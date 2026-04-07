@@ -11,6 +11,13 @@ export interface SessionStats {
   startTime: Date | null
 }
 
+/** 会话结束回调参数 */
+export interface SessionEndInfo {
+  subject: Subject
+  questionsCompleted: number
+  correctCount: number
+}
+
 /** learningStore 状态接口 */
 export interface LearningState {
   /** 会话是否活跃 */
@@ -39,6 +46,10 @@ export interface LearningActions {
   appendQuestions: (questions: Question[]) => void
   /** 记录答题结果并前进到下一题 */
   recordAnswer: (isCorrect: boolean) => void
+  /** 注册会话结束回调 */
+  setOnSessionEnd: (callback: (info: SessionEndInfo) => void) => void
+  /** 清除会话结束回调 */
+  clearOnSessionEnd: () => void
   /** 重置到初始状态 */
   reset: () => void
 }
@@ -60,12 +71,15 @@ const initialState: LearningState = {
   sessionStats: { ...initialStats },
 }
 
+/** 外部回调存储（不放入 zustand 状态以避免序列化问题） */
+let _onSessionEndCallback: ((info: SessionEndInfo) => void) | null = null
+
 /**
  * 学习会话 Store
  * 管理当前学习会话状态、题目队列、答题进度
  */
 export const useLearningStore = create<LearningState & LearningActions>()(
-  (set) => ({
+  (set, get) => ({
     ...initialState,
 
     startSession: (subject) =>
@@ -82,16 +96,25 @@ export const useLearningStore = create<LearningState & LearningActions>()(
         },
       }),
 
-    endSession: () =>
-      set((state) => ({
+    endSession: () => {
+      const state = get()
+      const subject = state.currentSubject
+      const { questionsCompleted, correctCount } = state.sessionStats
+
+      set({
         isSessionActive: false,
         currentQuestion: null,
         currentSubject: null,
-        // 保留 stats，让上层可以读取最终结果
         sessionStats: {
           ...state.sessionStats,
         },
-      })),
+      })
+
+      // 触发回调
+      if (_onSessionEndCallback && subject) {
+        _onSessionEndCallback({ subject, questionsCompleted, correctCount })
+      }
+    },
 
     setQuestionQueue: (questions) =>
       set({
@@ -125,6 +148,17 @@ export const useLearningStore = create<LearningState & LearningActions>()(
         }
       }),
 
-    reset: () => set({ ...initialState, sessionStats: { ...initialStats } }),
+    setOnSessionEnd: (callback) => {
+      _onSessionEndCallback = callback
+    },
+
+    clearOnSessionEnd: () => {
+      _onSessionEndCallback = null
+    },
+
+    reset: () => {
+      _onSessionEndCallback = null
+      set({ ...initialState, sessionStats: { ...initialStats } })
+    },
   }),
 )

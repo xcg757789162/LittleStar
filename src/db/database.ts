@@ -8,6 +8,10 @@ import type {
   QuestionTemplate,
   Achievement,
   DailySession,
+  GradeUnlock,
+  PlacementTest,
+  ReportData,
+  MasterySnapshot,
 } from '@/types/models'
 
 /**
@@ -31,6 +35,14 @@ export class LittleStarDB extends Dexie {
   achievements!: EntityTable<Achievement, 'id'>
   /** 每日学习会话表 */
   dailySessions!: EntityTable<DailySession, 'id'>
+  /** 年级解锁记录表 */
+  gradeUnlocks!: EntityTable<GradeUnlock, 'id'>
+  /** 入学测评记录表 */
+  placementTests!: EntityTable<PlacementTest, 'id'>
+  /** 学习报告数据表 */
+  reportData!: EntityTable<ReportData, 'id'>
+  /** 掌握度每日快照表 */
+  masterySnapshots!: EntityTable<MasterySnapshot, 'id'>
 
   constructor(databaseName: string = 'LittleStarDB') {
     super(databaseName)
@@ -59,6 +71,21 @@ export class LittleStarDB extends Dexie {
 
       // 每日学习会话表：自增主键，按孩子ID、日期索引
       dailySessions: '++id, childId, date, [childId+date]',
+    })
+
+    // Phase 2: 新增年级解锁、入学测评、学习报告、掌握度快照表
+    this.version(2).stores({
+      // 年级解锁记录表：自增主键，按孩子+科目联合索引
+      gradeUnlocks: '++id, childId, [childId+subject], gradeLevel, unlockedAt',
+
+      // 入学测评记录表：自增主键，按孩子+科目+年级联合索引
+      placementTests: '++id, childId, [childId+subject+gradeLevel], startedAt',
+
+      // 学习报告数据表：自增主键，按孩子、类型、年级索引
+      reportData: '++id, childId, type, [childId+type], [childId+gradeLevel], periodStart',
+
+      // 掌握度每日快照表：自增主键，按孩子+日期+科目联合索引
+      masterySnapshots: '++id, childId, [childId+date+subject], [childId+subject+gradeLevel], date',
     })
   }
 }

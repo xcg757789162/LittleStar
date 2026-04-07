@@ -3,7 +3,11 @@
  * 学习时长、完成量、正确率概览
  */
 
+import { useNavigate } from 'react-router-dom'
+
 export function ParentDashboard() {
+  const navigate = useNavigate()
+
   return (
     <div
       data-testid="parent-dashboard"
@@ -60,6 +64,28 @@ export function ParentDashboard() {
           <p style={{ fontSize: '14px', color: '#666' }}>正确率</p>
         </div>
       </div>
+
+      {/* 学习报告入口 */}
+      <button
+        data-testid="reports-btn"
+        onClick={() => navigate('/reports')}
+        style={{
+          width: '100%',
+          padding: '16px',
+          borderRadius: '12px',
+          border: '1px solid #E0E0E0',
+          backgroundColor: '#fff',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: '16px',
+          color: '#333',
+        }}
+      >
+        <span>📊 学习报告</span>
+        <span style={{ color: '#999' }}>→</span>
+      </button>
     </div>
   )
 }

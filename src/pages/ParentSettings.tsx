@@ -1,9 +1,13 @@
 /**
  * 家长设置管理
- * 每日学习时长、科目偏好、难度调整、孩子信息管理
+ * 每日学习时长、科目偏好、难度调整、孩子信息管理、解锁配置
  */
 
+import { useGradeUnlockStore } from '@/stores/gradeUnlockStore'
+
 export function ParentSettings() {
+  const { unlockConfig, updateUnlockConfig } = useGradeUnlockStore()
+
   return (
     <div
       data-testid="parent-settings"
@@ -66,6 +70,77 @@ export function ParentSettings() {
               {s}
             </span>
           ))}
+        </div>
+      </section>
+
+      {/* 年级解锁配置 */}
+      <section data-testid="unlock-config-section" style={{ marginBottom: '24px' }}>
+        <h2 style={{ fontSize: '18px', color: '#555', marginBottom: '12px' }}>年级解锁条件</h2>
+        <div
+          style={{
+            padding: '16px',
+            borderRadius: '12px',
+            backgroundColor: '#FFF3E0',
+          }}
+        >
+          {/* 掌握度阈值 */}
+          <div style={{ marginBottom: '16px' }}>
+            <label
+              htmlFor="mastery-threshold"
+              style={{ display: 'block', fontSize: '14px', color: '#666', marginBottom: '8px' }}
+            >
+              知识点掌握度阈值：{unlockConfig.masteryThreshold}%
+            </label>
+            <input
+              id="mastery-threshold"
+              data-testid="mastery-threshold-input"
+              type="range"
+              min={50}
+              max={100}
+              step={5}
+              value={unlockConfig.masteryThreshold}
+              onChange={(e) =>
+                updateUnlockConfig({ masteryThreshold: Number(e.target.value) })
+              }
+              style={{ width: '100%' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#999' }}>
+              <span>50%</span>
+              <span>100%</span>
+            </div>
+          </div>
+
+          {/* 最少掌握比例 */}
+          <div>
+            <label
+              htmlFor="mastered-ratio"
+              style={{ display: 'block', fontSize: '14px', color: '#666', marginBottom: '8px' }}
+            >
+              最少掌握知识点比例：{Math.round(unlockConfig.minMasteredRatio * 100)}%
+            </label>
+            <input
+              id="mastered-ratio"
+              data-testid="mastered-ratio-input"
+              type="range"
+              min={50}
+              max={100}
+              step={5}
+              value={Math.round(unlockConfig.minMasteredRatio * 100)}
+              onChange={(e) =>
+                updateUnlockConfig({ minMasteredRatio: Number(e.target.value) / 100 })
+              }
+              style={{ width: '100%' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#999' }}>
+              <span>50%</span>
+              <span>100%</span>
+            </div>
+          </div>
+
+          <p style={{ fontSize: '12px', color: '#888', marginTop: '12px' }}>
+            💡 当孩子的知识点掌握度 ≥ {unlockConfig.masteryThreshold}% 的比例达到{' '}
+            {Math.round(unlockConfig.minMasteredRatio * 100)}% 时，将解锁下一年级
+          </p>
         </div>
       </section>
     </div>
