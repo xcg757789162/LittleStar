@@ -1,0 +1,368 @@
+import type { KnowledgeNode, Question } from '@/types/models'
+
+/** 数学知识点 ID 常量 */
+const MATH_IDS = {
+  NUMBERS_1_5: 'math-numbers-1-5',
+  NUMBERS_6_10: 'math-numbers-6-10',
+  NUMBERS_11_20: 'math-numbers-11-20',
+  COUNTING: 'math-counting',
+  COMPARE: 'math-compare',
+  ADD_WITHIN_5: 'math-add-within-5',
+  ADD_WITHIN_10: 'math-add-within-10',
+  SHAPES: 'math-shapes',
+}
+
+/** 数学知识点 */
+export const mathKnowledgeNodes: KnowledgeNode[] = [
+  {
+    id: MATH_IDS.NUMBERS_1_5,
+    subject: 'math',
+    gradeLevel: 'middle-kindergarten',
+    name: '数字认知 1-5',
+    description: '认识数字1到5，理解数字的含义',
+    prerequisites: [],
+    nextNodes: [MATH_IDS.NUMBERS_6_10],
+    difficulty: 1,
+    contentType: 'flashcard',
+    order: 1,
+  },
+  {
+    id: MATH_IDS.NUMBERS_6_10,
+    subject: 'math',
+    gradeLevel: 'middle-kindergarten',
+    name: '数字认知 6-10',
+    description: '认识数字6到10，理解数字的含义',
+    prerequisites: [MATH_IDS.NUMBERS_1_5],
+    nextNodes: [MATH_IDS.NUMBERS_11_20, MATH_IDS.COUNTING],
+    difficulty: 2,
+    contentType: 'flashcard',
+    order: 2,
+  },
+  {
+    id: MATH_IDS.NUMBERS_11_20,
+    subject: 'math',
+    gradeLevel: 'senior-kindergarten',
+    name: '数字认知 11-20',
+    description: '认识数字11到20',
+    prerequisites: [MATH_IDS.NUMBERS_6_10],
+    nextNodes: [],
+    difficulty: 3,
+    contentType: 'flashcard',
+    order: 3,
+  },
+  {
+    id: MATH_IDS.COUNTING,
+    subject: 'math',
+    gradeLevel: 'middle-kindergarten',
+    name: '数数练习',
+    description: '按顺序数数，倒数，跳数',
+    prerequisites: [MATH_IDS.NUMBERS_6_10],
+    nextNodes: [MATH_IDS.COMPARE],
+    difficulty: 2,
+    contentType: 'quiz',
+    order: 4,
+  },
+  {
+    id: MATH_IDS.COMPARE,
+    subject: 'math',
+    gradeLevel: 'middle-kindergarten',
+    name: '比大小',
+    description: '比较两个数字的大小',
+    prerequisites: [MATH_IDS.COUNTING],
+    nextNodes: [MATH_IDS.ADD_WITHIN_5],
+    difficulty: 2,
+    contentType: 'quiz',
+    order: 5,
+  },
+  {
+    id: MATH_IDS.ADD_WITHIN_5,
+    subject: 'math',
+    gradeLevel: 'senior-kindergarten',
+    name: '5以内加法',
+    description: '学习5以内的加法运算',
+    prerequisites: [MATH_IDS.COMPARE],
+    nextNodes: [MATH_IDS.ADD_WITHIN_10],
+    difficulty: 3,
+    contentType: 'quiz',
+    order: 6,
+  },
+  {
+    id: MATH_IDS.ADD_WITHIN_10,
+    subject: 'math',
+    gradeLevel: 'senior-kindergarten',
+    name: '10以内加法',
+    description: '学习10以内的加法运算',
+    prerequisites: [MATH_IDS.ADD_WITHIN_5],
+    nextNodes: [],
+    difficulty: 4,
+    contentType: 'quiz',
+    order: 7,
+  },
+  {
+    id: MATH_IDS.SHAPES,
+    subject: 'math',
+    gradeLevel: 'middle-kindergarten',
+    name: '图形认识',
+    description: '认识圆形、三角形、正方形、长方形',
+    prerequisites: [],
+    nextNodes: [],
+    difficulty: 1,
+    contentType: 'flashcard',
+    order: 8,
+  },
+]
+
+/** 数学题目 */
+export const mathQuestions: Question[] = [
+  // 数字认知 1-5
+  {
+    id: 'math-q-001',
+    knowledgeNodeId: MATH_IDS.NUMBERS_1_5,
+    type: 'flashcard',
+    content: { text: '这是数字 1️⃣', hint: '一个苹果 🍎' },
+    answer: 1,
+    difficulty: 1,
+    isAIGenerated: false,
+  },
+  {
+    id: 'math-q-002',
+    knowledgeNodeId: MATH_IDS.NUMBERS_1_5,
+    type: 'multiple-choice',
+    content: {
+      text: '🍎🍎🍎 有几个苹果呀？',
+      options: [
+        { id: 'a', text: '2', isCorrect: false },
+        { id: 'b', text: '3', isCorrect: true },
+        { id: 'c', text: '4', isCorrect: false },
+      ],
+    },
+    answer: 'b',
+    difficulty: 1,
+    isAIGenerated: false,
+  },
+  {
+    id: 'math-q-003',
+    knowledgeNodeId: MATH_IDS.NUMBERS_1_5,
+    type: 'multiple-choice',
+    content: {
+      text: '哪个是数字 5？',
+      options: [
+        { id: 'a', text: '3', isCorrect: false },
+        { id: 'b', text: '5', isCorrect: true },
+        { id: 'c', text: '2', isCorrect: false },
+      ],
+    },
+    answer: 'b',
+    difficulty: 1,
+    isAIGenerated: false,
+  },
+  // 数字认知 6-10
+  {
+    id: 'math-q-004',
+    knowledgeNodeId: MATH_IDS.NUMBERS_6_10,
+    type: 'flashcard',
+    content: { text: '这是数字 7️⃣', hint: '七只小鸟 🐦' },
+    answer: 7,
+    difficulty: 2,
+    isAIGenerated: false,
+  },
+  {
+    id: 'math-q-005',
+    knowledgeNodeId: MATH_IDS.NUMBERS_6_10,
+    type: 'multiple-choice',
+    content: {
+      text: '🌟🌟🌟🌟🌟🌟🌟🌟 有几颗星星？',
+      options: [
+        { id: 'a', text: '6', isCorrect: false },
+        { id: 'b', text: '7', isCorrect: false },
+        { id: 'c', text: '8', isCorrect: true },
+      ],
+    },
+    answer: 'c',
+    difficulty: 2,
+    isAIGenerated: false,
+  },
+  // 数数练习
+  {
+    id: 'math-q-006',
+    knowledgeNodeId: MATH_IDS.COUNTING,
+    type: 'multiple-choice',
+    content: {
+      text: '3 后面是几？',
+      options: [
+        { id: 'a', text: '2', isCorrect: false },
+        { id: 'b', text: '4', isCorrect: true },
+        { id: 'c', text: '5', isCorrect: false },
+      ],
+    },
+    answer: 'b',
+    difficulty: 2,
+    isAIGenerated: false,
+  },
+  {
+    id: 'math-q-007',
+    knowledgeNodeId: MATH_IDS.COUNTING,
+    type: 'multiple-choice',
+    content: {
+      text: '7 前面是几？',
+      options: [
+        { id: 'a', text: '6', isCorrect: true },
+        { id: 'b', text: '8', isCorrect: false },
+        { id: 'c', text: '5', isCorrect: false },
+      ],
+    },
+    answer: 'a',
+    difficulty: 2,
+    isAIGenerated: false,
+  },
+  // 比大小
+  {
+    id: 'math-q-008',
+    knowledgeNodeId: MATH_IDS.COMPARE,
+    type: 'multiple-choice',
+    content: {
+      text: '3 和 5 哪个大？',
+      options: [
+        { id: 'a', text: '3', isCorrect: false },
+        { id: 'b', text: '5', isCorrect: true },
+        { id: 'c', text: '一样大', isCorrect: false },
+      ],
+    },
+    answer: 'b',
+    difficulty: 2,
+    isAIGenerated: false,
+  },
+  {
+    id: 'math-q-009',
+    knowledgeNodeId: MATH_IDS.COMPARE,
+    type: 'multiple-choice',
+    content: {
+      text: '8 和 6 哪个小？',
+      options: [
+        { id: 'a', text: '8', isCorrect: false },
+        { id: 'b', text: '6', isCorrect: true },
+      ],
+    },
+    answer: 'b',
+    difficulty: 2,
+    isAIGenerated: false,
+  },
+  // 5以内加法
+  {
+    id: 'math-q-010',
+    knowledgeNodeId: MATH_IDS.ADD_WITHIN_5,
+    type: 'multiple-choice',
+    content: {
+      text: '1 + 2 = ?',
+      options: [
+        { id: 'a', text: '2', isCorrect: false },
+        { id: 'b', text: '3', isCorrect: true },
+        { id: 'c', text: '4', isCorrect: false },
+      ],
+    },
+    answer: 'b',
+    difficulty: 3,
+    isAIGenerated: false,
+  },
+  {
+    id: 'math-q-011',
+    knowledgeNodeId: MATH_IDS.ADD_WITHIN_5,
+    type: 'multiple-choice',
+    content: {
+      text: '2 + 3 = ?',
+      options: [
+        { id: 'a', text: '4', isCorrect: false },
+        { id: 'b', text: '5', isCorrect: true },
+        { id: 'c', text: '6', isCorrect: false },
+      ],
+    },
+    answer: 'b',
+    difficulty: 3,
+    isAIGenerated: false,
+  },
+  // 10以内加法
+  {
+    id: 'math-q-012',
+    knowledgeNodeId: MATH_IDS.ADD_WITHIN_10,
+    type: 'multiple-choice',
+    content: {
+      text: '4 + 5 = ?',
+      options: [
+        { id: 'a', text: '8', isCorrect: false },
+        { id: 'b', text: '9', isCorrect: true },
+        { id: 'c', text: '10', isCorrect: false },
+      ],
+    },
+    answer: 'b',
+    difficulty: 4,
+    isAIGenerated: false,
+  },
+  {
+    id: 'math-q-013',
+    knowledgeNodeId: MATH_IDS.ADD_WITHIN_10,
+    type: 'multiple-choice',
+    content: {
+      text: '3 + 7 = ?',
+      options: [
+        { id: 'a', text: '9', isCorrect: false },
+        { id: 'b', text: '10', isCorrect: true },
+        { id: 'c', text: '11', isCorrect: false },
+      ],
+    },
+    answer: 'b',
+    difficulty: 4,
+    isAIGenerated: false,
+  },
+  // 数字认知 11-20
+  {
+    id: 'math-q-014',
+    knowledgeNodeId: MATH_IDS.NUMBERS_11_20,
+    type: 'flashcard',
+    content: { text: '这是数字 15', hint: '十五朵花 🌸' },
+    answer: 15,
+    difficulty: 3,
+    isAIGenerated: false,
+  },
+  {
+    id: 'math-q-015',
+    knowledgeNodeId: MATH_IDS.NUMBERS_11_20,
+    type: 'multiple-choice',
+    content: {
+      text: '12 后面是几？',
+      options: [
+        { id: 'a', text: '11', isCorrect: false },
+        { id: 'b', text: '13', isCorrect: true },
+        { id: 'c', text: '14', isCorrect: false },
+      ],
+    },
+    answer: 'b',
+    difficulty: 3,
+    isAIGenerated: false,
+  },
+  // 图形认识
+  {
+    id: 'math-q-016',
+    knowledgeNodeId: MATH_IDS.SHAPES,
+    type: 'multiple-choice',
+    content: {
+      text: '⚽ 像什么形状？',
+      options: [
+        { id: 'a', text: '圆形 ⭕', isCorrect: true },
+        { id: 'b', text: '三角形 🔺', isCorrect: false },
+        { id: 'c', text: '正方形 ⬜', isCorrect: false },
+      ],
+    },
+    answer: 'a',
+    difficulty: 1,
+    isAIGenerated: false,
+  },
+  {
+    id: 'math-q-017',
+    knowledgeNodeId: MATH_IDS.SHAPES,
+    type: 'flashcard',
+    content: { text: '这是三角形 🔺', hint: '有三个角的形状' },
+    answer: '三角形',
+    difficulty: 1,
+    isAIGenerated: false,
+  },
+]

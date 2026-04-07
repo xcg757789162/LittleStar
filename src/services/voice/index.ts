@@ -1,0 +1,5 @@
+export { TTSService } from './tts'
+export type { TTSConfig } from './tts'
+export { STTService } from './stt'
+export type { STTConfig } from './stt'
+export { WebSpeechFallback } from './web-speech-fallback'

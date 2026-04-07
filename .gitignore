@@ -8,6 +8,11 @@ dist/
 build/
 *.tsbuildinfo
 
+# TypeScript composite build output
+vite.config.d.ts
+vite.config.d.ts.map
+vite.config.js
+
 # Environment variables
 .env
 .env.local
@@ -40,3 +45,7 @@ coverage/
 
 # CodeBuddy
 .codebuddy/
+
+### PreCI ###
+PreCI/
+.codecc
