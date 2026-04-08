@@ -43,6 +43,9 @@ coverage/
 .cache/
 .parcel-cache/
 
+# Worktrees
+.worktrees/
+
 # CodeBuddy
 .codebuddy/
 
