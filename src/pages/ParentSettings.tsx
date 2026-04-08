@@ -3,10 +3,24 @@
  * 每日学习时长、科目偏好、难度调整、孩子信息管理、解锁配置
  */
 
+import { useChildStore } from '@/stores/childStore'
 import { useGradeUnlockStore } from '@/stores/gradeUnlockStore'
 
+/** 科目 key → 中文显示名映射 */
+const SUBJECT_LABELS: Record<string, string> = {
+  math: '数学',
+  chinese: '语文',
+  english: '英语',
+}
+
 export function ParentSettings() {
+  const currentChild = useChildStore((s) => s.currentChild)
   const { unlockConfig, updateUnlockConfig } = useGradeUnlockStore()
+
+  const childName = currentChild?.name ?? '未设置'
+  const childAge = currentChild?.age ?? '-'
+  const dailyMinutes = currentChild?.settings?.dailyLearningMinutes ?? 30
+  const preferredSubjects = currentChild?.settings?.preferredSubjects ?? []
 
   return (
     <div
@@ -29,8 +43,8 @@ export function ParentSettings() {
             backgroundColor: '#F5F5F5',
           }}
         >
-          <p>名字：小明</p>
-          <p>年龄：5岁</p>
+          <p>名字：{childName}</p>
+          <p>年龄：{childAge}岁</p>
         </div>
       </section>
 
@@ -44,7 +58,7 @@ export function ParentSettings() {
             backgroundColor: '#E3F2FD',
           }}
         >
-          <p>当前设置：30 分钟/天</p>
+          <p>当前设置：{dailyMinutes} 分钟/天</p>
         </div>
       </section>
 
@@ -55,11 +69,12 @@ export function ParentSettings() {
           style={{
             display: 'flex',
             gap: '8px',
+            flexWrap: 'wrap',
           }}
         >
-          {['数学', '语文', '英语'].map((s) => (
+          {preferredSubjects.map((key) => (
             <span
-              key={s}
+              key={key}
               style={{
                 padding: '8px 16px',
                 borderRadius: '20px',
@@ -67,7 +82,7 @@ export function ParentSettings() {
                 fontSize: '14px',
               }}
             >
-              {s}
+              {SUBJECT_LABELS[key] ?? key}
             </span>
           ))}
         </div>

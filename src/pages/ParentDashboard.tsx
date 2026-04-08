@@ -3,10 +3,76 @@
  * 学习时长、完成量、正确率概览
  */
 
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useChildStore } from '@/stores/childStore'
+import { db } from '@/db/database'
+
+interface DailyStats {
+  durationMinutes: number
+  questionsCompleted: number
+  accuracy: number
+}
+
+function todayString(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export function ParentDashboard() {
   const navigate = useNavigate()
+  const [stats, setStats] = useState<DailyStats>({
+    durationMinutes: 0,
+    questionsCompleted: 0,
+    accuracy: 0,
+  })
+
+  useEffect(() => {
+    async function loadStats() {
+      try {
+        const child = useChildStore.getState().currentChild
+        if (!child) return
+
+        const today = todayString()
+        const sessions = await db.dailySessions
+          .where('childId')
+          .equals(child.id ?? '')
+          .toArray()
+
+        // 筛选今日的会话
+        const todaySessions = sessions.filter((s) => s.date === today)
+
+        if (todaySessions.length === 0) return
+
+        // 聚合统计
+        let totalMinutes = 0
+        let totalQuestions = 0
+        let totalCorrect = 0
+
+        for (const session of todaySessions) {
+          if (session.startTime && session.endTime) {
+            const start = new Date(session.startTime).getTime()
+            const end = new Date(session.endTime).getTime()
+            totalMinutes += (end - start) / 60000
+          }
+          totalQuestions += session.questionsCompleted
+          totalCorrect += session.correctCount
+        }
+
+        setStats({
+          durationMinutes: Math.round(totalMinutes),
+          questionsCompleted: totalQuestions,
+          accuracy: totalQuestions > 0
+            ? Math.round((totalCorrect / totalQuestions) * 100)
+            : 0,
+        })
+      } catch {
+        // 加载失败使用默认值
+      }
+    }
+
+    loadStats()
+  }, [])
 
   return (
     <div
@@ -36,7 +102,9 @@ export function ParentDashboard() {
             textAlign: 'center',
           }}
         >
-          <p style={{ fontSize: '28px', fontWeight: 'bold', color: '#1565C0' }}>0分</p>
+          <p style={{ fontSize: '28px', fontWeight: 'bold', color: '#1565C0' }}>
+            {stats.durationMinutes}分
+          </p>
           <p style={{ fontSize: '14px', color: '#666' }}>今日学习</p>
         </div>
         <div
@@ -48,7 +116,9 @@ export function ParentDashboard() {
             textAlign: 'center',
           }}
         >
-          <p style={{ fontSize: '28px', fontWeight: 'bold', color: '#2E7D32' }}>0题</p>
+          <p style={{ fontSize: '28px', fontWeight: 'bold', color: '#2E7D32' }}>
+            {stats.questionsCompleted}题
+          </p>
           <p style={{ fontSize: '14px', color: '#666' }}>完成题数</p>
         </div>
         <div
@@ -60,7 +130,9 @@ export function ParentDashboard() {
             textAlign: 'center',
           }}
         >
-          <p style={{ fontSize: '28px', fontWeight: 'bold', color: '#E65100' }}>0%</p>
+          <p style={{ fontSize: '28px', fontWeight: 'bold', color: '#E65100' }}>
+            {stats.accuracy}%
+          </p>
           <p style={{ fontSize: '14px', color: '#666' }}>正确率</p>
         </div>
       </div>

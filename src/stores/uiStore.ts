@@ -6,6 +6,9 @@ export type Theme = 'light' | 'dark'
 /** 字体大小 */
 export type FontSize = 'normal' | 'large' | 'extra-large'
 
+/** 发音练习阶段 */
+export type PronunciationPhase = 'idle' | 'listening' | 'recording' | 'assessing' | 'feedback' | 'drilling'
+
 /** uiStore 状态接口 */
 export interface UIState {
   /** 主题 */
@@ -22,6 +25,10 @@ export interface UIState {
   isLoading: boolean
   /** 错误消息 */
   error: string | null
+  /** 发音练习当前阶段 */
+  pronunciationPhase: PronunciationPhase
+  /** 是否正在录制发音 */
+  isRecordingPronunciation: boolean
 }
 
 /** uiStore 操作接口 */
@@ -44,6 +51,10 @@ export interface UIActions {
   setError: (error: string) => void
   /** 清除错误消息 */
   clearError: () => void
+  /** 设置发音练习阶段 */
+  setPronunciationPhase: (phase: PronunciationPhase) => void
+  /** 设置是否正在录制发音 */
+  setIsRecordingPronunciation: (recording: boolean) => void
   /** 重置到初始状态 */
   reset: () => void
 }
@@ -57,6 +68,8 @@ const initialState: UIState = {
   fontSize: 'large',
   isLoading: false,
   error: null,
+  pronunciationPhase: 'idle',
+  isRecordingPronunciation: false,
 }
 
 /**
@@ -83,6 +96,10 @@ export const useUIStore = create<UIState & UIActions>()((set) => ({
   setError: (error) => set({ error }),
 
   clearError: () => set({ error: null }),
+
+  setPronunciationPhase: (phase) => set({ pronunciationPhase: phase }),
+
+  setIsRecordingPronunciation: (recording) => set({ isRecordingPronunciation: recording }),
 
   reset: () => set(initialState),
 }))

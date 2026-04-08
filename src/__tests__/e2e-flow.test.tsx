@@ -1,7 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { App } from '../App'
+
+// Mock useInitializeApp 使其直接返回已初始化状态
+vi.mock('@/hooks/useInitializeApp', () => ({
+  useInitializeApp: () => ({ isInitialized: true }),
+}))
 
 describe('E2E Flow', () => {
   it('应渲染应用根组件', () => {

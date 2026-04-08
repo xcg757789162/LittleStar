@@ -3,8 +3,11 @@
  */
 
 import { motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 
 export function Home() {
+  const navigate = useNavigate()
+
   return (
     <div
       data-testid="home-page"
@@ -35,6 +38,7 @@ export function Home() {
       </p>
       <motion.button
         whileTap={{ scale: 0.95 }}
+        onClick={() => navigate('/learn')}
         style={{
           padding: '16px 48px',
           borderRadius: '24px',

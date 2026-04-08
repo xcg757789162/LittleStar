@@ -67,6 +67,10 @@ export interface LearningRecord {
   timeSpent: number // 毫秒
   attemptCount: number
   timestamp: Date
+  /** 发音评分 0-100（语音题专用） */
+  pronunciationScore?: number
+  /** 发音星级 1-5（语音题专用） */
+  pronunciationStars?: number
 }
 
 /** 掌握率记录 */
