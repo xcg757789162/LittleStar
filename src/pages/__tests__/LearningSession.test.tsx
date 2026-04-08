@@ -105,8 +105,8 @@ describe('LearningSession', () => {
     })
   })
 
-  describe('学习中阶段 — 选择题', () => {
-    it('应渲染 MultipleChoice 组件', () => {
+  describe('学习中阶段 — 旧题型降级', () => {
+    it('multiple-choice 类型在新流程中不再渲染（已迁移到 ClassroomView）', () => {
       mockFlowState.isActive = true
       mockFlowState.currentQuestion = {
         id: 'q1',
@@ -126,15 +126,11 @@ describe('LearningSession', () => {
       }
 
       renderLearningSession()
-      expect(screen.getByText('1 + 1 = ?')).toBeInTheDocument()
-      expect(screen.getByText('1')).toBeInTheDocument()
-      expect(screen.getByText('2')).toBeInTheDocument()
-      expect(screen.getByText('3')).toBeInTheDocument()
+      // multiple-choice 已迁移到 ClassroomView，旧 renderQuestion 不处理此类型
+      expect(screen.queryByText('1 + 1 = ?')).not.toBeInTheDocument()
     })
-  })
 
-  describe('学习中阶段 — 闪卡', () => {
-    it('应渲染 FlashCard 组件', () => {
+    it('flashcard 类型在新流程中不再渲染（已迁移到 ClassroomView）', () => {
       mockFlowState.isActive = true
       mockFlowState.currentQuestion = {
         id: 'q2',
@@ -149,7 +145,8 @@ describe('LearningSession', () => {
       }
 
       renderLearningSession()
-      expect(screen.getByText('认识字：大')).toBeInTheDocument()
+      // flashcard 已迁移到 ClassroomView，旧 renderQuestion 不处理此类型
+      expect(screen.queryByText('认识字：大')).not.toBeInTheDocument()
     })
   })
 

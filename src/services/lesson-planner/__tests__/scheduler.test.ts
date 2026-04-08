@@ -1,0 +1,226 @@
+/**
+ * GenerationScheduler 单元测试
+ *
+ * 测试批量提交生成、轮询管理、缓存写入、失败重试逻辑。
+ */
+
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import {
+  GenerationScheduler,
+  type SchedulerConfig,
+  type GenerationTask,
+} from '../scheduler'
+import type { Classroom } from '@/services/openmaic/types'
+
+// Mock OpenMAIC Client
+const mockClient = {
+  generateClassroom: vi.fn(),
+  pollUntilComplete: vi.fn(),
+  getClassroom: vi.fn(),
+  getClassroomStatus: vi.fn(),
+  checkHealth: vi.fn(),
+}
+
+// Mock ClassroomCache
+const mockCache = {
+  saveClassroom: vi.fn(),
+  getClassroom: vi.fn(),
+  listCachedClassrooms: vi.fn(),
+  deleteClassroom: vi.fn(),
+  clearExpiredCache: vi.fn(),
+  clearAll: vi.fn(),
+  getCacheSize: vi.fn(),
+}
+
+const mockClassroom: Classroom = {
+  id: 'classroom-001',
+  title: 'Test Classroom',
+  status: 'completed',
+  scenes: [
+    {
+      id: 'scene-1',
+      title: 'Intro',
+      type: 'teaching',
+      slides: [{ type: 'content', title: 'Hello', content: 'Let us learn!' }],
+    },
+  ],
+}
+
+describe('GenerationScheduler', () => {
+  let scheduler: GenerationScheduler
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    scheduler = new GenerationScheduler(
+      mockClient as any,
+      mockCache as any,
+      { retryIntervals: [1, 1, 1], maxRetries: 3 },
+    )
+  })
+
+  describe('submitTask', () => {
+    it('should create a generation task', () => {
+      const task = scheduler.submitTask({
+        knowledgeNodeId: 'kn-1',
+        date: '2026-04-08',
+        requirement: 'Teach counting 1-5',
+      })
+
+      expect(task).toBeDefined()
+      expect(task.knowledgeNodeId).toBe('kn-1')
+      expect(task.date).toBe('2026-04-08')
+      expect(task.status).toBe('pending')
+    })
+
+    it('should assign unique IDs to tasks', () => {
+      const task1 = scheduler.submitTask({
+        knowledgeNodeId: 'kn-1',
+        date: '2026-04-08',
+        requirement: 'req 1',
+      })
+      const task2 = scheduler.submitTask({
+        knowledgeNodeId: 'kn-2',
+        date: '2026-04-08',
+        requirement: 'req 2',
+      })
+
+      expect(task1.id).not.toBe(task2.id)
+    })
+  })
+
+  describe('executeTasks', () => {
+    it('should process all pending tasks', async () => {
+      mockClient.generateClassroom.mockResolvedValue({ classroomId: 'cr-1', status: 'pending' })
+      mockClient.pollUntilComplete.mockResolvedValue(mockClassroom)
+      mockCache.saveClassroom.mockResolvedValue(undefined)
+
+      scheduler.submitTask({ knowledgeNodeId: 'kn-1', date: '2026-04-08', requirement: 'req 1' })
+      scheduler.submitTask({ knowledgeNodeId: 'kn-2', date: '2026-04-08', requirement: 'req 2' })
+
+      const results = await scheduler.executeTasks()
+
+      expect(results).toHaveLength(2)
+      expect(mockClient.generateClassroom).toHaveBeenCalledTimes(2)
+    })
+
+    it('should call generateClassroom with requirement', async () => {
+      mockClient.generateClassroom.mockResolvedValue({ classroomId: 'cr-1', status: 'pending' })
+      mockClient.pollUntilComplete.mockResolvedValue(mockClassroom)
+      mockCache.saveClassroom.mockResolvedValue(undefined)
+
+      scheduler.submitTask({ knowledgeNodeId: 'kn-1', date: '2026-04-08', requirement: 'Test requirement' })
+      await scheduler.executeTasks()
+
+      expect(mockClient.generateClassroom).toHaveBeenCalledWith(
+        expect.objectContaining({ requirement: 'Test requirement' }),
+      )
+    })
+
+    it('should poll until complete and save to cache', async () => {
+      mockClient.generateClassroom.mockResolvedValue({ classroomId: 'cr-1', status: 'pending' })
+      mockClient.pollUntilComplete.mockResolvedValue(mockClassroom)
+      mockCache.saveClassroom.mockResolvedValue(undefined)
+
+      scheduler.submitTask({ knowledgeNodeId: 'kn-1', date: '2026-04-08', requirement: 'req' })
+      await scheduler.executeTasks()
+
+      expect(mockClient.pollUntilComplete).toHaveBeenCalledWith('cr-1', expect.any(Object))
+      expect(mockCache.saveClassroom).toHaveBeenCalledWith('kn-1', '2026-04-08', mockClassroom)
+    })
+
+    it('should mark task as completed on success', async () => {
+      mockClient.generateClassroom.mockResolvedValue({ classroomId: 'cr-1', status: 'pending' })
+      mockClient.pollUntilComplete.mockResolvedValue(mockClassroom)
+      mockCache.saveClassroom.mockResolvedValue(undefined)
+
+      scheduler.submitTask({ knowledgeNodeId: 'kn-1', date: '2026-04-08', requirement: 'req' })
+      const results = await scheduler.executeTasks()
+
+      expect(results[0].status).toBe('completed')
+    })
+
+    it('should retry on failure up to maxRetries times', async () => {
+      mockClient.generateClassroom
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({ classroomId: 'cr-1', status: 'pending' })
+      mockClient.pollUntilComplete.mockResolvedValue(mockClassroom)
+      mockCache.saveClassroom.mockResolvedValue(undefined)
+
+      const customScheduler = new GenerationScheduler(
+        mockClient as any,
+        mockCache as any,
+        { maxRetries: 3, retryIntervals: [1, 1, 1] },
+      )
+
+      customScheduler.submitTask({ knowledgeNodeId: 'kn-1', date: '2026-04-08', requirement: 'req' })
+      const results = await customScheduler.executeTasks()
+
+      expect(results[0].status).toBe('completed')
+      expect(mockClient.generateClassroom).toHaveBeenCalledTimes(3)
+    })
+
+    it('should mark task as failed after max retries exhausted', async () => {
+      mockClient.generateClassroom.mockRejectedValue(new Error('Permanent error'))
+
+      const customScheduler = new GenerationScheduler(
+        mockClient as any,
+        mockCache as any,
+        { maxRetries: 3, retryIntervals: [1, 1, 1] },
+      )
+
+      customScheduler.submitTask({ knowledgeNodeId: 'kn-1', date: '2026-04-08', requirement: 'req' })
+      const results = await customScheduler.executeTasks()
+
+      expect(results[0].status).toBe('failed')
+      expect(results[0].error).toContain('Permanent error')
+    })
+
+    it('should handle poll failure', async () => {
+      mockClient.generateClassroom.mockResolvedValue({ classroomId: 'cr-1', status: 'pending' })
+      mockClient.pollUntilComplete.mockRejectedValue(new Error('Generation timed out'))
+
+      scheduler.submitTask({ knowledgeNodeId: 'kn-1', date: '2026-04-08', requirement: 'req' })
+      const results = await scheduler.executeTasks()
+
+      expect(results[0].status).toBe('failed')
+    })
+  })
+
+  describe('getTaskStatus', () => {
+    it('should return task status by knowledgeNodeId and date', () => {
+      scheduler.submitTask({ knowledgeNodeId: 'kn-1', date: '2026-04-08', requirement: 'req' })
+
+      const task = scheduler.getTaskStatus('kn-1', '2026-04-08')
+
+      expect(task).toBeDefined()
+      expect(task!.status).toBe('pending')
+    })
+
+    it('should return undefined for unknown task', () => {
+      const task = scheduler.getTaskStatus('unknown', '2026-04-08')
+      expect(task).toBeUndefined()
+    })
+  })
+
+  describe('getPendingCount', () => {
+    it('should return number of pending tasks', () => {
+      scheduler.submitTask({ knowledgeNodeId: 'kn-1', date: '2026-04-08', requirement: 'req 1' })
+      scheduler.submitTask({ knowledgeNodeId: 'kn-2', date: '2026-04-08', requirement: 'req 2' })
+
+      expect(scheduler.getPendingCount()).toBe(2)
+    })
+
+    it('should return 0 when no tasks', () => {
+      expect(scheduler.getPendingCount()).toBe(0)
+    })
+  })
+
+  describe('clearTasks', () => {
+    it('should remove all tasks', () => {
+      scheduler.submitTask({ knowledgeNodeId: 'kn-1', date: '2026-04-08', requirement: 'req' })
+      scheduler.clearTasks()
+      expect(scheduler.getPendingCount()).toBe(0)
+    })
+  })
+})

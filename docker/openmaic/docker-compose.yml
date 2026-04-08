@@ -1,0 +1,39 @@
+# OpenMAIC Docker 部署配置
+# 用于本机部署 OpenMAIC AI 课堂生成服务
+# 文档: https://github.com/THU-MAIC/OpenMAIC
+
+version: "3.8"
+
+services:
+  openmaic:
+    image: devprincekumar/openmaic:latest
+    container_name: openmaic-server
+    ports:
+      - "${OPENMAIC_PORT:-3000}:3000"
+    env_file:
+      - .env.local
+    volumes:
+      # 课堂数据持久化
+      - openmaic-data:/app/data
+      # 运行时日志
+      - openmaic-logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    # 资源限制（可选，防止占用过多本机资源）
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+volumes:
+  openmaic-data:
+    driver: local
+  openmaic-logs:
+    driver: local

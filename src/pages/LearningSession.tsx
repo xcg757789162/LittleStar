@@ -1,6 +1,6 @@
 /**
  * 每日学习流程页面
- * 整合闪卡/选择题/手写板组件，连接自适应引擎和 store
+ * 整合课堂渲染器(新流程)/手写板组件，连接自适应引擎和 store
  * 集成庆祝动画、鼓励覆盖层、音效系统
  */
 
@@ -9,8 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useLearningFlow } from '@/hooks/useLearningFlow'
 import { useSoundEffects } from '@/hooks/useSoundEffects'
-import { MultipleChoice } from '@/components/learning/MultipleChoice'
-import { FlashCard } from '@/components/learning/FlashCard'
+import { ClassroomView } from '@/components/classroom/ClassroomView'
 import { WritingPad } from '@/components/learning/WritingPad'
 import { FeedbackAnimation } from '@/components/feedback/FeedbackAnimation'
 import { CelebrationAnimation } from '@/components/feedback/CelebrationAnimation'
@@ -27,7 +26,6 @@ const SUBJECTS: { key: Subject; label: string; emoji: string; color: string }[] 
 export function LearningSession() {
   const navigate = useNavigate()
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null)
-  const [isFlipped, setIsFlipped] = useState(false)
 
   // 庆祝/鼓励动画状态
   const [showCelebration, setShowCelebration] = useState(false)
@@ -45,9 +43,13 @@ export function LearningSession() {
     isComplete,
     sessionSummary,
     encouragement,
+    currentClassroom,
+    isCacheEmpty,
     startFlow,
     stopFlow,
     handleAnswer,
+    handleClassroomAnswer,
+    handleClassroomComplete,
     dismissFeedback,
   } = useLearningFlow()
 
@@ -104,18 +106,6 @@ export function LearningSession() {
     [handleAnswer, playCorrect, playWrong, playCelebration, playStar],
   )
 
-  const handleMultipleChoiceAnswer = useCallback(
-    (_optionId: string, isCorrect: boolean) => {
-      handleAnswerWithEffects(isCorrect)
-    },
-    [handleAnswerWithEffects],
-  )
-
-  const handleFlashCardNext = useCallback(() => {
-    setIsFlipped(false)
-    handleAnswerWithEffects(true) // 闪卡默认为"已学习"
-  }, [handleAnswerWithEffects])
-
   const handleWritingSubmit = useCallback(() => {
     handleAnswerWithEffects(true) // 手写提交默认为完成
   }, [handleAnswerWithEffects])
@@ -145,33 +135,6 @@ export function LearningSession() {
     if (!currentQuestion) return null
 
     switch (currentQuestion.type) {
-      case 'multiple-choice':
-        return (
-          <MultipleChoice
-            question={currentQuestion.content.text}
-            options={
-              currentQuestion.content.options?.map((opt) => ({
-                id: opt.id,
-                text: opt.text,
-                isCorrect: opt.isCorrect,
-              })) ?? []
-            }
-            onAnswer={handleMultipleChoiceAnswer}
-          />
-        )
-
-      case 'flashcard':
-        return (
-          <FlashCard
-            frontText={currentQuestion.content.text}
-            backText={String(currentQuestion.answer)}
-            isFlipped={isFlipped}
-            onFlip={() => setIsFlipped(!isFlipped)}
-            onNext={handleFlashCardNext}
-            onPlayVoice={() => {}}
-          />
-        )
-
       case 'handwriting':
         return (
           <WritingPad
@@ -319,7 +282,7 @@ export function LearningSession() {
         </div>
       )}
 
-      {/* 学习中（题目渲染区域） */}
+      {/* 学习中（课堂渲染/题目渲染区域） */}
       {isActive && (
         <div
           style={{
@@ -331,7 +294,36 @@ export function LearningSession() {
         >
           {isLoading ? (
             <p style={{ fontSize: '20px', color: '#666' }}>正在准备题目...</p>
+          ) : currentClassroom ? (
+            /* 新流程：渲染 ClassroomView */
+            <ClassroomView
+              classroom={currentClassroom}
+              subject={selectedSubject ?? undefined}
+              onComplete={handleClassroomComplete}
+              onAnswer={handleClassroomAnswer}
+            />
+          ) : isCacheEmpty ? (
+            /* 缓存为空：课程准备中提示 */
+            <div
+              data-testid="cache-empty-hint"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '16px',
+                padding: '48px 32px',
+              }}
+            >
+              <span style={{ fontSize: '48px' }}>📚</span>
+              <p style={{ fontSize: '20px', color: '#666', textAlign: 'center' }}>
+                课程准备中，请稍后再试
+              </p>
+              <p style={{ fontSize: '14px', color: '#999', textAlign: 'center' }}>
+                教导处正在为你生成个性化课堂内容
+              </p>
+            </div>
           ) : (
+            /* 手写板组件渲染 */
             renderQuestion()
           )}
         </div>
