@@ -51,4 +51,4 @@ coverage/
 
 ### PreCI ###
 PreCI/
-.codecc
+.codecc.playwright-mcp/

@@ -174,7 +174,7 @@ export function usePlacementTest(
             })
 
             setPhase('result')
-            onComplete(testResult)
+            // onComplete 在 finishAndNavigate（用户点击"开始学习"）中统一调用
           }
         } catch {
           setPhase('result')
