@@ -1,12 +1,14 @@
 /**
  * useLearningFlow Hook
- * 学习主循环核心编排：AdaptiveRouter → QuestionGenerator → 答题 → 反馈 → 掌握率更新
+ * 学习主循环核心编排：
+ * - OpenMAIC 流程：教导处选课 → 缓存加载 → ClassroomView 渲染 → 答题回写 → 动态调整
+ * - 降级路径：缓存为空时显示"课程准备中"提示
  * Phase 1: 集成亲子互动环节 + TPR 全身反应法 + 艾宾浩斯复习机制
+ * Phase 3: 集成 OpenMAIC 课堂缓存流程
  */
 
 import { useState, useCallback, useRef } from 'react'
 import { AdaptiveRouter } from '@/engine/adaptive-router'
-import { QuestionGenerator } from '@/services/ai/question-generator'
 import { QwenProvider } from '@/services/ai/qwen-provider'
 import { AITeacher } from '@/services/ai/teacher'
 import { AchievementEngine } from '@/engine/achievement'
@@ -14,6 +16,8 @@ import { GradeUnlockEngine } from '@/engine/grade-unlock-engine'
 import { generateDailySnapshot } from '@/engine/mastery-snapshot'
 import { ReviewManager } from '@/engine/review-manager'
 import { RuleEngine } from '@/engine/rule-engine'
+import { ClassroomCache } from '@/services/openmaic/cache'
+import { DynamicAdjuster } from '@/services/lesson-planner'
 import { useLearningStore } from '@/stores/learningStore'
 import { useChildStore } from '@/stores/childStore'
 import { db } from '@/db/database'
@@ -22,8 +26,10 @@ import { getRandomTPR } from '@/data/seed/english-tpr'
 import type { ParentActivity } from '@/data/seed/english-parent-activities'
 import type { TPRCommand } from '@/data/seed/english-tpr'
 import type { FeedbackType } from '@/components/feedback/FeedbackAnimation'
+import type { QuizAnswerData } from '@/components/classroom/QuizSlide'
 import type { Subject, Question, KnowledgeNode } from '@/types/models'
 import type { AIProvider } from '@/services/ai/provider'
+import type { Classroom } from '@/services/openmaic/types'
 
 /** 简单 fallback AI provider（无 API key 时使用） */
 const fallbackProvider: AIProvider = {
@@ -63,6 +69,9 @@ export interface CurrentInterstitial {
   tprCommand?: TPRCommand
 }
 
+/** 课堂答题数据（复用 QuizSlide 的 QuizAnswerData） */
+export type ClassroomAnswerData = QuizAnswerData
+
 /** Hook 返回值 */
 export interface LearningFlowState {
   /** 学习是否激活 */
@@ -85,12 +94,22 @@ export interface LearningFlowState {
   encouragement: string
   /** 当前插入环节（亲子互动/TPR） */
   currentInterstitial: CurrentInterstitial | null
+  /** 当前课堂数据（OpenMAIC 新流程） */
+  currentClassroom: Classroom | null
+  /** 缓存是否为空（无课堂可加载） */
+  isCacheEmpty: boolean
+  /** 课堂答题计数 */
+  classroomAnswerCount: number
   /** 启动学习流程 */
   startFlow: (subject: Subject) => Promise<void>
   /** 停止学习流程 */
   stopFlow: () => void
-  /** 处理答题 */
+  /** 处理答题（旧流程） */
   handleAnswer: (isCorrect: boolean) => void
+  /** 处理课堂答题（新流程） */
+  handleClassroomAnswer: (data: ClassroomAnswerData) => void
+  /** 处理课堂完成（新流程） */
+  handleClassroomComplete: () => void
   /** 关闭反馈动画 */
   dismissFeedback: () => void
   /** 完成插入环节 */
@@ -108,6 +127,11 @@ export function useLearningFlow(): LearningFlowState {
   const [isCurrentReview, setIsCurrentReview] = useState(false)
   const [currentInterstitial, setCurrentInterstitial] = useState<CurrentInterstitial | null>(null)
 
+  // 新流程：课堂相关状态
+  const [currentClassroom, setCurrentClassroom] = useState<Classroom | null>(null)
+  const [isCacheEmpty, setIsCacheEmpty] = useState(false)
+  const [classroomAnswerCount, setClassroomAnswerCount] = useState(0)
+
   // 引擎实例（useRef 避免重复创建）
   const routerRef = useRef(new AdaptiveRouter())
   const reviewManagerRef = useRef(new ReviewManager())
@@ -115,9 +139,12 @@ export function useLearningFlow(): LearningFlowState {
   const achievementEngineRef = useRef(new AchievementEngine())
   const gradeUnlockEngineRef = useRef(new GradeUnlockEngine())
   const providerRef = useRef<AIProvider>(getAIProvider())
-  const generatorRef = useRef(new QuestionGenerator(providerRef.current))
   const teacherRef = useRef(new AITeacher(providerRef.current))
   const subjectRef = useRef<Subject>('math')
+
+  // 新流程：缓存和调整器实例
+  const classroomCacheRef = useRef(new ClassroomCache())
+  const dynamicAdjusterRef = useRef(new DynamicAdjuster())
 
   // 追踪连续正确/错误
   const consecutiveCorrectRef = useRef(0)
@@ -132,7 +159,6 @@ export function useLearningFlow(): LearningFlowState {
   // 只订阅 actions（稳定引用），避免订阅频繁变化的数据导致不必要重渲染
   const startSession = useLearningStore((s) => s.startSession)
   const endSession = useLearningStore((s) => s.endSession)
-  const setQuestionQueue = useLearningStore((s) => s.setQuestionQueue)
   const recordAnswer = useLearningStore((s) => s.recordAnswer)
 
   // 响应式订阅 currentQuestion — UI 需要随题目切换自动重渲染
@@ -140,6 +166,8 @@ export function useLearningFlow(): LearningFlowState {
 
   /**
    * 启动学习流程
+   * 先尝试从缓存加载 OpenMAIC 课堂
+   * 缓存为空时显示"课程准备中"提示，同时后台加载题目队列
    */
   const startFlow = useCallback(async (subject: Subject) => {
     setIsLoading(true)
@@ -147,6 +175,9 @@ export function useLearningFlow(): LearningFlowState {
     setSessionSummary(null)
     setCurrentInterstitial(null)
     setIsCurrentReview(false)
+    setCurrentClassroom(null)
+    setIsCacheEmpty(false)
+    setClassroomAnswerCount(0)
     subjectRef.current = subject
     consecutiveCorrectRef.current = 0
     consecutiveWrongRef.current = 0
@@ -158,133 +189,34 @@ export function useLearningFlow(): LearningFlowState {
     setIsActive(true)
 
     try {
-      // 2. 获取孩子信息
-      const child = useChildStore.getState().currentChild
-      const childId = child?.id ?? 'default'
-      const gradeLevel = child?.gradeLevel ?? 'middle-kindergarten'
+      // 2. 尝试从缓存加载课堂（新流程）
+      const cachedList = await classroomCacheRef.current.listCachedClassrooms()
 
-      // 3. 从 DB 加载知识点
-      const nodes = await db.knowledgeNodes
-        .where('subject')
-        .equals(subject)
-        .toArray()
+      if (cachedList.length > 0) {
+        // 有缓存 → 加载第一个课堂
+        const firstItem = cachedList[0]
+        const classroom = await classroomCacheRef.current.getClassroom(
+          firstItem.knowledgeNodeId,
+          firstItem.date,
+        )
 
-      // 4. 从 DB 加载掌握率
-      const masteryRecords = await db.masteryRecords
-        .where('childId')
-        .equals(childId)
-        .toArray()
-
-      const masteryMap = new Map<string, number>()
-      for (const record of masteryRecords) {
-        masteryMap.set(record.knowledgeNodeId, record.masteryLevel)
-      }
-
-      // 5. AdaptiveRouter 推荐知识点
-      const totalCount = ruleEngineRef.current.getRecommendedQuestionsPerSession(gradeLevel)
-      const recommendedNodes = routerRef.current.getRecommendations({
-        nodes: nodes as KnowledgeNode[],
-        masteryMap,
-        currentSubject: subject,
-        count: totalCount,
-      })
-
-      // 6. 获取复习内容（艾宾浩斯复习机制）
-      const reviewItems = await reviewManagerRef.current.getReviewItems(
-        childId,
-        subject,
-        totalCount,
-      )
-
-      // 7. 为复习内容生成题目（先复习，再新内容）
-      const questions: Question[] = []
-
-      // 7a. 复习题
-      for (const reviewItem of reviewItems) {
-        try {
-          const node = nodes.find((n) => n.id === reviewItem.nodeId)
-          if (!node) continue
-
-          const questionType = reviewItem.reviewFormat === 'flashcard'
-            ? 'flashcard'
-            : reviewItem.reviewFormat === 'oral'
-              ? 'voice'
-              : 'multiple-choice'
-
-          const generated = await generatorRef.current.generate({
-            subject,
-            knowledgeNodeId: node.id!,
-            difficulty: node.difficulty,
-            type: questionType === 'voice' ? 'flashcard' : questionType,
-          })
-
-          const qId = `review-${node.id}-${Date.now()}`
-          reviewQuestionIdsRef.current.add(qId)
-
-          questions.push({
-            id: qId,
-            knowledgeNodeId: node.id!,
-            type: generated.options ? 'multiple-choice' : 'flashcard',
-            content: {
-              text: generated.question,
-              options: generated.options?.map((opt) => ({
-                id: opt.id,
-                text: opt.text,
-                isCorrect: opt.isCorrect,
-              })),
-            },
-            answer: generated.answer,
-            difficulty: generated.difficulty,
-            isAIGenerated: !generated.isFallback,
-          })
-        } catch {
-          // 复习题生成失败跳过
+        if (classroom) {
+          setCurrentClassroom(classroom)
+          setIsCacheEmpty(false)
+          setIsLoading(false)
+          return // 新流程：课堂已加载，由 ClassroomView 渲染
         }
       }
 
-      // 7b. 新内容题
-      for (const node of recommendedNodes) {
-        try {
-          const generated = await generatorRef.current.generate({
-            subject,
-            knowledgeNodeId: node.id!,
-            difficulty: node.difficulty,
-            type: node.contentType === 'quiz' ? 'multiple-choice' : 'flashcard',
-          })
-
-          questions.push({
-            id: `q-${node.id}-${Date.now()}`,
-            knowledgeNodeId: node.id!,
-            type: generated.options ? 'multiple-choice' : 'flashcard',
-            content: {
-              text: generated.question,
-              options: generated.options?.map((opt) => ({
-                id: opt.id,
-                text: opt.text,
-                isCorrect: opt.isCorrect,
-              })),
-            },
-            answer: generated.answer,
-            difficulty: generated.difficulty,
-            isAIGenerated: !generated.isFallback,
-          })
-        } catch {
-          // 单题生成失败跳过
-        }
-      }
-
-      // 8. 设置题目队列
-      if (questions.length > 0) {
-        setQuestionQueue(questions)
-        // 标记首题是否为复习
-        setIsCurrentReview(reviewQuestionIdsRef.current.has(questions[0].id ?? ''))
-      }
+      // 无缓存或加载失败 → 标记缓存为空
+      // UI 层（LearningSession）通过 isCacheEmpty 显示"课程准备中"提示
+      setIsCacheEmpty(true)
     } catch {
       // 加载失败也保持激活，让用户可以退出
     } finally {
       setIsLoading(false)
     }
-  }, [startSession, setQuestionQueue])
+  }, [startSession])
 
   /**
    * 会话结束后的 DB 写入和引擎检查（异步，不阻塞 UI）
@@ -560,6 +492,71 @@ export function useLearningFlow(): LearningFlowState {
     setCurrentInterstitial(null)
   }, [])
 
+  /**
+   * 处理课堂答题（新流程）
+   * 回写掌握率数据并更新答题计数
+   */
+  const handleClassroomAnswer = useCallback((data: ClassroomAnswerData) => {
+    setClassroomAnswerCount((prev) => prev + 1)
+
+    // 记录到 learningStore（兼容旧流程统计）
+    recordAnswer(data.isCorrect)
+
+    // 更新连续计数
+    if (data.isCorrect) {
+      consecutiveCorrectRef.current++
+      consecutiveWrongRef.current = 0
+    } else {
+      consecutiveWrongRef.current++
+      consecutiveCorrectRef.current = 0
+    }
+
+    // 显示反馈
+    setShowFeedback(true)
+    setFeedbackType(data.isCorrect ? 'correct' : 'wrong')
+  }, [recordAnswer])
+
+  /**
+   * 处理课堂完成（新流程）
+   * 触发动态调整评估，标记会话完成
+   */
+  const handleClassroomComplete = useCallback(() => {
+    // 从 learningStore 读取最新统计数据（避免 stale closure）
+    const stats = useLearningStore.getState().sessionStats
+    const answerCount = stats.questionsCompleted
+    const correctRate = answerCount > 0 ? stats.correctCount / answerCount : 0
+
+    // 触发动态调整（异步，不阻塞）
+    // 使用 classroom.id 作为 knowledgeNodeId（课堂粒度的调整）
+    void dynamicAdjusterRef.current.evaluate({
+      knowledgeNodeId: currentClassroom?.id ?? 'unknown',
+      knowledgeNodeName: currentClassroom?.title ?? '',
+      currentMastery: Math.round(correctRate * 100),
+      sessionCorrectRate: correctRate,
+      totalAttempts: answerCount,
+    })
+
+    // 标记完成
+    const subject = subjectRef.current
+    endSession()
+    setIsActive(false)
+    setIsComplete(true)
+    setSessionSummary({
+      questionsCompleted: stats.questionsCompleted,
+      correctCount: stats.correctCount,
+      accuracy: stats.questionsCompleted > 0
+        ? Math.round((stats.correctCount / stats.questionsCompleted) * 100)
+        : 0,
+      subject,
+    })
+
+    // 异步写入 DB
+    onSessionEnd(subject, {
+      questionsCompleted: stats.questionsCompleted,
+      correctCount: stats.correctCount,
+    })
+  }, [currentClassroom, endSession, onSessionEnd])
+
   return {
     isActive,
     isLoading,
@@ -571,9 +568,14 @@ export function useLearningFlow(): LearningFlowState {
     sessionSummary,
     encouragement,
     currentInterstitial,
+    currentClassroom,
+    isCacheEmpty,
+    classroomAnswerCount,
     startFlow,
     stopFlow,
     handleAnswer,
+    handleClassroomAnswer,
+    handleClassroomComplete,
     dismissFeedback,
     completeInterstitial,
   }

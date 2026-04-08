@@ -9,11 +9,27 @@ import { useLearningFlow } from '../useLearningFlow'
 import { useLearningStore } from '@/stores/learningStore'
 import type { KnowledgeNode, Subject, Question } from '@/types/models'
 
-// 追踪 QuestionGenerator 构造函数参数
-let lastGeneratorProvider: unknown = null
 // 追踪 AITeacher.generateEncouragement 调用
 let encouragementCallCount = 0
 let lastEncouragementInput: unknown = null
+
+// Mock ClassroomCache — 新流程缓存
+const mockListCachedClassrooms = vi.fn()
+const mockGetClassroom = vi.fn()
+
+vi.mock('@/services/openmaic/cache', () => ({
+  ClassroomCache: class {
+    listCachedClassrooms = mockListCachedClassrooms
+    getClassroom = mockGetClassroom
+  },
+}))
+
+// Mock DynamicAdjuster — 新流程动态调整
+vi.mock('@/services/lesson-planner', () => ({
+  DynamicAdjuster: class {
+    evaluate = vi.fn().mockResolvedValue(undefined)
+  },
+}))
 
 // Mock 引擎和服务 — 使用 class 语法确保可以 new
 vi.mock('@/engine/adaptive-router', () => {
@@ -46,31 +62,6 @@ vi.mock('@/engine/adaptive-router', () => {
             order: 2,
           },
         ] satisfies KnowledgeNode[]
-      }
-    },
-  }
-})
-
-vi.mock('@/services/ai/question-generator', () => {
-  return {
-    QuestionGenerator: class {
-      constructor(provider: unknown) {
-        lastGeneratorProvider = provider
-      }
-      async generate() {
-        return {
-          question: '1 + 1 = ?',
-          options: [
-            { id: 'a', text: '1', isCorrect: false },
-            { id: 'b', text: '2', isCorrect: true },
-            { id: 'c', text: '3', isCorrect: false },
-          ],
-          answer: '2',
-          difficulty: 1,
-          isFallback: lastGeneratorProvider !== null && typeof (lastGeneratorProvider as { chatCompletion?: unknown }).chatCompletion === 'function'
-            ? false  // 真实 provider → 非 fallback
-            : true,  // fallback provider
-        }
       }
     },
   }
@@ -264,7 +255,6 @@ describe('useLearningFlow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useLearningStore.getState().reset()
-    lastGeneratorProvider = null
     encouragementCallCount = 0
     lastEncouragementInput = null
     achievementCheckCount = 0
@@ -277,6 +267,9 @@ describe('useLearningFlow', () => {
       achievements: [],
       masterySnapshots: [],
     }
+    // 默认缓存为空 — 走降级路径
+    mockListCachedClassrooms.mockResolvedValue([])
+    mockGetClassroom.mockResolvedValue(null)
   })
 
   describe('基本生命周期', () => {
@@ -314,28 +307,42 @@ describe('useLearningFlow', () => {
     })
   })
 
-  describe('引擎串联', () => {
-    it('startFlow 应通过 AdaptiveRouter 推荐知识点并生成题目队列', async () => {
+  describe('引擎串联（新流程 — ClassroomCache）', () => {
+    it('startFlow 应尝试从 ClassroomCache 加载课堂', async () => {
+      const mockClassroom = {
+        id: 'classroom-1',
+        title: '数字认识',
+        scenes: [],
+        metadata: { subject: 'math', knowledgeNodeId: 'node-1' },
+      }
+      mockListCachedClassrooms.mockResolvedValue([
+        { knowledgeNodeId: 'node-1', date: '2026-04-08' },
+      ])
+      mockGetClassroom.mockResolvedValue(mockClassroom)
+
       const { result } = renderHook(() => useLearningFlow())
 
       await act(async () => {
         await result.current.startFlow('math')
       })
 
-      // 应该有题目可用
-      expect(result.current.currentQuestion).not.toBeNull()
+      // 新流程：课堂数据应加载到 currentClassroom
+      expect(result.current.currentClassroom).not.toBeNull()
+      expect(result.current.isCacheEmpty).toBe(false)
     })
 
-    it('startFlow 后应加载题目到队列', async () => {
+    it('缓存为空时应标记 isCacheEmpty', async () => {
+      mockListCachedClassrooms.mockResolvedValue([])
+
       const { result } = renderHook(() => useLearningFlow())
 
       await act(async () => {
         await result.current.startFlow('math')
       })
 
-      // learningStore 的 questionQueue 应有题目
-      const storeState = useLearningStore.getState()
-      expect(storeState.questionQueue.length).toBeGreaterThan(0)
+      // 无缓存 → 标记缓存为空，UI 显示"课程准备中"
+      expect(result.current.currentClassroom).toBeNull()
+      expect(result.current.isCacheEmpty).toBe(true)
     })
   })
 
@@ -390,23 +397,25 @@ describe('useLearningFlow', () => {
   })
 
   describe('会话结束条件', () => {
-    it('题目队列耗尽时应标记为完成', async () => {
+    it('stopFlow 应标记会话为完成', async () => {
       const { result } = renderHook(() => useLearningFlow())
 
       await act(async () => {
         await result.current.startFlow('math')
       })
 
-      // 消耗所有题目
-      const queueLength = useLearningStore.getState().questionQueue.length
-      for (let i = 0; i < queueLength; i++) {
-        act(() => {
-          result.current.handleAnswer(true)
-        })
-        act(() => {
-          result.current.dismissFeedback()
-        })
-      }
+      // 答一题
+      act(() => {
+        result.current.handleAnswer(true)
+      })
+      act(() => {
+        result.current.dismissFeedback()
+      })
+
+      // 手动停止
+      act(() => {
+        result.current.stopFlow()
+      })
 
       expect(result.current.isComplete).toBe(true)
     })
@@ -418,61 +427,27 @@ describe('useLearningFlow', () => {
         await result.current.startFlow('math')
       })
 
-      // 消耗所有题目
-      const queueLength = useLearningStore.getState().questionQueue.length
-      for (let i = 0; i < queueLength; i++) {
-        act(() => {
-          result.current.handleAnswer(i % 2 === 0) // 交替对错
-        })
-        act(() => {
-          result.current.dismissFeedback()
-        })
-      }
-
-      expect(result.current.sessionSummary).not.toBeNull()
-      expect(result.current.sessionSummary?.questionsCompleted).toBe(queueLength)
-    })
-  })
-
-  describe('AI 出题集成', () => {
-    it('无 API Key 时 QuestionGenerator 使用 fallback provider', async () => {
-      // 默认环境无 VITE_QWEN_API_KEY
-      const { result } = renderHook(() => useLearningFlow())
-
-      await act(async () => {
-        await result.current.startFlow('math')
+      // 答几题再停止
+      act(() => {
+        result.current.handleAnswer(true) // 正确
+      })
+      act(() => {
+        result.current.dismissFeedback()
+      })
+      act(() => {
+        result.current.handleAnswer(false) // 错误
+      })
+      act(() => {
+        result.current.dismissFeedback()
       })
 
-      // fallback provider 的 chatCompletion 应该抛出错误
-      expect(lastGeneratorProvider).not.toBeNull()
-      const provider = lastGeneratorProvider as { chatCompletion: () => Promise<string> }
-      await expect(provider.chatCompletion()).rejects.toThrow('No AI provider configured')
-    })
+      act(() => {
+        result.current.stopFlow()
+      })
 
-    it('有 API Key 时应使用 QwenProvider', async () => {
-      // 设置环境变量
-      const originalEnv = import.meta.env.VITE_QWEN_API_KEY
-      import.meta.env.VITE_QWEN_API_KEY = 'test-api-key-12345'
-
-      try {
-        const { result } = renderHook(() => useLearningFlow())
-
-        await act(async () => {
-          await result.current.startFlow('math')
-        })
-
-        // QwenProvider 应该有 chatCompletion 方法且不抛出
-        expect(lastGeneratorProvider).not.toBeNull()
-        const provider = lastGeneratorProvider as { chatCompletion: () => Promise<string> }
-        const response = await provider.chatCompletion()
-        expect(response).toBe('太棒了，你真聪明！')
-      } finally {
-        if (originalEnv === undefined) {
-          delete import.meta.env.VITE_QWEN_API_KEY
-        } else {
-          import.meta.env.VITE_QWEN_API_KEY = originalEnv
-        }
-      }
+      expect(result.current.sessionSummary).not.toBeNull()
+      expect(result.current.sessionSummary?.questionsCompleted).toBe(2)
+      expect(result.current.sessionSummary?.correctCount).toBe(1)
     })
   })
 
@@ -522,16 +497,16 @@ describe('useLearningFlow', () => {
         await result.current.startFlow('math')
       })
 
-      // 消耗所有题目
-      const queueLength = useLearningStore.getState().questionQueue.length
-      for (let i = 0; i < queueLength; i++) {
-        act(() => {
-          result.current.handleAnswer(true)
-        })
-        act(() => {
-          result.current.dismissFeedback()
-        })
-      }
+      // 答一题然后停止
+      act(() => {
+        result.current.handleAnswer(true)
+      })
+      act(() => {
+        result.current.dismissFeedback()
+      })
+      act(() => {
+        result.current.stopFlow()
+      })
 
       // 等待异步 DB 写入
       await act(async () => {
@@ -548,15 +523,15 @@ describe('useLearningFlow', () => {
         await result.current.startFlow('math')
       })
 
-      const queueLength = useLearningStore.getState().questionQueue.length
-      for (let i = 0; i < queueLength; i++) {
-        act(() => {
-          result.current.handleAnswer(true)
-        })
-        act(() => {
-          result.current.dismissFeedback()
-        })
-      }
+      act(() => {
+        result.current.handleAnswer(true)
+      })
+      act(() => {
+        result.current.dismissFeedback()
+      })
+      act(() => {
+        result.current.stopFlow()
+      })
 
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 100))
@@ -572,15 +547,15 @@ describe('useLearningFlow', () => {
         await result.current.startFlow('math')
       })
 
-      const queueLength = useLearningStore.getState().questionQueue.length
-      for (let i = 0; i < queueLength; i++) {
-        act(() => {
-          result.current.handleAnswer(true)
-        })
-        act(() => {
-          result.current.dismissFeedback()
-        })
-      }
+      act(() => {
+        result.current.handleAnswer(true)
+      })
+      act(() => {
+        result.current.dismissFeedback()
+      })
+      act(() => {
+        result.current.stopFlow()
+      })
 
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 100))
