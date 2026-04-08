@@ -166,6 +166,245 @@ const curriculum: GradeCurriculum = {
         },
       ],
     },
+    {
+      id: 'en-kg-m4',
+      name: '字母认读 A-Z',
+      description: '系统认识 26 个英文字母大小写，从 A 到 Z 逐步学习',
+      order: 4,
+      knowledgeNodes: [
+        {
+          id: 'en-kg-letters-phase1',
+          name: '字母 A-H（第一阶段）',
+          description: '认识字母 A-H 的大小写，学习代表单词',
+          difficulty: 1,
+          contentTypes: ['flashcard', 'quiz'],
+          prerequisites: [],
+          templatePrompts: [
+            {
+              type: 'flashcard',
+              prompt: '展示字母 {letter} 的大小写和代表单词 {word}，配合 emoji 帮助记忆。',
+              constraints: { letters: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] },
+            },
+            {
+              type: 'multiple-choice',
+              prompt: '哪个是字母 {letter}？/ 字母 {letter} 的下一个字母是什么？',
+              constraints: { optionCount: 3 },
+            },
+          ],
+        },
+        {
+          id: 'en-kg-letters-phase2',
+          name: '字母 I-Z（第二阶段）',
+          description: '认识字母 I-Z 的大小写，完成全部 26 个字母学习',
+          difficulty: 2,
+          contentTypes: ['flashcard', 'quiz'],
+          prerequisites: ['en-kg-letters-phase1'],
+          templatePrompts: [
+            {
+              type: 'flashcard',
+              prompt: '展示字母 {letter} 的大小写和代表单词 {word}，配合 emoji 帮助记忆。',
+              constraints: { letters: ['I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'] },
+            },
+            {
+              type: 'multiple-choice',
+              prompt: '哪个是字母 {letter}？/ 大写 {letter} 的小写是什么？',
+              constraints: { optionCount: 3 },
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'en-kg-m5',
+      name: '英语儿歌磨耳朵',
+      description: '通过 5 首经典英文儿歌培养语感和韵律感',
+      order: 5,
+      knowledgeNodes: [
+        {
+          id: 'en-kg-song-abc',
+          name: 'ABC Song 字母歌',
+          description: '学唱 ABC Song，通过旋律记住字母顺序',
+          difficulty: 1,
+          contentTypes: ['voice'],
+          prerequisites: [],
+          templatePrompts: [
+            {
+              type: 'voice',
+              prompt: '跟唱 ABC Song：A B C D E F G, H I J K L M N O P, Q R S T U V, W X Y and Z。',
+              constraints: { song: 'ABC Song' },
+            },
+          ],
+        },
+        {
+          id: 'en-kg-song-twinkle',
+          name: 'Twinkle Twinkle Little Star',
+          description: '学唱一闪一闪小星星英文版',
+          difficulty: 1,
+          contentTypes: ['voice'],
+          prerequisites: [],
+          templatePrompts: [
+            {
+              type: 'voice',
+              prompt: '跟唱 Twinkle Twinkle Little Star，感受英语韵律。',
+              constraints: { song: 'Twinkle Twinkle Little Star' },
+            },
+          ],
+        },
+        {
+          id: 'en-kg-song-macdonald',
+          name: 'Old MacDonald Had a Farm',
+          description: '学唱老麦克唐纳有个农场，认识动物叫声',
+          difficulty: 1,
+          contentTypes: ['voice'],
+          prerequisites: [],
+          templatePrompts: [
+            {
+              type: 'voice',
+              prompt: '跟唱 Old MacDonald Had a Farm，模仿各种动物叫声。',
+              constraints: { song: 'Old MacDonald Had a Farm' },
+            },
+          ],
+        },
+        {
+          id: 'en-kg-song-head-shoulders',
+          name: 'Head, Shoulders, Knees and Toes',
+          description: '学唱 TPR 儿歌，边唱边指身体部位',
+          difficulty: 1,
+          contentTypes: ['voice'],
+          prerequisites: [],
+          templatePrompts: [
+            {
+              type: 'voice',
+              prompt: '跟唱 Head, Shoulders, Knees and Toes，边唱边指对应身体部位。',
+              constraints: { song: 'Head, Shoulders, Knees and Toes' },
+            },
+          ],
+        },
+        {
+          id: 'en-kg-song-happy',
+          name: 'If You\'re Happy and You Know It',
+          description: '学唱互动儿歌，通过动作表达情感',
+          difficulty: 1,
+          contentTypes: ['voice'],
+          prerequisites: [],
+          templatePrompts: [
+            {
+              type: 'voice',
+              prompt: '跟唱 If You\'re Happy and You Know It，做对应动作（拍手、跺脚等）。',
+              constraints: { song: 'If You\'re Happy and You Know It' },
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'en-kg-m6',
+      name: '日常对话场景',
+      description: '5 个日常生活场景的英语对话练习',
+      order: 6,
+      knowledgeNodes: [
+        {
+          id: 'en-kg-dialogue-greetings',
+          name: '打招呼 Greetings',
+          description: '学习日常问候：Hello! How are you? I\'m fine, thank you!',
+          difficulty: 2,
+          contentTypes: ['voice', 'quiz'],
+          prerequisites: ['en-kg-greetings'],
+          templatePrompts: [
+            {
+              type: 'voice',
+              prompt: '跟读对话：Hello! How are you? I\'m fine, thank you!',
+              constraints: { scenario: 'greetings' },
+            },
+            {
+              type: 'multiple-choice',
+              prompt: '别人说 {greeting}，你应该怎么回答？',
+              constraints: { optionCount: 3 },
+            },
+          ],
+        },
+        {
+          id: 'en-kg-dialogue-colors',
+          name: '颜色对话 Colors',
+          description: '学习询问和回答颜色：What color is it? It\'s red!',
+          difficulty: 2,
+          contentTypes: ['voice', 'quiz'],
+          prerequisites: ['en-kg-colors'],
+          templatePrompts: [
+            {
+              type: 'voice',
+              prompt: '跟读对话：What color is it? It\'s {color}!',
+              constraints: { colors: ['red', 'blue', 'green', 'yellow'] },
+            },
+            {
+              type: 'multiple-choice',
+              prompt: '看到 {color_emoji}，用英文怎么说这个颜色？',
+              constraints: { optionCount: 3 },
+            },
+          ],
+        },
+        {
+          id: 'en-kg-dialogue-numbers',
+          name: '数字对话 Numbers',
+          description: '学习数数和回答数量：How many? One, two, three...',
+          difficulty: 2,
+          contentTypes: ['voice', 'quiz'],
+          prerequisites: ['en-kg-numbers-1-5'],
+          templatePrompts: [
+            {
+              type: 'voice',
+              prompt: '跟读数数：One, two, three, four, five! How many {item}?',
+              constraints: { min: 1, max: 5 },
+            },
+            {
+              type: 'multiple-choice',
+              prompt: 'How many {item}? 数一数，一共有几个？',
+              constraints: { optionCount: 3 },
+            },
+          ],
+        },
+        {
+          id: 'en-kg-dialogue-family',
+          name: '家庭成员对话 Family',
+          description: '学习介绍家人：This is my mom/dad/sister/brother.',
+          difficulty: 2,
+          contentTypes: ['voice', 'quiz'],
+          prerequisites: ['en-kg-dialogue-greetings'],
+          templatePrompts: [
+            {
+              type: 'voice',
+              prompt: '跟读：This is my {family_member}. I love my family!',
+              constraints: { members: ['mom', 'dad', 'sister', 'brother'] },
+            },
+            {
+              type: 'multiple-choice',
+              prompt: '{family_member_cn} 用英文怎么说？',
+              constraints: { optionCount: 3 },
+            },
+          ],
+        },
+        {
+          id: 'en-kg-dialogue-food',
+          name: '食物对话 Food',
+          description: '学习表达食物偏好：I like apples. Do you like bananas?',
+          difficulty: 2,
+          contentTypes: ['voice', 'quiz'],
+          prerequisites: ['en-kg-dialogue-colors', 'en-kg-dialogue-numbers'],
+          templatePrompts: [
+            {
+              type: 'voice',
+              prompt: '跟读对话：I like {food}! Do you like {food}?',
+              constraints: { foods: ['apples', 'bananas', 'oranges', 'milk', 'bread'] },
+            },
+            {
+              type: 'multiple-choice',
+              prompt: '别人问 Do you like {food}?，你喜欢的话怎么回答？',
+              constraints: { optionCount: 3 },
+            },
+          ],
+        },
+      ],
+    },
   ],
 }
 

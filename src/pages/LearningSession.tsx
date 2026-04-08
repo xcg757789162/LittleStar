@@ -1,16 +1,21 @@
 /**
  * 每日学习流程页面
  * 整合闪卡/选择题/手写板组件，连接自适应引擎和 store
+ * 集成庆祝动画、鼓励覆盖层、音效系统
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useLearningFlow } from '@/hooks/useLearningFlow'
+import { useSoundEffects } from '@/hooks/useSoundEffects'
 import { MultipleChoice } from '@/components/learning/MultipleChoice'
 import { FlashCard } from '@/components/learning/FlashCard'
 import { WritingPad } from '@/components/learning/WritingPad'
 import { FeedbackAnimation } from '@/components/feedback/FeedbackAnimation'
+import { CelebrationAnimation } from '@/components/feedback/CelebrationAnimation'
+import { EncouragementOverlay } from '@/components/feedback/EncouragementOverlay'
+import type { CelebrationLevel } from '@/components/feedback/CelebrationAnimation'
 import type { Subject } from '@/types/models'
 
 const SUBJECTS: { key: Subject; label: string; emoji: string; color: string }[] = [
@@ -23,6 +28,13 @@ export function LearningSession() {
   const navigate = useNavigate()
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null)
   const [isFlipped, setIsFlipped] = useState(false)
+
+  // 庆祝/鼓励动画状态
+  const [showCelebration, setShowCelebration] = useState(false)
+  const [showEncouragement, setShowEncouragement] = useState(false)
+  const [celebrationLevel, setCelebrationLevel] = useState<CelebrationLevel>('normal')
+  const [showCompleteCelebration, setShowCompleteCelebration] = useState(false)
+  const consecutiveCorrectRef = useRef(0)
 
   const {
     isActive,
@@ -39,8 +51,17 @@ export function LearningSession() {
     dismissFeedback,
   } = useLearningFlow()
 
+  const {
+    playCorrect,
+    playWrong,
+    playCelebration,
+    playStar,
+    playLevelUp,
+  } = useSoundEffects()
+
   const handleStart = useCallback(async () => {
     if (selectedSubject) {
+      consecutiveCorrectRef.current = 0
       await startFlow(selectedSubject)
     }
   }, [selectedSubject, startFlow])
@@ -52,21 +73,72 @@ export function LearningSession() {
     navigate('/')
   }, [isActive, stopFlow, navigate])
 
+  /** 包装答题处理，增加音效和庆祝逻辑 */
+  const handleAnswerWithEffects = useCallback(
+    (isCorrect: boolean) => {
+      handleAnswer(isCorrect)
+
+      if (isCorrect) {
+        consecutiveCorrectRef.current++
+        playCorrect()
+        playStar()
+
+        // 根据连续答对次数决定庆祝等级
+        const streak = consecutiveCorrectRef.current
+        if (streak >= 5 && streak % 5 === 0) {
+          setCelebrationLevel('streak5')
+          setShowCelebration(true)
+          playCelebration()
+        } else if (streak >= 3 && streak % 3 === 0) {
+          setCelebrationLevel('streak3')
+          setShowCelebration(true)
+          playCelebration()
+        }
+        // 普通答对由 FeedbackAnimation 处理
+      } else {
+        consecutiveCorrectRef.current = 0
+        playWrong()
+        setShowEncouragement(true)
+      }
+    },
+    [handleAnswer, playCorrect, playWrong, playCelebration, playStar],
+  )
+
   const handleMultipleChoiceAnswer = useCallback(
     (_optionId: string, isCorrect: boolean) => {
-      handleAnswer(isCorrect)
+      handleAnswerWithEffects(isCorrect)
     },
-    [handleAnswer],
+    [handleAnswerWithEffects],
   )
 
   const handleFlashCardNext = useCallback(() => {
     setIsFlipped(false)
-    handleAnswer(true) // 闪卡默认为"已学习"
-  }, [handleAnswer])
+    handleAnswerWithEffects(true) // 闪卡默认为"已学习"
+  }, [handleAnswerWithEffects])
 
   const handleWritingSubmit = useCallback(() => {
-    handleAnswer(true) // 手写提交默认为完成
-  }, [handleAnswer])
+    handleAnswerWithEffects(true) // 手写提交默认为完成
+  }, [handleAnswerWithEffects])
+
+  // 会话完成时显示完整庆祝动画
+  useEffect(() => {
+    if (isComplete && sessionSummary) {
+      playLevelUp()
+      setShowCompleteCelebration(true)
+    }
+  }, [isComplete, sessionSummary, playLevelUp])
+
+  const handleCelebrationComplete = useCallback(() => {
+    setShowCelebration(false)
+  }, [])
+
+  const handleEncouragementComplete = useCallback(() => {
+    setShowEncouragement(false)
+  }, [])
+
+  const handleCompleteCelebrationDone = useCallback(() => {
+    setShowCompleteCelebration(false)
+  }, [])
 
   // 渲染题目组件
   const renderQuestion = () => {
@@ -298,8 +370,30 @@ export function LearningSession() {
         </div>
       )}
 
+      {/* 连续答对庆祝动画 */}
+      <CelebrationAnimation
+        visible={showCelebration}
+        level={celebrationLevel}
+        onComplete={handleCelebrationComplete}
+      />
+
+      {/* 答错鼓励覆盖层 */}
+      <EncouragementOverlay
+        visible={showEncouragement}
+        onComplete={handleEncouragementComplete}
+      />
+
+      {/* 会话完成庆祝动画（大量星星+纸屑） */}
+      <CelebrationAnimation
+        visible={showCompleteCelebration}
+        level="complete"
+        message="学习完成！你太棒了！🎉"
+        onComplete={handleCompleteCelebrationDone}
+        duration={3500}
+      />
+
       {/* 会话总结 */}
-      {isComplete && sessionSummary && (
+      {isComplete && sessionSummary && !showCompleteCelebration && (
         <div
           data-testid="session-summary"
           style={{
@@ -335,9 +429,15 @@ export function LearningSession() {
             </div>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#4CAF50' }}>
-                {sessionSummary.accuracy}%
+                {/* 图形化展示：用星星代替百分比 */}
+                {Array.from(
+                  { length: Math.round((sessionSummary.accuracy / 100) * 5) },
+                  (_, i) => (
+                    <span key={i}>⭐</span>
+                  ),
+                )}
               </div>
-              <div style={{ fontSize: '14px', color: '#666' }}>正确率</div>
+              <div style={{ fontSize: '14px', color: '#666' }}>表现</div>
             </div>
           </div>
           <button

@@ -1,12 +1,68 @@
 /**
  * 首页
+ * 首次使用（没有学习记录）时显示"入学测评"入口
+ * 否则显示"开始学习"
  */
 
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import { db } from '@/db/database'
+import { useChildStore } from '@/stores/childStore'
 
 export function Home() {
   const navigate = useNavigate()
+  const currentChild = useChildStore((s) => s.currentChild)
+  const [hasPlacementTest, setHasPlacementTest] = useState<boolean | null>(null)
+
+  // 检查是否已完成入学测评
+  useEffect(() => {
+    const checkPlacement = async () => {
+      try {
+        const childId = currentChild?.id ?? 'default'
+        const count = await db.placementTests
+          .where('childId')
+          .equals(childId)
+          .count()
+        setHasPlacementTest(count > 0)
+      } catch {
+        // DB 查询失败默认为已测评
+        setHasPlacementTest(true)
+      }
+    }
+    checkPlacement()
+  }, [currentChild])
+
+  const gradeLevel = currentChild?.gradeLevel ?? 'middle-kindergarten'
+
+  const handlePlacementTest = () => {
+    // 默认从数学科目开始入学测评
+    navigate(`/placement-test/math/${gradeLevel}`)
+  }
+
+  // 加载中状态
+  if (hasPlacementTest === null) {
+    return (
+      <div
+        data-testid="home-page"
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(180deg, #E8EAF6 0%, #F3E5F5 100%)',
+        }}
+      >
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+          style={{ fontSize: '48px' }}
+        >
+          🌟
+        </motion.div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -36,23 +92,94 @@ export function Home() {
       <p style={{ fontSize: '18px', color: '#666', marginBottom: '32px' }}>
         和小星老师一起快乐学习！
       </p>
-      <motion.button
-        whileTap={{ scale: 0.95 }}
-        onClick={() => navigate('/learn')}
-        style={{
-          padding: '16px 48px',
-          borderRadius: '24px',
-          border: 'none',
-          backgroundColor: '#7C4DFF',
-          color: 'white',
-          fontSize: '22px',
-          fontWeight: 'bold',
-          cursor: 'pointer',
-          boxShadow: '0 4px 16px rgba(124, 77, 255, 0.4)',
-        }}
-      >
-        开始学习
-      </motion.button>
+
+      {!hasPlacementTest ? (
+        /* 首次使用：显示入学测评入口 */
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '16px',
+          }}
+        >
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            style={{
+              fontSize: '16px',
+              color: '#7C4DFF',
+              fontWeight: 600,
+              textAlign: 'center',
+            }}
+          >
+            🌟 让小星老师先了解一下你吧！
+          </motion.p>
+
+          <motion.button
+            data-testid="placement-test-entry-btn"
+            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.05 }}
+            onClick={handlePlacementTest}
+            style={{
+              padding: '24px 56px',
+              borderRadius: '28px',
+              border: 'none',
+              backgroundColor: '#FF6B35',
+              color: 'white',
+              fontSize: '24px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              boxShadow: '0 6px 24px rgba(255, 107, 53, 0.4)',
+              minWidth: '220px',
+              minHeight: '88px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+            }}
+          >
+            <span style={{ fontSize: '32px' }}>🚀</span>
+            入学测评
+          </motion.button>
+
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+            style={{
+              fontSize: '13px',
+              color: '#999',
+              textAlign: 'center',
+            }}
+          >
+            只需几分钟，轻轻松松 ☺️
+          </motion.p>
+        </motion.div>
+      ) : (
+        /* 已完成测评：显示开始学习 */
+        <motion.button
+          whileTap={{ scale: 0.95 }}
+          onClick={() => navigate('/learn')}
+          style={{
+            padding: '16px 48px',
+            borderRadius: '24px',
+            border: 'none',
+            backgroundColor: '#7C4DFF',
+            color: 'white',
+            fontSize: '22px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            boxShadow: '0 4px 16px rgba(124, 77, 255, 0.4)',
+          }}
+        >
+          开始学习
+        </motion.button>
+      )}
     </div>
   )
 }

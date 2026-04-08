@@ -1,6 +1,7 @@
 /**
  * useLearningFlow Hook
  * 学习主循环核心编排：AdaptiveRouter → QuestionGenerator → 答题 → 反馈 → 掌握率更新
+ * Phase 1: 集成亲子互动环节 + TPR 全身反应法 + 艾宾浩斯复习机制
  */
 
 import { useState, useCallback, useRef } from 'react'
@@ -11,11 +12,15 @@ import { AITeacher } from '@/services/ai/teacher'
 import { AchievementEngine } from '@/engine/achievement'
 import { GradeUnlockEngine } from '@/engine/grade-unlock-engine'
 import { generateDailySnapshot } from '@/engine/mastery-snapshot'
-import { MasteryCalculator } from '@/engine/mastery'
+import { ReviewManager } from '@/engine/review-manager'
 import { RuleEngine } from '@/engine/rule-engine'
 import { useLearningStore } from '@/stores/learningStore'
 import { useChildStore } from '@/stores/childStore'
 import { db } from '@/db/database'
+import { getRandomActivity } from '@/data/seed/english-parent-activities'
+import { getRandomTPR } from '@/data/seed/english-tpr'
+import type { ParentActivity } from '@/data/seed/english-parent-activities'
+import type { TPRCommand } from '@/data/seed/english-tpr'
 import type { FeedbackType } from '@/components/feedback/FeedbackAnimation'
 import type { Subject, Question, KnowledgeNode } from '@/types/models'
 import type { AIProvider } from '@/services/ai/provider'
@@ -48,6 +53,16 @@ export interface SessionSummary {
   subject: Subject
 }
 
+/** 学习流中的插入环节类型 */
+export type InterstitialType = 'parent-activity' | 'tpr'
+
+/** 当前插入环节 */
+export interface CurrentInterstitial {
+  type: InterstitialType
+  parentActivity?: ParentActivity
+  tprCommand?: TPRCommand
+}
+
 /** Hook 返回值 */
 export interface LearningFlowState {
   /** 学习是否激活 */
@@ -56,6 +71,8 @@ export interface LearningFlowState {
   isLoading: boolean
   /** 当前题目 */
   currentQuestion: Question | null
+  /** 当前题目是否为复习内容 */
+  isCurrentReview: boolean
   /** 是否显示反馈动画 */
   showFeedback: boolean
   /** 反馈类型 */
@@ -66,6 +83,8 @@ export interface LearningFlowState {
   sessionSummary: SessionSummary | null
   /** 鼓励语 */
   encouragement: string
+  /** 当前插入环节（亲子互动/TPR） */
+  currentInterstitial: CurrentInterstitial | null
   /** 启动学习流程 */
   startFlow: (subject: Subject) => Promise<void>
   /** 停止学习流程 */
@@ -74,6 +93,8 @@ export interface LearningFlowState {
   handleAnswer: (isCorrect: boolean) => void
   /** 关闭反馈动画 */
   dismissFeedback: () => void
+  /** 完成插入环节 */
+  completeInterstitial: () => void
 }
 
 export function useLearningFlow(): LearningFlowState {
@@ -84,10 +105,12 @@ export function useLearningFlow(): LearningFlowState {
   const [isComplete, setIsComplete] = useState(false)
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null)
   const [encouragement, setEncouragement] = useState('')
+  const [isCurrentReview, setIsCurrentReview] = useState(false)
+  const [currentInterstitial, setCurrentInterstitial] = useState<CurrentInterstitial | null>(null)
 
   // 引擎实例（useRef 避免重复创建）
   const routerRef = useRef(new AdaptiveRouter())
-  const masteryCalcRef = useRef(new MasteryCalculator())
+  const reviewManagerRef = useRef(new ReviewManager())
   const ruleEngineRef = useRef(new RuleEngine())
   const achievementEngineRef = useRef(new AchievementEngine())
   const gradeUnlockEngineRef = useRef(new GradeUnlockEngine())
@@ -99,6 +122,12 @@ export function useLearningFlow(): LearningFlowState {
   // 追踪连续正确/错误
   const consecutiveCorrectRef = useRef(0)
   const consecutiveWrongRef = useRef(0)
+
+  // 追踪已回答的题目数（用于判断是否插入亲子活动）
+  const answeredSinceInterstitialRef = useRef(0)
+
+  // 追踪哪些题目是复习的（使用 question id Set）
+  const reviewQuestionIdsRef = useRef<Set<string>>(new Set())
 
   // 只订阅 actions（稳定引用），避免订阅频繁变化的数据导致不必要重渲染
   const startSession = useLearningStore((s) => s.startSession)
@@ -116,9 +145,13 @@ export function useLearningFlow(): LearningFlowState {
     setIsLoading(true)
     setIsComplete(false)
     setSessionSummary(null)
+    setCurrentInterstitial(null)
+    setIsCurrentReview(false)
     subjectRef.current = subject
     consecutiveCorrectRef.current = 0
     consecutiveWrongRef.current = 0
+    answeredSinceInterstitialRef.current = 0
+    reviewQuestionIdsRef.current = new Set()
 
     // 1. 启动 learningStore 会话
     startSession(subject)
@@ -148,15 +181,68 @@ export function useLearningFlow(): LearningFlowState {
       }
 
       // 5. AdaptiveRouter 推荐知识点
+      const totalCount = ruleEngineRef.current.getRecommendedQuestionsPerSession(gradeLevel)
       const recommendedNodes = routerRef.current.getRecommendations({
         nodes: nodes as KnowledgeNode[],
         masteryMap,
         currentSubject: subject,
-        count: ruleEngineRef.current.getRecommendedQuestionsPerSession(gradeLevel),
+        count: totalCount,
       })
 
-      // 6. QuestionGenerator 为每个推荐知识点生成题目
+      // 6. 获取复习内容（艾宾浩斯复习机制）
+      const reviewItems = await reviewManagerRef.current.getReviewItems(
+        childId,
+        subject,
+        totalCount,
+      )
+
+      // 7. 为复习内容生成题目（先复习，再新内容）
       const questions: Question[] = []
+
+      // 7a. 复习题
+      for (const reviewItem of reviewItems) {
+        try {
+          const node = nodes.find((n) => n.id === reviewItem.nodeId)
+          if (!node) continue
+
+          const questionType = reviewItem.reviewFormat === 'flashcard'
+            ? 'flashcard'
+            : reviewItem.reviewFormat === 'oral'
+              ? 'voice'
+              : 'multiple-choice'
+
+          const generated = await generatorRef.current.generate({
+            subject,
+            knowledgeNodeId: node.id!,
+            difficulty: node.difficulty,
+            type: questionType === 'voice' ? 'flashcard' : questionType,
+          })
+
+          const qId = `review-${node.id}-${Date.now()}`
+          reviewQuestionIdsRef.current.add(qId)
+
+          questions.push({
+            id: qId,
+            knowledgeNodeId: node.id!,
+            type: generated.options ? 'multiple-choice' : 'flashcard',
+            content: {
+              text: generated.question,
+              options: generated.options?.map((opt) => ({
+                id: opt.id,
+                text: opt.text,
+                isCorrect: opt.isCorrect,
+              })),
+            },
+            answer: generated.answer,
+            difficulty: generated.difficulty,
+            isAIGenerated: !generated.isFallback,
+          })
+        } catch {
+          // 复习题生成失败跳过
+        }
+      }
+
+      // 7b. 新内容题
       for (const node of recommendedNodes) {
         try {
           const generated = await generatorRef.current.generate({
@@ -187,9 +273,11 @@ export function useLearningFlow(): LearningFlowState {
         }
       }
 
-      // 7. 设置题目队列
+      // 8. 设置题目队列
       if (questions.length > 0) {
         setQuestionQueue(questions)
+        // 标记首题是否为复习
+        setIsCurrentReview(reviewQuestionIdsRef.current.has(questions[0].id ?? ''))
       }
     } catch {
       // 加载失败也保持激活，让用户可以退出
@@ -340,6 +428,23 @@ export function useLearningFlow(): LearningFlowState {
       consecutiveCorrectRef.current = 0
     }
 
+    // 更新已回答计数
+    answeredSinceInterstitialRef.current++
+
+    // 异步更新复习调度
+    const question = currentQuestion
+    if (question) {
+      const child = useChildStore.getState().currentChild
+      const childId = child?.id ?? 'default'
+      reviewManagerRef.current.recordReview(
+        childId,
+        question.knowledgeNodeId,
+        isCorrect,
+      ).catch(() => {
+        // 静默处理调度失败
+      })
+    }
+
     // 显示反馈
     setShowFeedback(true)
     setFeedbackType(isCorrect ? 'correct' : 'wrong')
@@ -357,7 +462,7 @@ export function useLearningFlow(): LearningFlowState {
       // 鼓励语生成失败时使用默认值
       setEncouragement(isCorrect ? '你真棒！' : '加油，再试一次！')
     })
-  }, [recordAnswer])
+  }, [recordAnswer, currentQuestion])
 
   /**
    * 关闭反馈动画，检查是否应继续
@@ -387,6 +492,33 @@ export function useLearningFlow(): LearningFlowState {
         questionsCompleted: state.sessionStats.questionsCompleted,
         correctCount: state.sessionStats.correctCount,
       })
+      return
+    }
+
+    // 更新当前题目的复习标记
+    setIsCurrentReview(
+      reviewQuestionIdsRef.current.has(state.currentQuestion?.id ?? ''),
+    )
+
+    // 每 2-3 个知识点后插入亲子互动或 TPR 环节（仅英语科目）
+    if (
+      subjectRef.current === 'english' &&
+      answeredSinceInterstitialRef.current >= 2 + Math.floor(Math.random() * 2)
+    ) {
+      answeredSinceInterstitialRef.current = 0
+
+      // 随机选择插入亲子活动或 TPR
+      if (Math.random() < 0.5) {
+        setCurrentInterstitial({
+          type: 'parent-activity',
+          parentActivity: getRandomActivity(),
+        })
+      } else {
+        setCurrentInterstitial({
+          type: 'tpr',
+          tprCommand: getRandomTPR(),
+        })
+      }
       return
     }
 
@@ -421,18 +553,28 @@ export function useLearningFlow(): LearningFlowState {
     }
   }, [endSession, stopFlow, onSessionEnd])
 
+  /**
+   * 完成插入环节（亲子互动/TPR），继续答题
+   */
+  const completeInterstitial = useCallback(() => {
+    setCurrentInterstitial(null)
+  }, [])
+
   return {
     isActive,
     isLoading,
     currentQuestion,
+    isCurrentReview,
     showFeedback,
     feedbackType,
     isComplete,
     sessionSummary,
     encouragement,
+    currentInterstitial,
     startFlow,
     stopFlow,
     handleAnswer,
     dismissFeedback,
+    completeInterstitial,
   }
 }

@@ -3,6 +3,10 @@ import type { KnowledgeNode, Question } from '@/types/models'
 import { mathKnowledgeNodes, mathQuestions } from './math'
 import { chineseKnowledgeNodes, chineseQuestions } from './chinese'
 import { englishKnowledgeNodes, englishQuestions } from './english'
+import { letterKnowledgeNodes, letterQuestions } from './english-letters'
+import { songKnowledgeNodes, songQuestions } from './english-songs'
+import { dialogueKnowledgeNodes, dialogueQuestions } from './english-dialogues'
+import { tprKnowledgeNodes, tprQuestions } from './english-tpr'
 
 /** 种子数据结构 */
 export interface SeedData {
@@ -26,11 +30,23 @@ export function getChineseSeedData(): SeedData {
   }
 }
 
-/** 获取英语种子数据 */
+/** 获取英语种子数据（包含基础 + 字母 + 儿歌 + 对话 + TPR） */
 export function getEnglishSeedData(): SeedData {
   return {
-    knowledgeNodes: englishKnowledgeNodes,
-    questions: englishQuestions,
+    knowledgeNodes: [
+      ...englishKnowledgeNodes,
+      ...letterKnowledgeNodes,
+      ...songKnowledgeNodes,
+      ...dialogueKnowledgeNodes,
+      ...tprKnowledgeNodes,
+    ],
+    questions: [
+      ...englishQuestions,
+      ...letterQuestions,
+      ...songQuestions,
+      ...dialogueQuestions,
+      ...tprQuestions,
+    ],
   }
 }
 

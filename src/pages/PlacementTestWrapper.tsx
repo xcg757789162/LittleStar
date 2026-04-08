@@ -44,7 +44,7 @@ export function PlacementTestWrapper() {
     <PlacementTestPage
       subject={validSubject}
       gradeLevel={validGrade}
-      onComplete={() => navigate('/learn')}
+      onComplete={() => navigate('/')}
       onExit={() => navigate(-1)}
     />
   )
