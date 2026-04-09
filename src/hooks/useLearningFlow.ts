@@ -140,6 +140,9 @@ export function useLearningFlow(): LearningFlowState {
   const teacherRef = useRef(new AITeacher(providerRef.current))
   const subjectRef = useRef<Subject>('math')
 
+  // 追踪当前课堂对应的知识点 ID（从缓存列表获取）
+  const currentKnowledgeNodeIdRef = useRef<string>('')
+
   // 新流程：缓存和调整器实例
   // 使用 PostgresCacheStore 持久化到数据库（如果有 childId），否则 fallback 内存 Map
   const classroomCacheRef = useRef<ClassroomCache | null>(null)
@@ -188,6 +191,7 @@ export function useLearningFlow(): LearningFlowState {
     consecutiveWrongRef.current = 0
     answeredSinceInterstitialRef.current = 0
     reviewQuestionIdsRef.current = new Set()
+    currentKnowledgeNodeIdRef.current = ''
 
     // 1. 启动 learningStore 会话
     startSession(subject)
@@ -200,6 +204,7 @@ export function useLearningFlow(): LearningFlowState {
       if (cachedList.length > 0) {
         // 有缓存 → 加载第一个课堂
         const firstItem = cachedList[0]
+        currentKnowledgeNodeIdRef.current = firstItem.knowledgeNodeId
         const classroom = await classroomCacheRef.current!.getClassroom(
           firstItem.knowledgeNodeId,
           firstItem.date,
@@ -226,7 +231,11 @@ export function useLearningFlow(): LearningFlowState {
   /**
    * 会话结束后的 DB 写入和引擎检查（异步，不阻塞 UI）
    */
-  const onSessionEnd = useCallback(async (subject: Subject, stats: { questionsCompleted: number; correctCount: number }) => {
+  const onSessionEnd = useCallback(async (
+    subject: Subject,
+    stats: { questionsCompleted: number; correctCount: number },
+    classroom?: Classroom | null,
+  ) => {
     try {
       const child = useChildStore.getState().currentChild
       if (!child) return
@@ -247,7 +256,79 @@ export function useLearningFlow(): LearningFlowState {
         streak: 1,
       })
 
-      // 2. 加载当前掌握率
+      // 2. 写入 classroom_history（课堂学习历史）
+      if (classroom) {
+        const knowledgeNodeId = currentKnowledgeNodeIdRef.current || classroom.id || 'unknown'
+        const accuracy = stats.questionsCompleted > 0
+          ? Math.round((stats.correctCount / stats.questionsCompleted) * 100)
+          : 0
+
+        // 计算学习轮次
+        const existingHistory = await apiClient.get<{ id: number }>('/classroom_history', {
+          filters: [
+            { column: 'childId', operator: 'eq', value: childId },
+            { column: 'knowledgeNodeId', operator: 'eq', value: knowledgeNodeId },
+          ],
+          select: 'id',
+        })
+        const round = existingHistory.length + 1
+
+        const historyRecord = await apiClient.post<{ id: number }>('/classroom_history', {
+          childId,
+          knowledgeNodeId,
+          knowledgeNodeName: classroom.title ?? knowledgeNodeId,
+          subject,
+          classroomId: classroom.id,
+          classroomTitle: classroom.title ?? '',
+          date: dateStr,
+          completedAt: today.toISOString(),
+          round,
+          isReview: false,
+          questionsCompleted: stats.questionsCompleted,
+          correctCount: stats.correctCount,
+          accuracy,
+        })
+
+        // 写入课堂快照数据（classroom_snapshots 表，关联 classroom_history）
+        if (historyRecord?.id) {
+          await apiClient.post('/classroom_snapshots', {
+            historyId: historyRecord.id,
+            classroomData: classroom,
+          })
+        }
+
+        // 3. Upsert mastery_records（更新掌握率）
+        const correctRate = stats.questionsCompleted > 0
+          ? stats.correctCount / stats.questionsCompleted
+          : 0
+        const masteryDelta = correctRate >= 0.8 ? 15 : correctRate >= 0.5 ? 5 : -5
+        const baseMastery = 50 // 首次学习基线
+
+        // 先尝试获取现有记录
+        const existingMastery = await apiClient.get<MasteryRecord>('/mastery_records', {
+          filters: [
+            { column: 'childId', operator: 'eq', value: childId },
+            { column: 'knowledgeNodeId', operator: 'eq', value: knowledgeNodeId },
+          ],
+        })
+
+        const currentMastery = existingMastery.length > 0 ? existingMastery[0].masteryLevel : baseMastery
+        const newMastery = Math.max(0, Math.min(100, currentMastery + masteryDelta))
+        const nextReview = new Date(today.getTime() + (newMastery >= 80 ? 7 : newMastery >= 60 ? 3 : 1) * 24 * 60 * 60 * 1000)
+
+        await apiClient.upsert('/mastery_records', {
+          childId,
+          knowledgeNodeId,
+          masteryLevel: newMastery,
+          lastPracticed: today.toISOString(),
+          nextReviewDate: nextReview.toISOString(),
+          consecutiveCorrect: correctRate >= 0.8 ? stats.correctCount : 0,
+          totalAttempts: (existingMastery[0]?.totalAttempts ?? 0) + stats.questionsCompleted,
+          totalCorrect: (existingMastery[0]?.totalCorrect ?? 0) + stats.correctCount,
+        })
+      }
+
+      // 4. 加载当前掌握率（用于后续成就/年级检查）
       const masteryRecords = await apiClient.get<MasteryRecord>('/mastery_records', {
         filters: [{ column: 'childId', operator: 'eq', value: childId }],
       })
@@ -257,7 +338,7 @@ export function useLearningFlow(): LearningFlowState {
         masteryMap.set(record.knowledgeNodeId, record.masteryLevel)
       }
 
-      // 3. 检查成就
+      // 5. 检查成就
       const existingAchievements = await apiClient.get<Achievement>('/achievements', {
         filters: [{ column: 'childId', operator: 'eq', value: childId }],
       })
@@ -286,7 +367,7 @@ export function useLearningFlow(): LearningFlowState {
         })
       }
 
-      // 4. 检查年级解锁
+      // 6. 检查年级解锁
       const nodes = await apiClient.get<KnowledgeNode>('/knowledge_nodes', {
         filters: [{ column: 'subject', operator: 'eq', value: subject }],
       })
@@ -298,7 +379,7 @@ export function useLearningFlow(): LearningFlowState {
         totalNodes: nodes.length,
       })
 
-      // 5. 生成每日掌握度快照
+      // 7. 生成每日掌握度快照
       const nodesMastery: Record<string, number> = {}
       for (const [nodeId, mastery] of masteryMap) {
         nodesMastery[nodeId] = mastery
@@ -314,8 +395,9 @@ export function useLearningFlow(): LearningFlowState {
       if (snapshot) {
         await apiClient.post('/mastery_snapshots', snapshot)
       }
-    } catch {
-      // 写入失败不影响用户体验，静默处理
+    } catch (error) {
+      // 写入失败不影响用户体验，但记录到 console 方便排查
+      console.error('[onSessionEnd] DB 写入失败:', error)
     }
   }, [])
 
@@ -560,11 +642,11 @@ export function useLearningFlow(): LearningFlowState {
       subject,
     })
 
-    // 异步写入 DB
+    // 异步写入 DB（传递课堂数据用于写入 classroom_history 和 mastery_records）
     onSessionEnd(subject, {
       questionsCompleted: stats.questionsCompleted,
       correctCount: stats.correctCount,
-    })
+    }, currentClassroom)
   }, [currentClassroom, endSession, onSessionEnd])
 
   return {
