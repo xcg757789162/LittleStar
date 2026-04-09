@@ -325,7 +325,7 @@ export function useLearningFlow(): LearningFlowState {
           consecutiveCorrect: correctRate >= 0.8 ? stats.correctCount : 0,
           totalAttempts: (existingMastery[0]?.totalAttempts ?? 0) + stats.questionsCompleted,
           totalCorrect: (existingMastery[0]?.totalCorrect ?? 0) + stats.correctCount,
-        })
+        }, 'child_id,knowledge_node_id')
       }
 
       // 4. 加载当前掌握率（用于后续成就/年级检查）

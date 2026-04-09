@@ -72,7 +72,7 @@ export class PostgresCacheStore implements CacheStore {
       classroomData: value.classroom,
       cachedAt: new Date(value.cachedAt).toISOString(),
       expiresAt,
-    })
+    }, 'child_id,cache_key')
   }
 
   async delete(key: string): Promise<void> {

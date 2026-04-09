@@ -477,11 +477,14 @@ export const apiClient = {
    * 利用 PostgREST 的 upsert 语义：当 UNIQUE 约束冲突时更新，否则插入。
    * @param path - PostgREST 资源路径（如 '/mastery_records'）
    * @param body - 请求体（camelCase，自动转换为 snake_case）
+   * @param onConflict - 冲突列（snake_case，逗号分隔）。PostgREST 在表有多个 UNIQUE
+   *   约束时需要显式指定用于冲突检测的列，例如 'child_id,knowledge_node_id'
    */
-  async upsert<T>(path: string, body: unknown): Promise<T> {
+  async upsert<T>(path: string, body: unknown, onConflict?: string): Promise<T> {
+    const upsertPath = onConflict ? `${path}?on_conflict=${onConflict}` : path
     const result = await request<T[]>({
       method: 'POST',
-      path,
+      path: upsertPath,
       body,
       headers: {
         Prefer: 'resolution=merge-duplicates',
@@ -496,11 +499,13 @@ export const apiClient = {
    * 与 upsert 相同，但接受数组输入。
    * @param path - PostgREST 资源路径
    * @param bodies - 请求体数组（camelCase，自动转换为 snake_case）
+   * @param onConflict - 冲突列（snake_case，逗号分隔）
    */
-  async batchUpsert<T>(path: string, bodies: unknown[]): Promise<T[]> {
+  async batchUpsert<T>(path: string, bodies: unknown[], onConflict?: string): Promise<T[]> {
+    const upsertPath = onConflict ? `${path}?on_conflict=${onConflict}` : path
     return request<T[]>({
       method: 'POST',
-      path,
+      path: upsertPath,
       body: bodies,
       headers: {
         Prefer: 'resolution=merge-duplicates',
