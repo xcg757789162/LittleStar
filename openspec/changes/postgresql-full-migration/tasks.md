@@ -20,16 +20,16 @@
 
 ## 3. PostgREST + Nginx 配置
 
-- [ ] 3.1 创建 `docker/postgrest/postgrest.conf`：配置 `db-uri`、`db-schemas = "api"`、`db-anon-role = "anon"`、`jwt-secret`、`server-port = 3000`
-- [ ] 3.2 在 PostgreSQL init 脚本中创建 `api` schema，将所有表移到 `api` schema 下或创建视图
-- [ ] 3.3 创建 `docker/nginx/nginx.conf`：路由规则（`/api/auth/*` → auth:3001、`/api/rest/*` → postgrest:3000、`/openmaic/*` → openmaic:3002），CORS 配置，iframe header 处理
-- [ ] 3.4 创建 `docker/nginx/Dockerfile`：基于 `nginx:alpine`
+- [x] 3.1 创建 `docker/postgrest/postgrest.conf`：配置 `db-uri`、`db-schemas = "api"`、`db-anon-role = "anon"`、`jwt-secret`、`server-port = 3000`
+- [x] 3.2 在 PostgreSQL init 脚本中创建 `api` schema，将所有表移到 `api` schema 下或创建视图
+- [x] 3.3 创建 `docker/nginx/nginx.conf`：路由规则（`/api/auth/*` → auth:3001、`/api/rest/*` → postgrest:3000、`/openmaic/*` → openmaic:3002），CORS 配置，iframe header 处理
+- [x] 3.4 创建 `docker/nginx/Dockerfile`：基于 `nginx:alpine`
 
 ## 4. Docker Compose 扩展
 
-- [ ] 4.1 重写 `docker/openmaic/docker-compose.yml`：新增 5 个服务（postgres、postgrest、auth-service、nginx、openmaic），配置网络、卷、depends_on、healthcheck
-- [ ] 4.2 创建 `.env.example`：列出所有环境变量（JWT_SECRET、POSTGRES_PASSWORD、POSTGRES_DB 等）及说明
-- [ ] 4.3 配置资源限制和重启策略：每个服务的 memory limit + `restart: unless-stopped`
+- [x] 4.1 重写 `docker/openmaic/docker-compose.yml`：新增 5 个服务（postgres、postgrest、auth-service、nginx、openmaic），配置网络、卷、depends_on、healthcheck
+- [x] 4.2 创建 `.env.example`：列出所有环境变量（JWT_SECRET、POSTGRES_PASSWORD、POSTGRES_DB 等）及说明
+- [x] 4.3 配置资源限制和重启策略：每个服务的 memory limit + `restart: unless-stopped`
 - [ ] 4.4 验证 `docker-compose up` 全部服务正常启动，PostgREST 能访问 PostgreSQL，Auth Service 能签发 JWT
 
 ## 5. 前端 API Client + React Query 基础
