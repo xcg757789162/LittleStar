@@ -1,22 +1,22 @@
 ## 1. PostgreSQL Schema + 种子数据（基础层）
 
-- [ ] 1.1 创建 `docker/postgresql/` 目录结构：`init/01-schema.sql`（建表 DDL）、`init/02-roles.sql`（角色和权限）、`init/03-rls.sql`（RLS 策略）、`init/04-seed.sql`（种子数据）
-- [ ] 1.2 编写 14+1 张表的 DDL（snake_case 命名）：`users`、`children`、`knowledge_nodes`、`learning_records`、`mastery_records`、`questions`、`question_templates`、`achievements`、`daily_sessions`、`grade_unlocks`、`placement_tests`、`report_data`、`mastery_snapshots`、`classroom_history`、`classroom_snapshots`（拆表）
-- [ ] 1.3 编写索引：所有 Dexie 定义中的复合索引转为 PostgreSQL B-tree 索引
-- [ ] 1.4 创建 PostgreSQL 角色：`anon`（匿名只读）、`authenticated`（已认证），配置 `GRANT` 权限
-- [ ] 1.5 编写 RLS 策略：用户表直接隔离、孩子表通过 `user_id` 隔离、其他子表通过 `child_id → children.user_id` 间接隔离、公共表（`knowledge_nodes`/`questions`/`question_templates`）对 `anon` 开放只读
-- [ ] 1.6 将 `src/data/seed/` 中的 TypeScript 种子数据转换为 SQL INSERT 语句（知识点、题目、出题模板）
-- [ ] 1.7 创建 `classroom_history_list` 视图（不含 classroomData，供列表查询）
+- [x] 1.1 创建 `docker/postgresql/` 目录结构：`init/01-schema.sql`（建表 DDL）、`init/02-roles.sql`（角色和权限）、`init/03-rls.sql`（RLS 策略）、`init/04-seed.sql`（种子数据）
+- [x] 1.2 编写 14+1 张表的 DDL（snake_case 命名）：`users`、`children`、`knowledge_nodes`、`learning_records`、`mastery_records`、`questions`、`question_templates`、`achievements`、`daily_sessions`、`grade_unlocks`、`placement_tests`、`report_data`、`mastery_snapshots`、`classroom_history`、`classroom_snapshots`（拆表）
+- [x] 1.3 编写索引：所有 Dexie 定义中的复合索引转为 PostgreSQL B-tree 索引
+- [x] 1.4 创建 PostgreSQL 角色：`anon`（匿名只读）、`authenticated`（已认证），配置 `GRANT` 权限
+- [x] 1.5 编写 RLS 策略：用户表直接隔离、孩子表通过 `user_id` 隔离、其他子表通过 `child_id → children.user_id` 间接隔离、公共表（`knowledge_nodes`/`questions`/`question_templates`）对 `anon` 开放只读
+- [x] 1.6 将 `src/data/seed/` 中的 TypeScript 种子数据转换为 SQL INSERT 语句（知识点、题目、出题模板）
+- [x] 1.7 创建 `classroom_history_list` 视图（不含 classroomData，供列表查询）
 
 ## 2. Auth Service 开发
 
-- [ ] 2.1 创建 `docker/auth-service/` 项目结构：`package.json`、`tsconfig.json`、`Dockerfile`、`src/index.ts`
-- [ ] 2.2 实现 `POST /auth/register`：输入验证 → bcrypt 哈希（cost 10）→ INSERT users → 签发 JWT（payload: `{ role, user_id, username, exp }`）→ 返回 token
-- [ ] 2.3 实现 `POST /auth/login`：查询用户 → bcrypt.compare → 更新 last_login_at → 签发 JWT → 返回 token
-- [ ] 2.4 实现 `POST /auth/refresh`：验证旧 token → 签发新 token（延长过期时间）
-- [ ] 2.5 实现 `GET /auth/me`：解析 JWT → 查询用户信息（不含密码）→ 返回
-- [ ] 2.6 错误处理中间件：统一的 JSON 错误格式（`{ error, message, details }`）
-- [ ] 2.7 编写 Dockerfile：基于 `node:20-alpine`，多阶段构建
+- [x] 2.1 创建 `docker/auth-service/` 项目结构：`package.json`、`tsconfig.json`、`Dockerfile`、`src/index.ts`
+- [x] 2.2 实现 `POST /auth/register`：输入验证 → bcrypt 哈希（cost 10）→ INSERT users → 签发 JWT（payload: `{ role, user_id, username, exp }`）→ 返回 token
+- [x] 2.3 实现 `POST /auth/login`：查询用户 → bcrypt.compare → 更新 last_login_at → 签发 JWT → 返回 token
+- [x] 2.4 实现 `POST /auth/refresh`：验证旧 token → 签发新 token（延长过期时间）
+- [x] 2.5 实现 `GET /auth/me`：解析 JWT → 查询用户信息（不含密码）→ 返回
+- [x] 2.6 错误处理中间件：统一的 JSON 错误格式（`{ error, message, details }`）
+- [x] 2.7 编写 Dockerfile：基于 `node:20-alpine`，多阶段构建
 
 ## 3. PostgREST + Nginx 配置
 
