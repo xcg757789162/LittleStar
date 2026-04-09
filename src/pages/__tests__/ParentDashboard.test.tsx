@@ -3,20 +3,24 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ParentDashboard } from '../ParentDashboard'
 
+// vi.hoisted: 确保 mock 数据在 vi.mock hoisting 前可用
 const { mockDailySessions } = vi.hoisted(() => {
   const mockDailySessions: unknown[] = []
   return { mockDailySessions }
 })
 
-vi.mock('@/db/database', () => ({
-  db: {
-    dailySessions: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          toArray: vi.fn().mockImplementation(async () => [...mockDailySessions]),
-        }),
-      }),
-    },
+// Mock API Client（ParentDashboard 现在通过 apiClient 加载数据）
+vi.mock('@/services/api', () => ({
+  apiClient: {
+    get: vi.fn().mockImplementation(async (path: string) => {
+      if (path === '/daily_sessions') return [...mockDailySessions]
+      if (path === '/knowledge_nodes') return []
+      if (path === '/mastery_records') return []
+      return []
+    }),
+    getOne: vi.fn().mockResolvedValue(null),
+    post: vi.fn().mockResolvedValue({}),
+    patch: vi.fn().mockResolvedValue({}),
   },
 }))
 

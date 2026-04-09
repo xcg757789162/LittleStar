@@ -53,31 +53,12 @@ vi.mock('@/services/lesson-planner', () => ({
   }),
 }))
 
-// Mock DB
-vi.mock('@/db/database', () => ({
-  db: {
-    placementTests: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          count: vi.fn().mockResolvedValue(1), // 已完成测评
-        }),
-      }),
-    },
-    knowledgeNodes: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          toArray: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-    },
-    masteryRecords: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          toArray: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-    },
-  },
+// Mock React Query hooks（Home 现在使用 usePlacementTests hook）
+vi.mock('@/hooks/queries', () => ({
+  usePlacementTests: vi.fn().mockReturnValue({
+    data: [{ id: 1, childId: 'child-1', subject: 'math' }], // 已完成测评
+    isLoading: false,
+  }),
 }))
 
 // Mock childStore

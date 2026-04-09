@@ -2,6 +2,12 @@
  * 登录/注册页面
  * 美观的儿童教育风格设计
  * 支持切换登录/注册模式
+ *
+ * 适配新版 authStore API:
+ * - isLoading (原 isLoggingIn)
+ * - error (原 authError)
+ * - clearError (原 clearAuthError)
+ * - user (原 currentUser)
  */
 
 import { useState, useCallback } from 'react'
@@ -18,7 +24,12 @@ export function AuthPage() {
   const [nickname, setNickname] = useState('')
   const [localError, setLocalError] = useState('')
 
-  const { isLoggingIn, authError, login, register, clearAuthError } = useAuthStore()
+  // 适配新版 authStore 字段名
+  const isLoading = useAuthStore((s) => s.isLoading)
+  const authError = useAuthStore((s) => s.error)
+  const login = useAuthStore((s) => s.login)
+  const register = useAuthStore((s) => s.register)
+  const clearError = useAuthStore((s) => s.clearError)
 
   const switchMode = useCallback((newMode: AuthMode) => {
     setMode(newMode)
@@ -27,12 +38,12 @@ export function AuthPage() {
     setConfirmPassword('')
     setNickname('')
     setLocalError('')
-    clearAuthError()
-  }, [clearAuthError])
+    clearError()
+  }, [clearError])
 
   const handleSubmit = useCallback(async () => {
     setLocalError('')
-    clearAuthError()
+    clearError()
 
     // 基本验证
     if (!username.trim()) {
@@ -52,20 +63,33 @@ export function AuthPage() {
       return
     }
 
-    if (mode === 'register') {
-      if (!nickname.trim()) {
-        setLocalError('请输入昵称')
-        return
+    try {
+      if (mode === 'register') {
+        if (!nickname.trim()) {
+          setLocalError('请输入昵称')
+          return
+        }
+        if (password !== confirmPassword) {
+          setLocalError('两次密码不一致')
+          return
+        }
+        // 新版 authStore.register 接受 RegisterRequest 对象
+        await register({
+          username: username.trim(),
+          password,
+          nickname: nickname.trim(),
+        })
+      } else {
+        // 新版 authStore.login 接受 LoginRequest 对象
+        await login({
+          username: username.trim(),
+          password,
+        })
       }
-      if (password !== confirmPassword) {
-        setLocalError('两次密码不一致')
-        return
-      }
-      await register(username.trim(), password, nickname.trim())
-    } else {
-      await login(username.trim(), password)
+    } catch {
+      // authStore 已经设置了 error，这里不需要额外处理
     }
-  }, [mode, username, password, confirmPassword, nickname, login, register, clearAuthError])
+  }, [mode, username, password, confirmPassword, nickname, login, register, clearError])
 
   const displayError = localError || authError
 
@@ -329,22 +353,22 @@ export function AuthPage() {
               data-testid="auth-submit-btn"
               whileTap={{ scale: 0.95 }}
               onClick={handleSubmit}
-              disabled={isLoggingIn}
+              disabled={isLoading}
               style={{
                 width: '100%',
                 padding: '14px',
                 borderRadius: '16px',
                 border: 'none',
-                backgroundColor: isLoggingIn ? '#B39DDB' : '#7C4DFF',
+                backgroundColor: isLoading ? '#B39DDB' : '#7C4DFF',
                 color: 'white',
                 fontSize: '18px',
                 fontWeight: 'bold',
-                cursor: isLoggingIn ? 'default' : 'pointer',
+                cursor: isLoading ? 'default' : 'pointer',
                 marginTop: '8px',
                 boxShadow: '0 4px 16px rgba(124, 77, 255, 0.3)',
               }}
             >
-              {isLoggingIn
+              {isLoading
                 ? '请稍候...'
                 : mode === 'login'
                   ? '🚀 登录'

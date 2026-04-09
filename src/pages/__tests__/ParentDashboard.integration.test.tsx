@@ -40,30 +40,13 @@ vi.mock('@/services/openmaic/client', () => ({
   }),
 }))
 
-// Mock DB
-vi.mock('@/db/database', () => ({
-  db: {
-    dailySessions: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          toArray: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-    },
-    knowledgeNodes: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          toArray: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-    },
-    masteryRecords: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          toArray: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-    },
+// Mock API Client（ParentDashboard 现在通过 apiClient 加载数据）
+vi.mock('@/services/api', () => ({
+  apiClient: {
+    get: vi.fn().mockResolvedValue([]),
+    getOne: vi.fn().mockResolvedValue(null),
+    post: vi.fn().mockResolvedValue({}),
+    patch: vi.fn().mockResolvedValue({}),
   },
 }))
 

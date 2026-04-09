@@ -12,12 +12,10 @@ const {
   mockGetClassroom,
   mockListCachedClassrooms,
   mockEvaluate,
-  mockRecordMastery,
 } = vi.hoisted(() => ({
   mockGetClassroom: vi.fn(),
   mockListCachedClassrooms: vi.fn(),
   mockEvaluate: vi.fn(),
-  mockRecordMastery: vi.fn(),
 }))
 
 // Mock ClassroomCache
@@ -53,45 +51,15 @@ vi.mock('@/services/lesson-planner', () => ({
   }),
 }))
 
-// Mock MasteryTracker / DB
-vi.mock('@/db/database', () => ({
-  db: {
-    knowledgeNodes: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          toArray: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-    },
-    masteryRecords: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          toArray: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-      put: mockRecordMastery,
-    },
-    dailySessions: {
-      add: vi.fn(),
-    },
-    achievements: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          toArray: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-      add: vi.fn(),
-    },
-    masterySnapshots: {
-      add: vi.fn(),
-    },
-    placementTests: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          count: vi.fn().mockResolvedValue(1),
-        }),
-      }),
-    },
+// Mock API Client（useLearningFlow 现在通过 apiClient 进行数据操作）
+vi.mock('@/services/api', () => ({
+  apiClient: {
+    get: vi.fn().mockResolvedValue([]),
+    getOne: vi.fn().mockResolvedValue(null),
+    post: vi.fn().mockResolvedValue({}),
+    patch: vi.fn().mockResolvedValue({}),
+    upsert: vi.fn().mockResolvedValue({}),
+    batchUpsert: vi.fn().mockResolvedValue([]),
   },
 }))
 

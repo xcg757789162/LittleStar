@@ -8,28 +8,43 @@ const { mockMasteryRecords } = vi.hoisted(() => {
   return { mockMasteryRecords }
 })
 
-vi.mock('@/db/database', () => ({
-  db: {
-    masteryRecords: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          toArray: vi.fn().mockImplementation(async () => [...mockMasteryRecords]),
-        }),
-      }),
-      toArray: vi.fn().mockImplementation(async () => [...mockMasteryRecords]),
-    },
+// Mock React Query hooks（StarMap 现在使用 useMasteryRecords hook）
+vi.mock('@/hooks/queries', () => ({
+  useMasteryRecords: vi.fn().mockImplementation(() => ({
+    data: [...mockMasteryRecords],
+    isLoading: false,
+  })),
+}))
+
+// Mock framer-motion
+vi.mock('framer-motion', () => ({
+  motion: {
+    div: 'div',
+    h1: 'h1',
+    p: 'p',
+    span: 'span',
   },
 }))
 
 vi.mock('@/stores/childStore', () => ({
-  useChildStore: {
-    getState: vi.fn().mockReturnValue({
-      currentChild: {
-        id: 'child-1',
-        name: '小星星',
-      },
-    }),
-  },
+  useChildStore: Object.assign(
+    vi.fn().mockImplementation((selector: (s: Record<string, unknown>) => unknown) =>
+      selector({
+        currentChild: {
+          id: 1,
+          name: '小星星',
+        },
+      }),
+    ),
+    {
+      getState: vi.fn().mockReturnValue({
+        currentChild: {
+          id: 1,
+          name: '小星星',
+        },
+      }),
+    },
+  ),
 }))
 
 describe('StarMap', () => {
@@ -68,8 +83,8 @@ describe('StarMap', () => {
   it('掌握率 ≥ 80% 的科目星球应被点亮', async () => {
     // 数学科目掌握率 85%（≥ 80%）
     mockMasteryRecords.push(
-      { childId: 'child-1', knowledgeNodeId: 'math-1', masteryLevel: 85 },
-      { childId: 'child-1', knowledgeNodeId: 'math-2', masteryLevel: 85 },
+      { childId: 1, knowledgeNodeId: 'math-1', masteryLevel: 85 },
+      { childId: 1, knowledgeNodeId: 'math-2', masteryLevel: 85 },
     )
 
     render(<StarMap />)
@@ -83,9 +98,9 @@ describe('StarMap', () => {
   it('多科目掌握率 ≥ 80% 时应显示正确的点亮数量', async () => {
     // 数学 90%, 语文 85%, 英语 50%
     mockMasteryRecords.push(
-      { childId: 'child-1', knowledgeNodeId: 'math-1', masteryLevel: 90 },
-      { childId: 'child-1', knowledgeNodeId: 'chinese-1', masteryLevel: 85 },
-      { childId: 'child-1', knowledgeNodeId: 'english-1', masteryLevel: 50 },
+      { childId: 1, knowledgeNodeId: 'math-1', masteryLevel: 90 },
+      { childId: 1, knowledgeNodeId: 'chinese-1', masteryLevel: 85 },
+      { childId: 1, knowledgeNodeId: 'english-1', masteryLevel: 50 },
     )
 
     render(<StarMap />)

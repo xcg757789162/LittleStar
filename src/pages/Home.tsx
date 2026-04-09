@@ -19,9 +19,14 @@ export function Home() {
   const [cachedCount, setCachedCount] = useState<number>(0)
   const cacheRef = useRef(new ClassroomCache())
 
-  // 通过 React Query 查询入学测评记录
+  // 通过 React Query 查询入学测评记录（仅在有 childId 时查询）
   const { data: placementTests, isLoading: isLoadingTests } = usePlacementTests(childId)
-  const hasPlacementTest = placementTests ? placementTests.length > 0 : null
+
+  // 当 childId 为 undefined（无孩子/未登录）时，query 不会执行（enabled: false）
+  // 此时 placementTests 为 undefined → hasPlacementTest = false（直接当未测评处理）
+  const hasPlacementTest = childId
+    ? (placementTests ? placementTests.length > 0 : null)
+    : false
 
   // 加载缓存课程数量（独立于测评状态，首次渲染即加载）
   useEffect(() => {
@@ -43,8 +48,8 @@ export function Home() {
     navigate(`/placement-test/math/${gradeLevel}`)
   }
 
-  // 加载中状态（React Query 查询中或尚未返回数据）
-  if (isLoadingTests || hasPlacementTest === null) {
+  // 加载中状态（仅当有 childId 且 React Query 正在查询时才显示）
+  if (childId && (isLoadingTests || hasPlacementTest === null)) {
     return (
       <div
         data-testid="home-page"

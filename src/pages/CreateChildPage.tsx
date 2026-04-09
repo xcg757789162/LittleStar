@@ -2,12 +2,14 @@
  * 创建孩子信息引导页面
  * 登录后如果没有孩子，需要先创建一个孩子
  * 分步引导：名字 → 年龄 → 年级 → 头像 → 完成
+ *
+ * 适配新版 API：使用 apiClient 替代 Dexie.js
  */
 
 import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { db } from '@/db/database'
+import { apiClient } from '@/services/api'
 import { useChildStore } from '@/stores/childStore'
 import { useAuthStore } from '@/stores/authStore'
 import type { Child, GradeLevel } from '@/types/models'
@@ -42,7 +44,7 @@ function suggestGrade(age: number): GradeLevel {
 export function CreateChildPage() {
   const navigate = useNavigate()
   const addChild = useChildStore((s) => s.addChild)
-  const currentUser = useAuthStore((s) => s.currentUser)
+  const user = useAuthStore((s) => s.user)
 
   const [step, setStep] = useState<Step>('name')
   const [name, setName] = useState('')
@@ -94,18 +96,16 @@ export function CreateChildPage() {
     setIsSaving(true)
 
     try {
-      const userId = currentUser?.id
-      if (!userId) {
+      if (!user) {
         setError('未登录，请重新登录')
         return
       }
-      const childData: Omit<Child, 'id'> = {
-        userId,
+
+      const childData = {
         name: name.trim(),
         avatar,
         age,
         gradeLevel,
-        createdAt: new Date(),
         settings: {
           dailyLearningMinutes: 20,
           preferredSubjects: ['math', 'chinese', 'english'],
@@ -115,9 +115,12 @@ export function CreateChildPage() {
         },
       }
 
-      const id = await db.children.add(childData)
-      const newChild: Child = { ...childData, id: String(id) }
-      addChild(newChild)
+      // 通过 API 创建孩子（apiClient 会自动附加 JWT token 和 snake_case 转换）
+      const created = await apiClient.post<Child>('/children', childData)
+
+      if (created && created.length > 0) {
+        addChild(created[0])
+      }
 
       setStep('done')
       // 短暂展示后导航到首页
@@ -127,7 +130,7 @@ export function CreateChildPage() {
     } finally {
       setIsSaving(false)
     }
-  }, [isSaving, currentUser, name, avatar, age, gradeLevel, addChild, navigate])
+  }, [isSaving, user, name, avatar, age, gradeLevel, addChild, navigate])
 
   const renderStep = () => {
     switch (step) {

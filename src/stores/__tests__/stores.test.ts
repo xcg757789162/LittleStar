@@ -1,30 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { act } from '@testing-library/react'
-import Dexie from 'dexie'
-import { LittleStarDB } from '@/db/database'
 import { useChildStore } from '../childStore'
 import { useLearningStore } from '../learningStore'
 import { useUIStore } from '../uiStore'
 import type { Child, Question } from '@/types/models'
 
-let testCounter = 0
-
 describe('Zustand Stores', () => {
-  let db: LittleStarDB
-
-  beforeEach(async () => {
-    testCounter++
-    db = new LittleStarDB(`TestStoreDB_${testCounter}_${Date.now()}`)
-
+  beforeEach(() => {
     // Reset all stores before each test
     useChildStore.getState().reset()
     useLearningStore.getState().reset()
     useUIStore.getState().reset()
-  })
-
-  afterEach(async () => {
-    if (db.isOpen()) db.close()
-    await Dexie.delete(db.name)
   })
 
   // ─────────────────────────────────────────

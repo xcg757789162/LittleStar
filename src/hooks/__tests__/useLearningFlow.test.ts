@@ -95,77 +95,47 @@ vi.mock('@/engine/rule-engine', () => {
   }
 })
 
-// 追踪 DB 写入操作
-let dbWriteTracker = {
-  learningRecords: [] as unknown[],
-  masteryRecordsPut: [] as unknown[],
-  dailySessions: [] as unknown[],
-  achievements: [] as unknown[],
-  masterySnapshots: [] as unknown[],
+// 追踪 API 写入操作
+let apiWriteTracker = {
+  postCalls: [] as { path: string; body: unknown }[],
+  patchCalls: [] as { path: string; body: unknown }[],
 }
 
-vi.mock('@/db/database', () => ({
-  db: {
-    knowledgeNodes: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          toArray: vi.fn().mockResolvedValue([
-            {
-              id: 'node-1',
-              subject: 'math',
-              gradeLevel: 'middle-kindergarten',
-              name: '数字认识',
-              description: '认识数字1-10',
-              prerequisites: [],
-              nextNodes: [],
-              difficulty: 1,
-              contentType: 'quiz',
-              order: 1,
-            },
-          ]),
-        }),
-      }),
-    },
-    masteryRecords: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          toArray: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-      put: vi.fn().mockImplementation(async (record: unknown) => {
-        dbWriteTracker.masteryRecordsPut.push(record)
-        return 1
-      }),
-    },
-    learningRecords: {
-      add: vi.fn().mockImplementation(async (record: unknown) => {
-        dbWriteTracker.learningRecords.push(record)
-        return 1
-      }),
-    },
-    dailySessions: {
-      add: vi.fn().mockImplementation(async (session: unknown) => {
-        dbWriteTracker.dailySessions.push(session)
-        return 1
-      }),
-    },
-    achievements: {
-      where: vi.fn().mockReturnValue({
-        equals: vi.fn().mockReturnValue({
-          toArray: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-      add: vi.fn().mockImplementation(async (achievement: unknown) => {
-        dbWriteTracker.achievements.push(achievement)
-        return 1
-      }),
-    },
-    masterySnapshots: {
-      add: vi.fn().mockImplementation(async (snapshot: unknown) => {
-        dbWriteTracker.masterySnapshots.push(snapshot)
-        return 1
-      }),
-    },
+// Mock API Client（useLearningFlow 现在通过 apiClient 进行所有数据操作）
+vi.mock('@/services/api', () => ({
+  apiClient: {
+    get: vi.fn().mockImplementation(async (path: string) => {
+      if (path === '/knowledge_nodes') {
+        return [
+          {
+            id: 'node-1',
+            subject: 'math',
+            gradeLevel: 'middle-kindergarten',
+            name: '数字认识',
+            description: '认识数字1-10',
+            prerequisites: [],
+            nextNodes: [],
+            difficulty: 1,
+            contentType: 'quiz',
+            order: 1,
+          },
+        ]
+      }
+      if (path === '/mastery_records') return []
+      if (path === '/achievements') return []
+      return []
+    }),
+    getOne: vi.fn().mockResolvedValue(null),
+    post: vi.fn().mockImplementation(async (path: string, body: unknown) => {
+      apiWriteTracker.postCalls.push({ path, body })
+      return { id: Date.now() }
+    }),
+    patch: vi.fn().mockImplementation(async (path: string, body: unknown) => {
+      apiWriteTracker.patchCalls.push({ path, body })
+      return {}
+    }),
+    upsert: vi.fn().mockResolvedValue({}),
+    batchUpsert: vi.fn().mockResolvedValue([]),
   },
 }))
 
@@ -260,12 +230,9 @@ describe('useLearningFlow', () => {
     achievementCheckCount = 0
     gradeUnlockCheckCount = 0
     snapshotGenerateCount = 0
-    dbWriteTracker = {
-      learningRecords: [],
-      masteryRecordsPut: [],
-      dailySessions: [],
-      achievements: [],
-      masterySnapshots: [],
+    apiWriteTracker = {
+      postCalls: [],
+      patchCalls: [],
     }
     // 默认缓存为空 — 走降级路径
     mockListCachedClassrooms.mockResolvedValue([])

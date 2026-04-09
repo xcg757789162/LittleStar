@@ -48,11 +48,15 @@ interface JWTPayload {
 }
 
 function signToken(payload: JWTPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
+  return jwt.sign(
+    { ...payload },
+    JWT_SECRET!,
+    { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions
+  )
 }
 
 function verifyToken(token: string): JWTPayload {
-  return jwt.verify(token, JWT_SECRET) as JWTPayload
+  return jwt.verify(token, JWT_SECRET!) as unknown as JWTPayload
 }
 
 function extractToken(req: Request): string | null {
@@ -301,7 +305,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   }
 
   // PostgreSQL unique violation
-  if ((err as Record<string, unknown>).code === '23505') {
+  if ((err as unknown as Record<string, unknown>).code === '23505') {
     res.status(409).json({
       error: 'conflict',
       message: '数据冲突，请检查输入',

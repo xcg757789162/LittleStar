@@ -13,7 +13,7 @@ RUN npm ci --ignore-scripts
 COPY tsconfig.json ./
 COPY src/ ./src/
 
-RUN npx tsc
+RUN npx tsc --skipLibCheck
 
 # Stage 2: Production
 FROM node:20-alpine
