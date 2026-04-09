@@ -12,6 +12,19 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // === PostgreSQL 后端代理（通过 Nginx 网关） ===
+      // Auth Service：登录/注册/刷新 token
+      '/api/auth': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      // PostgREST：数据库 REST API
+      '/api/rest': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+
+      // === OpenMAIC AI 课堂代理 ===
       // API 代理：LittleStar → OpenMAIC API（已有路径，保持兼容）
       '/openmaic-proxy': {
         target: 'http://localhost:3000',
@@ -19,6 +32,7 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/openmaic-proxy/, ''),
       },
       // OpenMAIC API 代理（iframe 内页面的 fetch 请求使用 /api/... 路径）
+      // 注意：放在 /api/auth 和 /api/rest 之后，避免拦截后端 API
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,

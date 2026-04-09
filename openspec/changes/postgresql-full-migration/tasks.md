@@ -51,16 +51,16 @@
 
 ## 7. 前端迁移 — 替换 Dexie 调用（11 个文件）
 
-- [ ] 7.1 迁移 `src/main.tsx`：移除 `seedDatabase()` 调用和 `db` import，添加 `QueryClientProvider`
-- [ ] 7.2 迁移 `src/hooks/useInitializeApp.ts`：移除 `db.children.where()` 调用，改用 `useChildren()` React Query hook
-- [ ] 7.3 迁移 `src/hooks/useLearningFlow.ts`：所有 `db.learningRecords.add()`、`db.masteryRecords` 操作改用 mutation hooks
-- [ ] 7.4 迁移 `src/hooks/usePlacementTest.ts`：`db.placementTests` 操作改用 mutation hooks
-- [ ] 7.5 迁移 `src/pages/Home.tsx`：`db.placementTests.where()` 改用 `usePlacementTests()` query
-- [ ] 7.6 迁移 `src/pages/StarMap.tsx`：`db.masteryRecords.where()` 改用 `useMasteryRecords()` query
-- [ ] 7.7 迁移 `src/pages/ParentDashboard.tsx`：所有 db 查询改用 React Query hooks
-- [ ] 7.8 迁移 `src/pages/CreateChildPage.tsx`：`db.children.add()` 改用 `useCreateChild()` mutation
-- [ ] 7.9 迁移 `src/engine/review-manager.ts`：db 操作改用 API Client 直接调用
-- [ ] 7.10 迁移 `src/services/review-learning.ts`：db 操作改用 API Client 直接调用
+- [x] 7.1 迁移 `src/main.tsx`：移除 `seedDatabase()` 调用和 `db` import，添加 `QueryClientProvider`（已在任务组 5 中完成，另提取 queryClient 到 lib/queryClient.ts）
+- [x] 7.2 迁移 `src/hooks/useInitializeApp.ts`：移除 `db.children.where()` 调用，改用 authStore.restoreAuth + apiClient.get('/children')
+- [x] 7.3 迁移 `src/hooks/useLearningFlow.ts`：所有 `db.dailySessions/masteryRecords/achievements/knowledgeNodes/masterySnapshots` 操作改用 apiClient 调用
+- [x] 7.4 迁移 `src/hooks/usePlacementTest.ts`：`db.placementTests.add()` 改用 `apiClient.post('/placement_tests')`
+- [x] 7.5 迁移 `src/pages/Home.tsx`：`db.placementTests.where()` 改用 `usePlacementTests()` React Query hook
+- [x] 7.6 迁移 `src/pages/StarMap.tsx`：`db.masteryRecords` 改用 `useMasteryRecords()` + useMemo
+- [x] 7.7 迁移 `src/pages/ParentDashboard.tsx`：所有 db 查询改用 apiClient 直接调用
+- [x] 7.8 N/A — `src/pages/CreateChildPage.tsx` 不存在于当前分支
+- [x] 7.9 迁移 `src/engine/review-manager.ts`：db 操作改用 apiClient 调用（get/getOne/patch）
+- [x] 7.10 N/A — `src/services/review-learning.ts` 不存在于当前分支
 
 ## 8. 清理 + Vite Proxy 更新 + RLS 验证
 
