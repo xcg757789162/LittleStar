@@ -190,11 +190,44 @@ interface RequestOptions {
   onResponse?: (response: Response) => void
 }
 
+// ============================================================
+// 公共只读表（anon 角色可访问，无需 token）
+// ============================================================
+const PUBLIC_READONLY_PATHS = new Set([
+  '/knowledge_nodes',
+  '/questions',
+  '/question_templates',
+  '/parent_activities',
+  '/tpr_instructions',
+  '/curricula',
+  '/curriculum_modules',
+  '/curriculum_nodes',
+  '/media_files',
+])
+
+/** 判断路径是否是公共只读表 */
+function isPublicPath(path: string): boolean {
+  // 精确匹配或带查询参数（如 /curricula?gradeLevel=eq.1）
+  return PUBLIC_READONLY_PATHS.has(path) ||
+    [...PUBLIC_READONLY_PATHS].some((p) => path.startsWith(`${p}?`))
+}
+
 async function request<T>(options: RequestOptions): Promise<T> {
   const { method, path, body, headers = {}, isRetry = false, query, onResponse } = options
 
   const token = getToken()
   const url = `${API_REST_BASE}${path}${buildQueryString(query)}`
+
+  // ── Token 守卫：无 token + 非公共表 → 直接拒绝，不发请求 ──
+  // 这避免了 PostgREST 用 anon 角色访问私有表导致 "permission denied"
+  if (!token && !isPublicPath(path)) {
+    throw new ApiError(401, '请先登录后再操作')
+  }
+
+  // 写操作必须有 token（即使是公共表也不允许匿名写入）
+  if (!token && method !== 'GET') {
+    throw new ApiError(401, '请先登录后再操作')
+  }
 
   const requestHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -272,6 +305,11 @@ async function request<T>(options: RequestOptions): Promise<T> {
       }
     } catch {
       // 无法解析错误响应体，使用默认消息
+    }
+
+    // 403 权限错误：给出更清晰的提示，而不是让用户以为服务离线
+    if (response.status === 403) {
+      errorMessage = '权限不足，请确认已登录且有权访问此数据'
     }
 
     throw new ApiError(response.status, errorMessage, errorDetails, errorCode)
