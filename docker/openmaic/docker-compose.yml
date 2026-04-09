@@ -149,6 +149,7 @@ services:
   openmaic:
     image: devprincekumar/openmaic:latest
     container_name: openmaic-server
+    user: root
     env_file:
       - path: .env.local
         required: false

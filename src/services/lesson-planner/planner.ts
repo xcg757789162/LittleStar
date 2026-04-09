@@ -99,7 +99,7 @@ export class LessonPlanner {
     // C2 修复：过滤掉 id 为 undefined 的节点，避免后续非空断言崩溃
     const subjectNodes = nodes
       .filter((n) => n.subject === subject && n.id != null)
-      .sort((a, b) => a.order - b.order)
+      .sort((a, b) => a.orderIndex - b.orderIndex)
 
     // 分类知识点
     const { newNodes, reviewNodes, consolidationNodes } = this.categorizeNodes(

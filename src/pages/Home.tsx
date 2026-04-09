@@ -5,13 +5,14 @@
  * 触发教导处预生成（后台异步）
  */
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
 import { usePlacementTests } from '@/hooks/queries'
 import { ClassroomCache } from '@/services/openmaic/cache'
 import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
+import { usePreGeneration } from '@/hooks/usePreGeneration'
 
 export function Home() {
   const navigate = useNavigate()
@@ -55,6 +56,38 @@ export function Home() {
     }
     loadCacheStatus()
   }, [cacheInstance])
+
+  // 课堂预生成 Hook（评测完成 + 缓存为空时自动触发）
+  const { status: preGenStatus, completedCount: preGenCompleted } = usePreGeneration(
+    childId,
+    hasPlacementTest,
+    cachedCount,
+  )
+
+  // 预生成完成后刷新缓存数量
+  const refreshCache = useCallback(async () => {
+    try {
+      const size = await cacheInstance.getCacheSize()
+      setCachedCount(size)
+    } catch {
+      // 静默处理
+    }
+  }, [cacheInstance])
+
+  useEffect(() => {
+    if (preGenStatus === 'completed' && preGenCompleted > 0) {
+      void refreshCache()
+    }
+  }, [preGenStatus, preGenCompleted, refreshCache])
+
+  // 生成中时定时刷新缓存状态（每 10 秒检查一次）
+  useEffect(() => {
+    if (preGenStatus !== 'generating') return
+    const interval = setInterval(() => {
+      void refreshCache()
+    }, 10000)
+    return () => clearInterval(interval)
+  }, [preGenStatus, refreshCache])
 
   const handlePlacementTest = () => {
     // 导航到科目选择页面，让用户自由选择学科
@@ -258,7 +291,11 @@ export function Home() {
           >
             {cachedCount > 0
               ? `📚 ${cachedCount} 节课已就绪`
-              : '📝 课程准备中...'}
+              : preGenStatus === 'generating'
+                ? '🎨 AI 老师正在备课...'
+                : preGenStatus === 'failed'
+                  ? '⚠️ 课程生成失败，点击重试'
+                  : '📝 课程准备中...'}
           </div>
 
           <motion.button

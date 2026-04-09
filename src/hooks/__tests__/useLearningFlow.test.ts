@@ -47,7 +47,7 @@ vi.mock('@/engine/adaptive-router', () => {
             nextNodes: [],
             difficulty: 1,
             contentType: 'quiz',
-            order: 1,
+            orderIndex: 1,
           },
           {
             id: 'node-2',
@@ -59,7 +59,7 @@ vi.mock('@/engine/adaptive-router', () => {
             nextNodes: [],
             difficulty: 2,
             contentType: 'quiz',
-            order: 2,
+            orderIndex: 2,
           },
         ] satisfies KnowledgeNode[]
       }
@@ -117,7 +117,7 @@ vi.mock('@/services/api', () => ({
             nextNodes: [],
             difficulty: 1,
             contentType: 'quiz',
-            order: 1,
+            orderIndex: 1,
           },
         ]
       }

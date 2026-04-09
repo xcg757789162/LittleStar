@@ -21,7 +21,7 @@ function createNode(overrides: Partial<KnowledgeNode> = {}): KnowledgeNode {
     nextNodes: [],
     difficulty: 3,
     contentType: 'quiz',
-    order: 1,
+    orderIndex: 1,
     ...overrides,
   }
 }

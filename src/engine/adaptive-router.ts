@@ -47,8 +47,8 @@ export class AdaptiveRouter {
 
     if (subjectNodes.length === 0) return null
 
-    // 按 order 排序
-    subjectNodes.sort((a, b) => a.order - b.order)
+    // 按 orderIndex 排序
+    subjectNodes.sort((a, b) => a.orderIndex - b.orderIndex)
 
     // 1. 优先推荐未开始学习且已解锁的知识点（新知识）
     const newUnlocked = subjectNodes.find((node) => {
@@ -113,7 +113,7 @@ export class AdaptiveRouter {
       subjectNodes = subjectNodes.filter((n) => n.difficulty <= maxDifficulty)
     }
 
-    subjectNodes.sort((a, b) => a.order - b.order)
+    subjectNodes.sort((a, b) => a.orderIndex - b.orderIndex)
 
     // 新知识优先（约 60%）
     const newCount = Math.ceil(count * 0.6)

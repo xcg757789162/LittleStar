@@ -9,32 +9,32 @@ describe('AdaptiveRouter', () => {
     {
       id: 'math-1', subject: 'math', gradeLevel: 'middle-kindergarten',
       name: '数字1-5', description: '', prerequisites: [], nextNodes: ['math-2'],
-      difficulty: 1, contentType: 'flashcard', order: 1,
+      difficulty: 1, contentType: 'flashcard', orderIndex: 1,
     },
     {
       id: 'math-2', subject: 'math', gradeLevel: 'middle-kindergarten',
       name: '数字6-10', description: '', prerequisites: ['math-1'], nextNodes: ['math-3'],
-      difficulty: 2, contentType: 'flashcard', order: 2,
+      difficulty: 2, contentType: 'flashcard', orderIndex: 2,
     },
     {
       id: 'math-3', subject: 'math', gradeLevel: 'senior-kindergarten',
       name: '加法', description: '', prerequisites: ['math-2'], nextNodes: [],
-      difficulty: 3, contentType: 'quiz', order: 3,
+      difficulty: 3, contentType: 'quiz', orderIndex: 3,
     },
     {
       id: 'cn-1', subject: 'chinese', gradeLevel: 'middle-kindergarten',
       name: '声母', description: '', prerequisites: [], nextNodes: ['cn-2'],
-      difficulty: 1, contentType: 'voice', order: 1,
+      difficulty: 1, contentType: 'voice', orderIndex: 1,
     },
     {
       id: 'cn-2', subject: 'chinese', gradeLevel: 'middle-kindergarten',
       name: '韵母', description: '', prerequisites: ['cn-1'], nextNodes: [],
-      difficulty: 2, contentType: 'voice', order: 2,
+      difficulty: 2, contentType: 'voice', orderIndex: 2,
     },
     {
       id: 'en-1', subject: 'english', gradeLevel: 'middle-kindergarten',
       name: '字母', description: '', prerequisites: [], nextNodes: [],
-      difficulty: 1, contentType: 'flashcard', order: 1,
+      difficulty: 1, contentType: 'flashcard', orderIndex: 1,
     },
   ]
 

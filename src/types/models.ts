@@ -72,7 +72,7 @@ export interface KnowledgeNode {
   nextNodes: string[] // 后续知识点 ID
   difficulty: number // 1-10
   contentType: ContentType
-  order: number // 学习顺序
+  orderIndex: number // 学习顺序
 }
 
 /** 学习记录 */

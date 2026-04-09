@@ -4,10 +4,12 @@
  */
 
 import { useState, useCallback, useMemo, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { PlacementTestEngine } from '@/engine/placement-test-engine'
 import { loadCurriculum } from '@/curriculum'
 import { apiClient } from '@/services/api'
 import { useChildStore } from '@/stores/childStore'
+import { placementTestKeys } from '@/hooks/queries/usePlacementTests'
 import type { TestSession, TestPlanItem } from '@/engine/placement-test-engine'
 import type { GradeLevel, Subject, PlacementResult } from '@/types/models'
 
@@ -61,6 +63,7 @@ export function usePlacementTest(
   gradeLevel: GradeLevel,
   onComplete: (result: PlacementResult) => void,
 ): PlacementTestState {
+  const queryClient = useQueryClient()
   const [phase, setPhase] = useState<PlacementPhase>('intro')
   const [session, setSession] = useState<TestSession | null>(null)
   const [currentQuestion, setCurrentQuestion] = useState<TestPlanItem | null>(null)
@@ -202,6 +205,10 @@ export function usePlacementTest(
               startedAt: new Date().toISOString(),
               completedAt: new Date().toISOString(),
               result: testResult,
+            })
+            // 刷新 React Query 缓存，确保返回科目选择页时显示最新状态
+            queryClient.invalidateQueries({
+              queryKey: placementTestKeys.byChild(childId),
             })
           } catch {
             // DB 写入失败不阻塞结果显示（用户可以看到结果但数据未持久化）
