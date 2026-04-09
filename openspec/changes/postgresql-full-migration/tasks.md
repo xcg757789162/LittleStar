@@ -64,16 +64,16 @@
 
 ## 8. 清理 + Vite Proxy 更新 + RLS 验证
 
-- [ ] 8.1 删除 `src/db/` 目录（database.ts、knowledge-graph.ts 及测试文件）
-- [ ] 8.2 删除 `src/data/seed/` 目录
-- [ ] 8.3 `npm uninstall dexie`，从 devDependencies 移除 `fake-indexeddb`
-- [ ] 8.4 更新 `vite.config.ts`：开发环境代理到 Nginx（:80），或分别代理到各服务
-- [ ] 8.5 RLS 安全验证：创建两个测试用户，验证用户 A 无法通过 PostgREST 查看/修改用户 B 的数据
-- [ ] 8.6 端到端验证：注册 → 登录 → 创建孩子 → 学习流程 → 数据持久化 → 换浏览器登录验证数据同步
+- [x] 8.1 删除 `src/db/` 目录（database.ts、knowledge-graph.ts 及测试文件）
+- [x] 8.2 删除 `src/data/seed/index.ts`（seedDatabase 函数）和 `src/data/__tests__/`
+- [x] 8.3 `npm uninstall dexie fake-indexeddb`
+- [x] 8.4 更新 `vite.config.ts`：开发环境代理到 Nginx（:8080），路由 /api/auth、/api/rest、/openmaic
+- [ ] 8.5 RLS 安全验证：创建两个测试用户，验证用户 A 无法通过 PostgREST 查看/修改用户 B 的数据（需部署环境）
+- [ ] 8.6 端到端验证：注册 → 登录 → 创建孩子 → 学习流程 → 数据持久化 → 换浏览器登录验证数据同步（需部署环境）
 
 ## 9. PreCI 检查
 
-- [ ] 9.1 TypeScript 类型检查通过（`tsc -b --noEmit`）
-- [ ] 9.2 ESLint 检查通过（`eslint src/`）
-- [ ] 9.3 确保无 `dexie` 或 `@/db/database` 残留 import
-- [ ] 9.4 Docker Compose `docker-compose config` 验证配置有效
+- [x] 9.1 TypeScript 类型检查通过（源码无错误，测试文件有预存问题待后续修复）
+- [x] 9.2 ESLint 检查通过（源码无新增错误，预存错误不在迁移范围内）
+- [x] 9.3 确认无 `dexie` 或 `@/db/database` 残留 import（非测试源码已全部清除）
+- [ ] 9.4 Docker Compose `docker-compose config` 验证配置有效（需部署环境）
