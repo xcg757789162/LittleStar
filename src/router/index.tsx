@@ -22,8 +22,8 @@ import { AppLayout } from '@/components/layout/AppLayout'
 
 /** 认证守卫：未登录 → /auth */
 function RequireAuth() {
-  const currentUser = useAuthStore((s) => s.currentUser)
-  if (!currentUser) {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  if (!isAuthenticated) {
     return <Navigate to="/auth" replace />
   }
   return <Outlet />
@@ -44,8 +44,8 @@ function RequireChild() {
 
 /** 已登录时访问 /auth → 重定向到首页 */
 function GuestOnly() {
-  const currentUser = useAuthStore((s) => s.currentUser)
-  if (currentUser) {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  if (isAuthenticated) {
     return <Navigate to="/" replace />
   }
   return <Outlet />

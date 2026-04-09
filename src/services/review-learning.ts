@@ -6,9 +6,12 @@
  * 2. 查询学习历史（按孩子、科目、知识点）
  * 3. 加载历史课堂（快速复习模式 — 原样回放）
  * 4. 获取重学统计信息
+ *
+ * 迁移说明：从 Dexie.js (IndexedDB) 迁移到 PostgREST API
  */
 
-import { db } from '@/db/database'
+import { apiClient } from '@/services/api'
+import type { PostgRESTFilter } from '@/services/api/types'
 import type { Subject } from '@/types/models'
 import type { Classroom } from '@/services/openmaic/types'
 
@@ -64,6 +67,33 @@ export interface ReLearnStats {
   recentRelearns: HistoryListItem[]
 }
 
+/** ClassroomHistory 数据库记录类型 */
+interface ClassroomHistoryRecord {
+  id?: string
+  childId: string
+  knowledgeNodeId: string
+  knowledgeNodeName: string
+  subject: Subject
+  classroomId: string
+  classroomTitle: string
+  classroomData: string
+  date: string
+  completedAt: string | Date
+  round: number
+  isReview: boolean
+  questionsCompleted: number
+  correctCount: number
+  accuracy: number
+}
+
+/** MasteryRecord 数据库记录类型 */
+interface MasteryRecordRow {
+  id?: string
+  childId: string
+  knowledgeNodeId: string
+  reviewCount?: number
+}
+
 /**
  * ReviewLearningService — 重新学习/复习服务
  */
@@ -84,10 +114,12 @@ export class ReviewLearningService {
     } = input
 
     // 计算学习轮次：查询该孩子在该知识点上已有多少条记录
-    const existingRecords = await db.classroomHistory
-      .where('[childId+knowledgeNodeId]')
-      .equals([childId, knowledgeNodeId])
-      .toArray()
+    const existingRecords = await apiClient.get<ClassroomHistoryRecord>('/classroom_history', {
+      filters: [
+        { column: 'childId', operator: 'eq', value: childId },
+        { column: 'knowledgeNodeId', operator: 'eq', value: knowledgeNodeId },
+      ],
+    })
 
     const round = existingRecords.length + 1
 
@@ -98,7 +130,7 @@ export class ReviewLearningService {
       ? Math.round((correctCount / questionsCompleted) * 100)
       : 0
 
-    const id = await db.classroomHistory.add({
+    const created = await apiClient.post<ClassroomHistoryRecord>('/classroom_history', {
       childId,
       knowledgeNodeId,
       knowledgeNodeName,
@@ -107,7 +139,7 @@ export class ReviewLearningService {
       classroomTitle: classroom.title,
       classroomData: JSON.stringify(classroom),
       date: dateStr,
-      completedAt: today,
+      completedAt: today.toISOString(),
       round,
       isReview,
       questionsCompleted,
@@ -117,20 +149,24 @@ export class ReviewLearningService {
 
     // 同步更新 MasteryRecord 的 reviewCount
     if (isReview) {
-      const masteryRecords = await db.masteryRecords
-        .where('[childId+knowledgeNodeId]')
-        .equals([childId, knowledgeNodeId])
-        .toArray()
+      const masteryRecords = await apiClient.get<MasteryRecordRow>('/mastery_records', {
+        filters: [
+          { column: 'childId', operator: 'eq', value: childId },
+          { column: 'knowledgeNodeId', operator: 'eq', value: knowledgeNodeId },
+        ],
+      })
 
       if (masteryRecords.length > 0) {
         const record = masteryRecords[0]
-        await db.masteryRecords.update(record.id!, {
-          reviewCount: (record.reviewCount ?? 0) + 1,
-        })
+        if (record.id) {
+          await apiClient.patch<MasteryRecordRow>(`/mastery_records?id=eq.${record.id}`, {
+            reviewCount: (record.reviewCount ?? 0) + 1,
+          })
+        }
       }
     }
 
-    return String(id)
+    return String(created?.id ?? '')
   }
 
   /**
@@ -139,28 +175,23 @@ export class ReviewLearningService {
   async getHistory(params: HistoryQueryParams): Promise<HistoryListItem[]> {
     const { childId, subject, knowledgeNodeId, limit = 50 } = params
 
-    let collection
+    const filters: PostgRESTFilter[] = [
+      { column: 'childId', operator: 'eq', value: childId },
+    ]
 
     if (knowledgeNodeId) {
-      collection = db.classroomHistory
-        .where('[childId+knowledgeNodeId]')
-        .equals([childId, knowledgeNodeId])
+      filters.push({ column: 'knowledgeNodeId', operator: 'eq', value: knowledgeNodeId })
     } else if (subject) {
-      collection = db.classroomHistory
-        .where('[childId+subject]')
-        .equals([childId, subject])
-    } else {
-      collection = db.classroomHistory
-        .where('childId')
-        .equals(childId)
+      filters.push({ column: 'subject', operator: 'eq', value: subject })
     }
 
-    const records = await collection
-      .reverse()
-      .limit(limit)
-      .toArray()
+    const records = await apiClient.get<ClassroomHistoryRecord>('/classroom_history', {
+      filters,
+      order: [{ column: 'completedAt', ascending: false }],
+      limit,
+    })
 
-    return records.map((r) => ({
+    return records.map((r: ClassroomHistoryRecord) => ({
       id: String(r.id),
       childId: r.childId,
       knowledgeNodeId: r.knowledgeNodeId,
@@ -169,7 +200,7 @@ export class ReviewLearningService {
       classroomId: r.classroomId,
       classroomTitle: r.classroomTitle,
       date: r.date,
-      completedAt: r.completedAt,
+      completedAt: new Date(r.completedAt),
       round: r.round,
       isReview: r.isReview,
       questionsCompleted: r.questionsCompleted,
@@ -184,11 +215,13 @@ export class ReviewLearningService {
    * @returns 完整的 Classroom 数据，不存在时返回 null
    */
   async loadClassroomFromHistory(historyId: string): Promise<Classroom | null> {
-    const record = await db.classroomHistory.get(historyId)
-    if (!record) return null
+    const records = await apiClient.get<ClassroomHistoryRecord>('/classroom_history', {
+      filters: [{ column: 'id', operator: 'eq', value: historyId }],
+    })
+    if (records.length === 0) return null
 
     try {
-      return JSON.parse(record.classroomData) as Classroom
+      return JSON.parse(records[0].classroomData) as Classroom
     } catch {
       return null
     }
@@ -201,12 +234,14 @@ export class ReviewLearningService {
     childId: string,
     knowledgeNodeId: string,
   ): Promise<Classroom | null> {
-    const records = await db.classroomHistory
-      .where('[childId+knowledgeNodeId]')
-      .equals([childId, knowledgeNodeId])
-      .reverse()
-      .limit(1)
-      .toArray()
+    const records = await apiClient.get<ClassroomHistoryRecord>('/classroom_history', {
+      filters: [
+        { column: 'childId', operator: 'eq', value: childId },
+        { column: 'knowledgeNodeId', operator: 'eq', value: knowledgeNodeId },
+      ],
+      order: [{ column: 'completedAt', ascending: false }],
+      limit: 1,
+    })
 
     if (records.length === 0) return null
 
@@ -221,12 +256,11 @@ export class ReviewLearningService {
    * 获取重学统计信息
    */
   async getReLearnStats(childId: string): Promise<ReLearnStats> {
-    const allRecords = await db.classroomHistory
-      .where('childId')
-      .equals(childId)
-      .toArray()
+    const allRecords = await apiClient.get<ClassroomHistoryRecord>('/classroom_history', {
+      filters: [{ column: 'childId', operator: 'eq', value: childId }],
+    })
 
-    const reviewRecords = allRecords.filter((r) => r.isReview)
+    const reviewRecords = allRecords.filter((r: ClassroomHistoryRecord) => r.isReview)
 
     const subjectRelearns: Record<Subject, number> = {
       math: 0,
@@ -240,9 +274,11 @@ export class ReviewLearningService {
 
     // 最近 5 条重学记录
     const recentRelearns = reviewRecords
-      .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
+      .sort((a: ClassroomHistoryRecord, b: ClassroomHistoryRecord) =>
+        new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
+      )
       .slice(0, 5)
-      .map((r) => ({
+      .map((r: ClassroomHistoryRecord) => ({
         id: String(r.id),
         childId: r.childId,
         knowledgeNodeId: r.knowledgeNodeId,
@@ -251,7 +287,7 @@ export class ReviewLearningService {
         classroomId: r.classroomId,
         classroomTitle: r.classroomTitle,
         date: r.date,
-        completedAt: r.completedAt,
+        completedAt: new Date(r.completedAt),
         round: r.round,
         isReview: r.isReview,
         questionsCompleted: r.questionsCompleted,

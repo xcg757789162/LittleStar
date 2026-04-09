@@ -34,7 +34,7 @@ export function StarMap() {
   // 计算各科目掌握率
   const { masteries, litCount } = useMemo(() => {
     const childRecords = childId
-      ? records.filter((r) => r.childId === Number(childId))
+      ? records.filter((r: { childId: string | number }) => String(r.childId) === String(childId))
       : []
 
     // 按知识点 ID 前缀分组（math-1 → math, chinese-1 → chinese）

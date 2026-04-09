@@ -42,7 +42,10 @@ export function BottomNav() {
       }}
     >
       {NAV_ITEMS.map((item) => {
-        const isActive = location.pathname === item.path
+        // 首页 "/" 使用精确匹配，其他路由使用前缀匹配（支持子路由高亮）
+        const isActive = item.path === '/'
+          ? location.pathname === '/'
+          : location.pathname.startsWith(item.path)
         return (
           <button
             key={item.key}

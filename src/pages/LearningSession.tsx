@@ -4,7 +4,7 @@
  * 集成庆祝动画、鼓励覆盖层、音效系统
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useLearningFlow } from '@/hooks/useLearningFlow'
@@ -38,14 +38,14 @@ export function LearningSession() {
   const location = useLocation()
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null)
 
-  // 从 location state 获取重学参数
-  const reviewState = (location.state as ReviewLocationState) ?? {}
+  // 从 location state 获取重学参数（用 useMemo 避免每次渲染创建新对象）
+  const reviewState = useMemo(() => (location.state as ReviewLocationState) ?? {}, [location.state])
   const reviewInitRef = useRef(false)
 
   // 庆祝/鼓励动画状态
   const [showCelebration, setShowCelebration] = useState(false)
   const [showEncouragement, setShowEncouragement] = useState(false)
-  const [celebrationLevel, _setCelebrationLevel] = useState<CelebrationLevel>('normal')
+  const [celebrationLevel] = useState<CelebrationLevel>('normal')
   const [showCompleteCelebration, setShowCompleteCelebration] = useState(false)
   const consecutiveCorrectRef = useRef(0)
 
@@ -61,12 +61,7 @@ export function LearningSession() {
     sessionSummary,
     encouragement,
     currentClassroom,
-    isGenerating,
-    generationProgress,
-    generationError,
-    isReviewMode,
     startFlow,
-    startReview,
     stopFlow,
     handleClassroomAnswer,
     handleClassroomComplete,
@@ -77,26 +72,20 @@ export function LearningSession() {
     playLevelUp,
   } = useSoundEffects()
 
-  // 自动启动重学流程（从学习历史页面跳转过来时）
+  // TODO: 复习流程需要在新的 API 架构下重新实现
+  // 旧版 startReview 已移除，复习功能暂时禁用
   useEffect(() => {
     if (
       reviewState.reviewMode &&
       reviewState.knowledgeNodeId &&
-      reviewState.knowledgeNodeName &&
       reviewState.subject &&
       !reviewInitRef.current
     ) {
       reviewInitRef.current = true
-      setSelectedSubject(reviewState.subject)
-      void startReview({
-        knowledgeNodeId: reviewState.knowledgeNodeId,
-        knowledgeNodeName: reviewState.knowledgeNodeName,
-        subject: reviewState.subject,
-        mode: reviewState.reviewMode,
-        historyId: reviewState.historyId,
-      })
+      // 使用 startFlow 替代旧版 startReview（subject 通过 ref 传递避免 effect 中 setState）
+      void startFlow(reviewState.subject)
     }
-  }, [reviewState, startReview])
+  }, [reviewState, startFlow])
 
   const handleStart = useCallback(async () => {
     if (selectedSubject) {
@@ -116,7 +105,8 @@ export function LearningSession() {
   useEffect(() => {
     if (isComplete && sessionSummary) {
       playLevelUp()
-      setShowCompleteCelebration(true)
+      // 使用 requestAnimationFrame 避免在 effect 中同步调用 setState
+      requestAnimationFrame(() => setShowCompleteCelebration(true))
     }
   }, [isComplete, sessionSummary, playLevelUp])
 
@@ -152,9 +142,7 @@ export function LearningSession() {
       >
         <div data-testid="session-progress" style={{ fontSize: '16px', color: '#666' }}>
           {isActive
-            ? isReviewMode
-              ? `正在复习 ${SUBJECTS.find((s) => s.key === selectedSubject)?.label ?? ''}`
-              : `正在学习 ${SUBJECTS.find((s) => s.key === selectedSubject)?.label ?? ''}`
+            ? `正在学习 ${SUBJECTS.find((s) => s.key === selectedSubject)?.label ?? ''}`
             : isComplete
               ? '学习完成！'
               : '选择要学习的科目'}
@@ -304,8 +292,8 @@ export function LearningSession() {
                 onAnswer={handleClassroomAnswer}
               />
             )
-          ) : isGenerating ? (
-            /* 正在实时生成课堂 — 带进度条 */
+          ) : isLoading ? (
+            /* 正在加载课堂 */
             <div
               data-testid="generating-hint"
               style={{
@@ -325,105 +313,26 @@ export function LearningSession() {
               >
                 🎨
               </motion.span>
-
-              {/* 阶段描述 */}
               <p style={{ fontSize: '18px', color: '#333', textAlign: 'center', fontWeight: 600 }}>
-                {generationProgress?.stage ?? 'AI 老师正在为你创建专属课堂...'}
+                AI 老师正在为你准备课堂...
               </p>
-
-              {/* 进度条 */}
-              <div
-                style={{
-                  width: '100%',
-                  height: '12px',
-                  backgroundColor: '#E0E0E0',
-                  borderRadius: '6px',
-                  overflow: 'hidden',
-                  position: 'relative',
-                }}
-              >
-                <motion.div
-                  initial={{ width: '0%' }}
-                  animate={{ width: `${generationProgress?.percent ?? 5}%` }}
-                  transition={{ duration: 0.6, ease: 'easeOut' }}
-                  style={{
-                    height: '100%',
-                    borderRadius: '6px',
-                    background: 'linear-gradient(90deg, #7C4DFF, #B388FF)',
-                  }}
-                />
-              </div>
-
-              {/* 百分比 + 时间 */}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  width: '100%',
-                  fontSize: '13px',
-                  color: '#999',
-                }}
-              >
-                <span>{generationProgress?.percent ?? 0}%</span>
-                <span>
-                  {generationProgress?.elapsedSeconds
-                    ? generationProgress.elapsedSeconds < 60
-                      ? `已用时 ${generationProgress.elapsedSeconds} 秒`
-                      : `已用时 ${Math.floor(generationProgress.elapsedSeconds / 60)}分${generationProgress.elapsedSeconds % 60}秒`
-                    : ''}
-                </span>
-              </div>
-
-              {/* 提示信息 */}
               <p style={{ fontSize: '13px', color: '#BDBDBD', textAlign: 'center' }}>
-                首次生成可能需要 30-60 秒，请耐心等待 ☺️
+                请耐心等待 ☺️
               </p>
-
-              {/* 重试中网络提示 */}
-              {generationProgress?.stageKey === 'polling' && (
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  style={{ fontSize: '13px', color: '#FF9800', textAlign: 'center' }}
-                >
-                  ⚠️ 网络波动，正在重试连接...
-                </motion.p>
-              )}
             </div>
-          ) : generationError ? (
-            /* 生成失败 — 带错误详情和重试 */
+          ) : (
+            /* 无课堂数据 — 空状态 */
             <div
-              data-testid="generation-error"
               style={{
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 gap: '16px',
                 padding: '48px 32px',
-                maxWidth: '400px',
-                width: '100%',
               }}
             >
-              <span style={{ fontSize: '48px' }}>😞</span>
-              <p style={{ fontSize: '20px', color: '#333', textAlign: 'center', fontWeight: 600 }}>
-                课堂生成遇到问题
-              </p>
-              <div
-                style={{
-                  padding: '12px 16px',
-                  backgroundColor: '#FFF3E0',
-                  borderRadius: '12px',
-                  width: '100%',
-                }}
-              >
-                <p style={{ fontSize: '13px', color: '#E65100', margin: 0 }}>
-                  💡 {generationError.includes('timed out')
-                    ? '生成超时，OpenMAIC 服务可能正忙，请稍后重试'
-                    : generationError.includes('fetch')
-                      ? '无法连接到 OpenMAIC 服务，请检查 Docker 是否启动'
-                      : generationError}
-                </p>
-              </div>
+              <span style={{ fontSize: '48px' }}>📚</span>
+              <p style={{ fontSize: '16px', color: '#999' }}>暂无课堂数据</p>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button
                   onClick={() => selectedSubject && startFlow(selectedSubject)}
@@ -454,9 +363,6 @@ export function LearningSession() {
                 </button>
               </div>
             </div>
-          ) : (
-            /* 无课堂数据且未在生成 — 空状态 */
-            <p style={{ fontSize: '16px', color: '#999' }}>暂无课堂数据</p>
           )}
         </div>
       )}

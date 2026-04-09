@@ -4,6 +4,7 @@
  */
 
 import { useChildStore } from '@/stores/childStore'
+import { useAuthStore } from '@/stores/authStore'
 import { useGradeUnlockStore } from '@/stores/gradeUnlockStore'
 
 /** 科目 key → 中文显示名映射 */
@@ -15,6 +16,7 @@ const SUBJECT_LABELS: Record<string, string> = {
 
 export function ParentSettings() {
   const currentChild = useChildStore((s) => s.currentChild)
+  const logout = useAuthStore((s) => s.logout)
   const { unlockConfig, updateUnlockConfig } = useGradeUnlockStore()
 
   const childName = currentChild?.name ?? '未设置'
@@ -158,6 +160,30 @@ export function ParentSettings() {
           </p>
         </div>
       </section>
+
+      {/* 退出登录 */}
+      <button
+        data-testid="logout-btn"
+        onClick={() => {
+          if (window.confirm('确定要退出登录吗？')) {
+            logout()
+          }
+        }}
+        style={{
+          width: '100%',
+          padding: '14px',
+          borderRadius: '12px',
+          border: '1px solid #FFCDD2',
+          backgroundColor: '#fff',
+          color: '#D32F2F',
+          fontSize: '16px',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          marginBottom: '32px',
+        }}
+      >
+        退出登录
+      </button>
     </div>
   )
 }

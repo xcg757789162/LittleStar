@@ -7,6 +7,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
+import { useAuthStore } from '@/stores/authStore'
 import { apiClient } from '@/services/api'
 import { ClassroomCache } from '@/services/openmaic/cache'
 import { OpenMAICClient } from '@/services/openmaic/client'
@@ -74,6 +75,8 @@ const actionBtnStyle = {
 
 export function ParentDashboard() {
   const navigate = useNavigate()
+  const logout = useAuthStore((s) => s.logout)
+  const user = useAuthStore((s) => s.user)
   const [stats, setStats] = useState<DailyStats>({
     durationMinutes: 0,
     questionsCompleted: 0,
@@ -101,9 +104,9 @@ export function ParentDashboard() {
 
   // M1: 惰性初始化 refs，避免每次渲染创建新实例
   const cacheRef = useRef<ClassroomCache | null>(null)
-  if (!cacheRef.current) cacheRef.current = new ClassroomCache()
+  if (cacheRef.current == null) cacheRef.current = new ClassroomCache()
   const clientRef = useRef<OpenMAICClient | null>(null)
-  if (!clientRef.current) clientRef.current = new OpenMAICClient()
+  if (clientRef.current == null) clientRef.current = new OpenMAICClient()
 
   // 加载学习统计
   useEffect(() => {
@@ -117,9 +120,8 @@ export function ParentDashboard() {
           filters: [{ column: 'childId', operator: 'eq', value: Number(child.id) }],
         })
 
-        // 筛选今日的会话
+        // 从 API 返回的所有 session 中过滤出今日的
         const todaySessions = sessions.filter((s) => s.date === today)
-
         if (todaySessions.length === 0) return
 
         // 聚合统计
@@ -270,7 +272,33 @@ export function ParentDashboard() {
         margin: '0 auto',
       }}
     >
-      <h1 style={{ fontSize: '24px', color: '#333', marginBottom: '24px' }}>学习概览</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <h1 style={{ fontSize: '24px', color: '#333', margin: 0 }}>学习概览</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '13px', color: '#999' }}>👤 {user?.nickname ?? '用户'}</span>
+          <button
+            data-testid="header-logout-btn"
+            onClick={() => {
+              if (window.confirm('确定要退出登录吗？')) {
+                logout()
+              }
+            }}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              border: '1px solid #FFCDD2',
+              backgroundColor: '#FFF5F5',
+              color: '#D32F2F',
+              fontSize: '13px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            退出
+          </button>
+        </div>
+      </div>
 
       {/* 统计卡片 */}
       <div
@@ -518,6 +546,31 @@ export function ParentDashboard() {
           </button>
         </div>
       )}
+
+      {/* 退出登录 */}
+      <button
+        data-testid="logout-btn"
+        onClick={() => {
+          if (window.confirm('确定要退出登录吗？')) {
+            logout()
+          }
+        }}
+        style={{
+          width: '100%',
+          padding: '14px',
+          borderRadius: '12px',
+          border: '1px solid #FFCDD2',
+          backgroundColor: '#fff',
+          color: '#D32F2F',
+          fontSize: '16px',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          marginTop: '24px',
+          marginBottom: '32px',
+        }}
+      >
+        退出登录
+      </button>
     </div>
   )
 }

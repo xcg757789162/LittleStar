@@ -42,6 +42,10 @@ export const useChildStore = create<ChildState & ChildActions>()((set) => ({
 
   addChild: (child) =>
     set((state) => {
+      // 去重：如果已存在相同 id 的孩子，跳过添加
+      if (child.id && state.children.some((c) => c.id === child.id)) {
+        return state
+      }
       const newChildren = [...state.children, child]
       return {
         children: newChildren,

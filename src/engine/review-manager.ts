@@ -1,6 +1,6 @@
 /**
  * 艾宾浩斯复习管理器
- * 整合 ReviewScheduler 调度算法 + IndexedDB 读写
+ * 整合 ReviewScheduler 调度算法 + PostgREST API 数据读写
  * 提供「今日需要复习的知识点」查询和复习完成记录
  */
 

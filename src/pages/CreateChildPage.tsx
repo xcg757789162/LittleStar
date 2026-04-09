@@ -54,43 +54,6 @@ export function CreateChildPage() {
   const [error, setError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
-  const handleNext = useCallback(() => {
-    setError('')
-    switch (step) {
-      case 'name':
-        if (!name.trim()) {
-          setError('请输入孩子的名字')
-          return
-        }
-        if (name.trim().length > 10) {
-          setError('名字不超过 10 个字')
-          return
-        }
-        setStep('age')
-        break
-      case 'age':
-        setGradeLevel(suggestGrade(age))
-        setStep('grade')
-        break
-      case 'grade':
-        setStep('avatar')
-        break
-      case 'avatar':
-        // 保存到数据库
-        handleSave()
-        break
-    }
-  }, [step, name, age])
-
-  const handleBack = useCallback(() => {
-    setError('')
-    switch (step) {
-      case 'age': setStep('name'); break
-      case 'grade': setStep('age'); break
-      case 'avatar': setStep('grade'); break
-    }
-  }, [step])
-
   const handleSave = useCallback(async () => {
     if (isSaving) return
     setIsSaving(true)
@@ -118,8 +81,8 @@ export function CreateChildPage() {
       // 通过 API 创建孩子（apiClient 会自动附加 JWT token 和 snake_case 转换）
       const created = await apiClient.post<Child>('/children', childData)
 
-      if (created && created.length > 0) {
-        addChild(created[0])
+      if (created) {
+        addChild(created)
       }
 
       setStep('done')
@@ -131,6 +94,43 @@ export function CreateChildPage() {
       setIsSaving(false)
     }
   }, [isSaving, user, name, avatar, age, gradeLevel, addChild, navigate])
+
+  const handleNext = useCallback(() => {
+    setError('')
+    switch (step) {
+      case 'name':
+        if (!name.trim()) {
+          setError('请输入孩子的名字')
+          return
+        }
+        if (name.trim().length > 10) {
+          setError('名字不超过 10 个字')
+          return
+        }
+        setStep('age')
+        break
+      case 'age':
+        setGradeLevel(suggestGrade(age))
+        setStep('grade')
+        break
+      case 'grade':
+        setStep('avatar')
+        break
+      case 'avatar':
+        // 保存到数据库
+        handleSave()
+        break
+    }
+  }, [step, name, age, handleSave])
+
+  const handleBack = useCallback(() => {
+    setError('')
+    switch (step) {
+      case 'age': setStep('name'); break
+      case 'grade': setStep('age'); break
+      case 'avatar': setStep('grade'); break
+    }
+  }, [step])
 
   const renderStep = () => {
     switch (step) {
