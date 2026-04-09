@@ -1,5 +1,6 @@
 /**
  * 应用根组件
+ * 集成认证恢复和初始化流程
  */
 
 import { AppRoutes } from '@/router'

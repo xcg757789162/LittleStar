@@ -1,15 +1,17 @@
 /**
  * useInitializeApp Hook
  * App 启动时执行一次性初始化：
- * 1. 从 Dexie.js 加载孩子列表到 childStore
- * 2. DB 为空时自动创建默认孩子
+ * 1. 从 localStorage 恢复用户登录状态 (authStore.restoreAuth)
+ * 2. 若已登录，根据 userId 从 Dexie.js 加载该用户的孩子列表到 childStore
  * 3. 管理 loading 状态 (isInitialized)
+ *
+ * 不再自动创建默认孩子，改为引导用户登录 → 创建孩子
  */
 
 import { useState, useEffect } from 'react'
+import { useAuthStore } from '@/stores/authStore'
 import { useChildStore } from '@/stores/childStore'
 import { db } from '@/db/database'
-import type { Child } from '@/types/models'
 
 /** Hook 返回值 */
 export interface InitializeAppState {
@@ -17,63 +19,46 @@ export interface InitializeAppState {
   isInitialized: boolean
 }
 
-/** 默认孩子配置 */
-const DEFAULT_CHILD: Omit<Child, 'id'> = {
-  name: '小星星',
-  avatar: '⭐',
-  age: 5,
-  gradeLevel: 'middle-kindergarten',
-  createdAt: new Date(),
-  settings: {
-    dailyLearningMinutes: 20,
-    preferredSubjects: ['math', 'chinese', 'english'],
-    difficultyAdjustment: 0,
-    voiceEnabled: true,
-    soundEffectsEnabled: true,
-  },
-}
-
 export function useInitializeApp(): InitializeAppState {
   const [isInitialized, setIsInitialized] = useState(false)
+  const restoreAuth = useAuthStore((s) => s.restoreAuth)
+  const isAuthLoaded = useAuthStore((s) => s.isAuthLoaded)
+  const currentUser = useAuthStore((s) => s.currentUser)
   const addChild = useChildStore((s) => s.addChild)
+  const resetChildren = useChildStore((s) => s.reset)
 
+  // Step 1: 恢复认证状态
   useEffect(() => {
+    restoreAuth()
+  }, [restoreAuth])
+
+  // Step 2: 认证加载完成后，根据用户加载孩子
+  useEffect(() => {
+    if (!isAuthLoaded) return
+
     let cancelled = false
 
-    async function initialize() {
+    async function loadChildren() {
       try {
-        // 1. 从 DB 加载孩子列表
-        const children = await db.children.toArray()
+        // 先重置 childStore，确保切换用户时清空
+        resetChildren()
 
-        if (cancelled) return
+        if (currentUser?.id) {
+          // 已登录 → 按 userId 加载该用户的孩子
+          const children = await db.children
+            .where('userId')
+            .equals(currentUser.id)
+            .toArray()
 
-        if (children.length === 0) {
-          // 2. DB 为空 → 创建默认孩子
-          const id = await db.children.add({ ...DEFAULT_CHILD })
           if (cancelled) return
 
-          const defaultChild: Child = {
-            ...DEFAULT_CHILD,
-            id: String(id),
-            createdAt: new Date(),
-          }
-          addChild(defaultChild)
-        } else {
-          // 3. DB 有数据 → 加载到 store
           for (const child of children) {
-            if (cancelled) return
             addChild(child)
           }
         }
+        // 未登录 → 不加载任何孩子（路由守卫会引导到 /auth）
       } catch {
-        // 初始化失败时使用内存中的默认孩子
-        if (!cancelled) {
-          addChild({
-            ...DEFAULT_CHILD,
-            id: 'fallback-1',
-            createdAt: new Date(),
-          })
-        }
+        // 加载失败静默处理
       } finally {
         if (!cancelled) {
           setIsInitialized(true)
@@ -81,12 +66,12 @@ export function useInitializeApp(): InitializeAppState {
       }
     }
 
-    initialize()
+    loadChildren()
 
     return () => {
       cancelled = true
     }
-  }, [addChild])
+  }, [isAuthLoaded, currentUser?.id, addChild, resetChildren])
 
   return { isInitialized }
 }

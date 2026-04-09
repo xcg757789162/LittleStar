@@ -1,33 +1,83 @@
 /**
  * React Router 路由配置
+ * 包含认证守卫：未登录重定向到 /auth，无孩子重定向到 /create-child
  */
 
-import { Routes, Route } from 'react-router-dom'
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
+import { useAuthStore } from '@/stores/authStore'
+import { useChildStore } from '@/stores/childStore'
 import { Home } from '@/pages/Home'
 import { LearningSession } from '@/pages/LearningSession'
+import { LearningHistory } from '@/pages/LearningHistory'
 import { StarMap } from '@/pages/StarMap'
 import { ParentDashboard } from '@/pages/ParentDashboard'
 import { ParentSettings } from '@/pages/ParentSettings'
 import { PlacementTestWrapper } from '@/pages/PlacementTestWrapper'
 import { LearningReportPage } from '@/pages/LearningReportPage'
 import { ReportDetailPage } from '@/pages/ReportDetailPage'
+import { AuthPage } from '@/pages/AuthPage'
+import { CreateChildPage } from '@/pages/CreateChildPage'
 import { NotFound } from '@/pages/NotFound'
 import { AppLayout } from '@/components/layout/AppLayout'
 
-export function AppRoutes() {
+/** 认证守卫：未登录 → /auth */
+function RequireAuth() {
+  const currentUser = useAuthStore((s) => s.currentUser)
+  if (!currentUser) {
+    return <Navigate to="/auth" replace />
+  }
+  return <Outlet />
+}
+
+/** 已登录 + 有孩子守卫：无孩子 → /create-child */
+function RequireChild() {
+  const childrenList = useChildStore((s) => s.children)
+  if (childrenList.length === 0) {
+    return <Navigate to="/create-child" replace />
+  }
   return (
     <AppLayout>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/learn" element={<LearningSession />} />
-        <Route path="/starmap" element={<StarMap />} />
-        <Route path="/parent" element={<ParentDashboard />} />
-        <Route path="/parent/settings" element={<ParentSettings />} />
-        <Route path="/placement-test/:subject/:grade" element={<PlacementTestWrapper />} />
-        <Route path="/reports" element={<LearningReportPage />} />
-        <Route path="/reports/:reportId" element={<ReportDetailPage />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <Outlet />
     </AppLayout>
+  )
+}
+
+/** 已登录时访问 /auth → 重定向到首页 */
+function GuestOnly() {
+  const currentUser = useAuthStore((s) => s.currentUser)
+  if (currentUser) {
+    return <Navigate to="/" replace />
+  }
+  return <Outlet />
+}
+
+export function AppRoutes() {
+  return (
+    <Routes>
+      {/* 公开路由（已登录则跳转首页） */}
+      <Route element={<GuestOnly />}>
+        <Route path="/auth" element={<AuthPage />} />
+      </Route>
+
+      {/* 需登录的路由 */}
+      <Route element={<RequireAuth />}>
+        {/* 创建孩子（不需要有孩子） */}
+        <Route path="/create-child" element={<CreateChildPage />} />
+
+        {/* 需登录 + 有孩子的路由（包含 AppLayout） */}
+        <Route element={<RequireChild />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/learn" element={<LearningSession />} />
+          <Route path="/history" element={<LearningHistory />} />
+          <Route path="/starmap" element={<StarMap />} />
+          <Route path="/parent" element={<ParentDashboard />} />
+          <Route path="/parent/settings" element={<ParentSettings />} />
+          <Route path="/placement-test/:subject/:grade" element={<PlacementTestWrapper />} />
+          <Route path="/reports" element={<LearningReportPage />} />
+          <Route path="/reports/:reportId" element={<ReportDetailPage />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Route>
+    </Routes>
   )
 }

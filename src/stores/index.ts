@@ -2,6 +2,9 @@
  * Zustand Stores 统一导出
  */
 
+export { useAuthStore } from './authStore'
+export type { AuthState, AuthActions } from './authStore'
+
 export { useChildStore } from './childStore'
 export type { ChildState, ChildActions } from './childStore'
 
