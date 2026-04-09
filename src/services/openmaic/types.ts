@@ -114,6 +114,12 @@ export interface Classroom {
   createdAt?: string
   /** 语言代码（可选） */
   language?: string
+  /**
+   * OpenMAIC 原生前端的课堂 URL（可选）
+   * 后端生成完成时返回，格式如 /classroom/{id}
+   * 通过 Vite proxy /openmaic 路径嵌入 iframe
+   */
+  classroomUrl?: string
 }
 
 // ============================================================

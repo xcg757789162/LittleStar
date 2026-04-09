@@ -22,6 +22,23 @@ export type QuestionType = 'flashcard' | 'multiple-choice' | 'handwriting' | 'vo
 /** 内容类型 */
 export type ContentType = 'flashcard' | 'quiz' | 'writing' | 'voice'
 
+// ===== 用户认证模型 =====
+
+/** 用户（家长） */
+export interface User {
+  id?: string
+  /** 用户名（唯一） */
+  username: string
+  /** 密码哈希（简易版本使用 btoa 编码，生产环境应使用 bcrypt） */
+  passwordHash: string
+  /** 昵称 */
+  nickname: string
+  /** 创建时间 */
+  createdAt: Date
+  /** 最后登录时间 */
+  lastLoginAt?: Date
+}
+
 /** 孩子设置 */
 export interface ChildSettings {
   dailyLearningMinutes: number
@@ -34,6 +51,8 @@ export interface ChildSettings {
 /** 用户（孩子） */
 export interface Child {
   id?: string
+  /** 所属用户（家长）ID */
+  userId: string
   name: string
   avatar: string
   age: number
@@ -84,6 +103,8 @@ export interface MasteryRecord {
   consecutiveCorrect: number
   totalAttempts: number
   totalCorrect: number
+  /** 重学次数（每次"再学一遍"时 +1） */
+  reviewCount?: number
 }
 
 /** 题目内容 */
@@ -152,6 +173,47 @@ export interface DailySession {
   correctCount: number
   subjects: Subject[]
   streak: number
+  /** 关联的课堂 ID（OpenMAIC 课堂） */
+  classroomId?: string
+  /** 关联的知识点 ID */
+  knowledgeNodeId?: string
+  /** 是否为复习/重学会话 */
+  isReview?: boolean
+  /** 学习轮次（第几次学这个知识点） */
+  round?: number
+}
+
+/** 课堂学习历史（持久化已完成的课堂记录） */
+export interface ClassroomHistory {
+  id?: string
+  /** 孩子 ID */
+  childId: string
+  /** 知识点 ID */
+  knowledgeNodeId: string
+  /** 知识点名称 */
+  knowledgeNodeName: string
+  /** 科目 */
+  subject: Subject
+  /** 课堂 ID（OpenMAIC） */
+  classroomId: string
+  /** 课堂标题 */
+  classroomTitle: string
+  /** 课堂 JSON 数据（完整 Classroom 对象序列化） */
+  classroomData: string
+  /** 学习日期 YYYY-MM-DD */
+  date: string
+  /** 完成时间 */
+  completedAt: Date
+  /** 学习轮次（第几次学这个知识点） */
+  round: number
+  /** 是否为复习/重学 */
+  isReview: boolean
+  /** 答题数 */
+  questionsCompleted: number
+  /** 正确数 */
+  correctCount: number
+  /** 正确率 0-100 */
+  accuracy: number
 }
 
 // ===== Phase 2: 年级解锁 + 入学测评 + 学习报告 =====

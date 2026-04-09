@@ -2,8 +2,6 @@
 # 用于本机部署 OpenMAIC AI 课堂生成服务
 # 文档: https://github.com/THU-MAIC/OpenMAIC
 
-version: "3.8"
-
 services:
   openmaic:
     image: devprincekumar/openmaic:latest
@@ -19,7 +17,7 @@ services:
       - openmaic-logs:/app/logs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
