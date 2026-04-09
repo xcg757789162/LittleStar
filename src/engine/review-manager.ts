@@ -6,7 +6,8 @@
 
 import { ReviewScheduler } from './scheduler'
 import type { PrioritizableItem } from './scheduler'
-import { db } from '@/db/database'
+import { apiClient } from '@/services/api'
+import type { MasteryRecord, KnowledgeNode } from '@/types/models'
 
 /** 复习项（带额外显示信息） */
 export interface ReviewItem extends PrioritizableItem {
@@ -76,11 +77,10 @@ export class ReviewManager {
   async getDueReviewItems(childId: string): Promise<ReviewItem[]> {
     const now = new Date()
 
-    // 从 DB 获取所有掌握率记录
-    const masteryRecords = await db.masteryRecords
-      .where('childId')
-      .equals(childId)
-      .toArray()
+    // 从 API 获取所有掌握率记录
+    const masteryRecords = await apiClient.get<MasteryRecord>('/mastery_records', {
+      filters: [{ column: 'childId', operator: 'eq', value: Number(childId) }],
+    })
 
     // 筛选已到期或已过期的
     const dueRecords = masteryRecords.filter(
@@ -91,10 +91,9 @@ export class ReviewManager {
 
     // 查找知识点名称
     const nodeIds = dueRecords.map((r) => r.knowledgeNodeId)
-    const nodes = await db.knowledgeNodes
-      .where('id')
-      .anyOf(nodeIds)
-      .toArray()
+    const nodes = await apiClient.get<KnowledgeNode>('/knowledge_nodes', {
+      filters: [{ column: 'id', operator: 'in', value: nodeIds }],
+    })
 
     const nodeMap = new Map(nodes.map((n) => [n.id!, n]))
 
@@ -127,10 +126,9 @@ export class ReviewManager {
   async getReviewStats(childId: string): Promise<ReviewStats> {
     const now = new Date()
 
-    const masteryRecords = await db.masteryRecords
-      .where('childId')
-      .equals(childId)
-      .toArray()
+    const masteryRecords = await apiClient.get<MasteryRecord>('/mastery_records', {
+      filters: [{ column: 'childId', operator: 'eq', value: Number(childId) }],
+    })
 
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000)
@@ -187,12 +185,13 @@ export class ReviewManager {
     isCorrect: boolean,
   ): Promise<void> {
     // 获取当前掌握率记录
-    const records = await db.masteryRecords
-      .where('[childId+knowledgeNodeId]')
-      .equals([childId, knowledgeNodeId])
-      .toArray()
+    const record = await apiClient.getOne<MasteryRecord>('/mastery_records', {
+      filters: [
+        { column: 'childId', operator: 'eq', value: Number(childId) },
+        { column: 'knowledgeNodeId', operator: 'eq', value: knowledgeNodeId },
+      ],
+    })
 
-    const record = records[0]
     if (!record) return
 
     // 计算上次间隔
@@ -221,13 +220,15 @@ export class ReviewManager {
       newMastery = Math.max(0, newMastery - 10)
     }
 
-    await db.masteryRecords.update(record.id!, {
+    await apiClient.patch('/mastery_records', {
       masteryLevel: newMastery,
-      lastPracticed: new Date(),
-      nextReviewDate,
+      lastPracticed: new Date().toISOString(),
+      nextReviewDate: nextReviewDate.toISOString(),
       consecutiveCorrect: newConsecutiveCorrect,
       totalAttempts: newTotalAttempts,
       totalCorrect: newTotalCorrect,
+    }, {
+      filters: [{ column: 'id', operator: 'eq', value: record.id! }],
     })
   }
 
@@ -237,16 +238,16 @@ export class ReviewManager {
   async hasDueReviews(childId: string): Promise<boolean> {
     const now = new Date()
 
-    const count = await db.masteryRecords
-      .where('childId')
-      .equals(childId)
-      .filter((record) => {
-        if (!record.nextReviewDate) return false
-        return new Date(record.nextReviewDate) <= now
-      })
-      .count()
+    // 查询有 nextReviewDate 且已到期的记录
+    const records = await apiClient.get<MasteryRecord>('/mastery_records', {
+      filters: [
+        { column: 'childId', operator: 'eq', value: Number(childId) },
+        { column: 'nextReviewDate', operator: 'lte', value: now.toISOString() },
+      ],
+      limit: 1,
+    })
 
-    return count > 0
+    return records.length > 0
   }
 }
 

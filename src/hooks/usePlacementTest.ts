@@ -6,7 +6,7 @@
 import { useState, useCallback, useMemo, useRef } from 'react'
 import { PlacementTestEngine } from '@/engine/placement-test-engine'
 import { loadCurriculum } from '@/curriculum'
-import { db } from '@/db/database'
+import { apiClient } from '@/services/api'
 import { useChildStore } from '@/stores/childStore'
 import type { TestSession, TestPlanItem } from '@/engine/placement-test-engine'
 import type { GradeLevel, Subject, PlacementResult } from '@/types/models'
@@ -154,11 +154,10 @@ export function usePlacementTest(
             const testResult = engine.completeTest(session, curriculum.modules)
             setResult(testResult)
 
-            // 写入 DB
+            // 写入 DB（通过 PostgREST API）
             const child = useChildStore.getState().currentChild
-            const childId = child?.id
-            if (!childId) return
-            await db.placementTests.add({
+            const childId = child?.id ? Number(child.id) : 0
+            await apiClient.post('/placement_tests', {
               childId,
               subject,
               gradeLevel,
@@ -169,8 +168,8 @@ export function usePlacementTest(
                 isCorrect: a.isCorrect,
                 timeSpent: a.timeSpent,
               })),
-              startedAt: new Date(),
-              completedAt: new Date(),
+              startedAt: new Date().toISOString(),
+              completedAt: new Date().toISOString(),
               result: testResult,
             })
 

@@ -3,10 +3,10 @@
  * 星球收集，掌握后点亮
  */
 
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useChildStore } from '@/stores/childStore'
-import { db } from '@/db/database'
+import { useMasteryRecords } from '@/hooks/queries'
 import type { Subject } from '@/types/models'
 
 const PLANETS: { key: Subject; label: string; emoji: string; color: string }[] = [
@@ -25,60 +25,49 @@ interface SubjectMastery {
 }
 
 export function StarMap() {
-  const [masteries, setMasteries] = useState<SubjectMastery[]>([])
-  const [litCount, setLitCount] = useState(0)
+  const currentChild = useChildStore((s) => s.currentChild)
+  const childId = currentChild?.id
 
-  useEffect(() => {
-    async function loadMastery() {
-      try {
-        const child = useChildStore.getState().currentChild
-        if (!child) return
+  // 通过 React Query 获取掌握率记录
+  const { data: records = [] } = useMasteryRecords(childId)
 
-        const records = await db.masteryRecords
-          .where('childId')
-          .equals(child.id!)
-          .toArray()
-        const childRecords = records
+  // 计算各科目掌握率
+  const { masteries, litCount } = useMemo(() => {
+    const childRecords = records.filter((r) => r.childId === (childId ? Number(childId) : undefined))
 
-        // 按知识点 ID 前缀分组（math-1 → math, chinese-1 → chinese）
-        const subjectMap = new Map<Subject, number[]>()
-        for (const record of childRecords) {
-          const nodeId = record.knowledgeNodeId
-          // 推断科目：从知识点 ID 的前缀判断
-          let subject: Subject | null = null
-          if (nodeId.startsWith('math')) subject = 'math'
-          else if (nodeId.startsWith('chinese')) subject = 'chinese'
-          else if (nodeId.startsWith('english')) subject = 'english'
+    // 按知识点 ID 前缀分组（math-1 → math, chinese-1 → chinese）
+    const subjectMap = new Map<Subject, number[]>()
+    for (const record of childRecords) {
+      const nodeId = record.knowledgeNodeId
+      let subject: Subject | null = null
+      if (nodeId.startsWith('math')) subject = 'math'
+      else if (nodeId.startsWith('chinese')) subject = 'chinese'
+      else if (nodeId.startsWith('english')) subject = 'english'
 
-          if (subject) {
-            const existing = subjectMap.get(subject) ?? []
-            existing.push(record.masteryLevel)
-            subjectMap.set(subject, existing)
-          }
-        }
-
-        // 计算各科目平均掌握率
-        const results: SubjectMastery[] = PLANETS.map((planet) => {
-          const levels = subjectMap.get(planet.key) ?? []
-          const avg = levels.length > 0
-            ? Math.round(levels.reduce((s, v) => s + v, 0) / levels.length)
-            : 0
-          return {
-            subject: planet.key,
-            averageMastery: avg,
-            isLit: avg >= LIGHT_UP_THRESHOLD,
-          }
-        })
-
-        setMasteries(results)
-        setLitCount(results.filter((r) => r.isLit).length)
-      } catch {
-        // 加载失败使用默认值
+      if (subject) {
+        const existing = subjectMap.get(subject) ?? []
+        existing.push(record.masteryLevel)
+        subjectMap.set(subject, existing)
       }
     }
 
-    loadMastery()
-  }, [])
+    const results: SubjectMastery[] = PLANETS.map((planet) => {
+      const levels = subjectMap.get(planet.key) ?? []
+      const avg = levels.length > 0
+        ? Math.round(levels.reduce((s, v) => s + v, 0) / levels.length)
+        : 0
+      return {
+        subject: planet.key,
+        averageMastery: avg,
+        isLit: avg >= LIGHT_UP_THRESHOLD,
+      }
+    })
+
+    return {
+      masteries: results,
+      litCount: results.filter((r) => r.isLit).length,
+    }
+  }, [records, childId])
 
   // 获取指定科目的掌握率信息
   const getMastery = (subject: Subject): SubjectMastery => {

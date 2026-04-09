@@ -7,12 +7,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
-import { db } from '@/db/database'
+import { apiClient } from '@/services/api'
 import { ClassroomCache } from '@/services/openmaic/cache'
 import { OpenMAICClient } from '@/services/openmaic/client'
 import { PinVerification } from '@/components/parent/PinVerification'
 
-import type { Subject } from '@/types/models'
+import type { Subject, DailySession, KnowledgeNode, MasteryRecord } from '@/types/models'
 
 /** localStorage key for parent PIN */
 const PIN_STORAGE_KEY = 'littlestar_parent_pin'
@@ -113,10 +113,9 @@ export function ParentDashboard() {
         if (!child) return
 
         const today = todayString()
-        const sessions = await db.dailySessions
-          .where('childId')
-          .equals(child.id ?? '')
-          .toArray()
+        const sessions = await apiClient.get<DailySession>('/daily_sessions', {
+          filters: [{ column: 'childId', operator: 'eq', value: Number(child.id) }],
+        })
 
         // 筛选今日的会话
         const todaySessions = sessions.filter((s) => s.date === today)
@@ -191,10 +190,9 @@ export function ParentDashboard() {
         const masteryData: SubjectMastery[] = []
         for (const config of SUBJECT_CONFIG) {
           // 查询该学科下所有知识点的掌握率记录
-          const nodes = await db.knowledgeNodes
-            .where('subject')
-            .equals(config.subject)
-            .toArray()
+          const nodes = await apiClient.get<KnowledgeNode>('/knowledge_nodes', {
+            filters: [{ column: 'subject', operator: 'eq', value: config.subject }],
+          })
           const nodeIds = nodes.map((n) => n.id).filter(Boolean) as string[]
 
           if (nodeIds.length === 0) {
@@ -203,10 +201,9 @@ export function ParentDashboard() {
           }
 
           // 获取该孩子在这些知识点上的掌握率记录
-          const records = await db.masteryRecords
-            .where('childId')
-            .equals(child.id ?? '')
-            .toArray()
+          const records = await apiClient.get<MasteryRecord>('/mastery_records', {
+            filters: [{ column: 'childId', operator: 'eq', value: Number(child.id) }],
+          })
           const subjectRecords = records.filter((r) => nodeIds.includes(r.knowledgeNodeId))
 
           if (subjectRecords.length === 0) {

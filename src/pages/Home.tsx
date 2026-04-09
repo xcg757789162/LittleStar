@@ -1,168 +1,50 @@
 /**
  * 首页
- * 显示当前孩子信息、评测状态、学习入口
- * 改造：任选单科评测即可开始学习，展示各科评测状态
+ * 首次使用（没有学习记录）时显示"入学测评"入口
+ * 否则显示"开始学习"，同时展示缓存课程状态
+ * 触发教导处预生成（后台异步）
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { db } from '@/db/database'
 import { useChildStore } from '@/stores/childStore'
-import { useAuthStore } from '@/stores/authStore'
-import { OpenMAICClient } from '@/services/openmaic/client'
-import { ChildSwitcher } from '@/components/ChildSwitcher'
-import type { Subject } from '@/types/models'
-
-/** 服务状态类型 */
-type ServiceStatus = 'checking' | 'online' | 'offline'
-
-/** 科目配置 */
-const SUBJECT_CONFIG: { key: Subject; label: string; emoji: string; color: string }[] = [
-  { key: 'math', label: '数学', emoji: '🔢', color: '#E3F2FD' },
-  { key: 'chinese', label: '语文', emoji: '📖', color: '#FFF3E0' },
-  { key: 'english', label: '英语', emoji: '🔤', color: '#E8F5E9' },
-]
+import { usePlacementTests } from '@/hooks/queries'
+import { ClassroomCache } from '@/services/openmaic/cache'
 
 export function Home() {
   const navigate = useNavigate()
   const currentChild = useChildStore((s) => s.currentChild)
-  const currentUser = useAuthStore((s) => s.currentUser)
-  const authLogout = useAuthStore((s) => s.logout)
-  const resetChildren = useChildStore((s) => s.reset)
+  const childId = currentChild?.id
+  const [cachedCount, setCachedCount] = useState<number>(0)
+  const cacheRef = useRef(new ClassroomCache())
 
-  /** 已评测的科目集合 */
-  const [testedSubjects, setTestedSubjects] = useState<Set<Subject>>(new Set())
-  /** 是否已完成数据加载 */
-  const [isDataLoaded, setIsDataLoaded] = useState(false)
-  const [serviceStatus, setServiceStatus] = useState<ServiceStatus>('checking')
-  const [learningCount, setLearningCount] = useState<number>(0)
-  const [showChildSwitcher, setShowChildSwitcher] = useState(false)
-  const clientRef = useRef(new OpenMAICClient())
+  // 通过 React Query 查询入学测评记录
+  const { data: placementTests, isLoading: isLoadingTests } = usePlacementTests(childId)
+  const hasPlacementTest = placementTests ? placementTests.length > 0 : null
 
-  // 检查各科评测状态
+  // 加载缓存课程数量（独立于测评状态，首次渲染即加载）
   useEffect(() => {
-    const checkPlacement = async () => {
+    const loadCacheStatus = async () => {
       try {
-        const childId = currentChild?.id
-        if (!childId) return
-        const tests = await db.placementTests
-          .where('childId')
-          .equals(childId)
-          .toArray()
-        const subjects = new Set(tests.map((t) => t.subject))
-        setTestedSubjects(subjects)
+        const size = await cacheRef.current.getCacheSize()
+        setCachedCount(size)
       } catch {
-        setTestedSubjects(new Set())
-      }
-      setIsDataLoaded(true)
-    }
-    setIsDataLoaded(false)
-    checkPlacement()
-  }, [currentChild])
-
-  // 检查 OpenMAIC 服务状态 + 加载学习历史条数
-  useEffect(() => {
-    let cancelled = false
-
-    const checkService = async () => {
-      try {
-        const healthy = await clientRef.current.checkHealth()
-        if (!cancelled) {
-          setServiceStatus(healthy ? 'online' : 'offline')
-        }
-      } catch {
-        if (!cancelled) {
-          setServiceStatus('offline')
-        }
+        setCachedCount(0)
       }
     }
-
-    const loadHistoryCount = async () => {
-      try {
-        const childId = currentChild?.id
-        if (!childId) return
-        const count = await db.classroomHistory
-          .where('childId')
-          .equals(childId)
-          .count()
-        if (!cancelled) {
-          setLearningCount(count)
-        }
-      } catch {
-        // 静默处理
-      }
-    }
-
-    checkService()
-    loadHistoryCount()
-
-    const interval = setInterval(checkService, 30000)
-
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [currentChild])
+    loadCacheStatus()
+  }, [])
 
   const gradeLevel = currentChild?.gradeLevel ?? 'middle-kindergarten'
-  const hasAnyTest = testedSubjects.size > 0
-  const hasAllTests = testedSubjects.size >= 3
 
-  const handleLogout = useCallback(() => {
-    resetChildren()
-    authLogout()
-    navigate('/auth', { replace: true })
-  }, [resetChildren, authLogout, navigate])
-  const handleStartTest = useCallback((subject: Subject) => {
-    navigate(`/placement-test/${subject}/${gradeLevel}`)
-  }, [navigate, gradeLevel])
-
-  /** 渲染服务状态指示器 */
-  const renderServiceStatus = () => {
-    const statusConfig = {
-      checking: { bg: '#FFF3E0', color: '#FF9800', text: '🔍 正在检测课堂服务...' },
-      online: {
-        bg: '#E8F5E9',
-        color: '#4CAF50',
-        text: learningCount > 0
-          ? `✅ 课堂服务就绪 · 已学 ${learningCount} 节课`
-          : '✅ 课堂服务就绪，可以开始学习',
-      },
-      offline: { bg: '#FFEBEE', color: '#F44336', text: '⚠️ 课堂服务离线，请检查 Docker' },
-    }
-
-    const config = statusConfig[serviceStatus]
-    return (
-      <motion.div
-        data-testid="service-status"
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        style={{
-          padding: '8px 20px',
-          borderRadius: '16px',
-          backgroundColor: config.bg,
-          fontSize: '14px',
-          color: config.color,
-          cursor: serviceStatus === 'offline' ? 'pointer' : 'default',
-        }}
-        onClick={serviceStatus === 'offline' ? () => {
-          setServiceStatus('checking')
-          clientRef.current.checkHealth().then((ok) => {
-            setServiceStatus(ok ? 'online' : 'offline')
-          }).catch(() => setServiceStatus('offline'))
-        } : undefined}
-      >
-        {config.text}
-        {serviceStatus === 'offline' && (
-          <span style={{ fontSize: '12px', marginLeft: '8px' }}>(点击重试)</span>
-        )}
-      </motion.div>
-    )
+  const handlePlacementTest = () => {
+    // 默认从数学科目开始入学测评
+    navigate(`/placement-test/math/${gradeLevel}`)
   }
 
-  // 加载中状态
-  if (!isDataLoaded) {
+  // 加载中状态（React Query 查询中或尚未返回数据）
+  if (isLoadingTests || hasPlacementTest === null) {
     return (
       <div
         data-testid="home-page"
@@ -193,149 +75,112 @@ export function Home() {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
+        justifyContent: 'center',
         background: 'linear-gradient(180deg, #E8EAF6 0%, #F3E5F5 100%)',
         padding: '24px',
-        paddingTop: '40px',
       }}
     >
-      {/* 顶部用户栏 */}
-      <div
-        style={{
-          width: '100%',
-          maxWidth: '480px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px',
-        }}
-      >
-        <div style={{ fontSize: '13px', color: '#999' }}>
-          👤 {currentUser?.nickname ?? '用户'}
-        </div>
-        <button
-          onClick={handleLogout}
-          style={{
-            padding: '4px 12px',
-            borderRadius: '8px',
-            border: '1px solid #E0E0E0',
-            backgroundColor: 'white',
-            fontSize: '12px',
-            color: '#999',
-            cursor: 'pointer',
-          }}
-        >
-          退出登录
-        </button>
-      </div>
-
-      {/* 当前孩子卡片（可点击切换） */}
-      <motion.button
-        data-testid="child-card"
-        whileTap={{ scale: 0.97 }}
-        onClick={() => setShowChildSwitcher(true)}
-        style={{
-          width: '100%',
-          maxWidth: '480px',
-          padding: '16px 20px',
-          borderRadius: '20px',
-          border: 'none',
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '14px',
-          cursor: 'pointer',
-          boxShadow: '0 2px 12px rgba(0, 0, 0, 0.06)',
-          marginBottom: '24px',
-        }}
-      >
-        <span style={{ fontSize: '40px' }}>{currentChild?.avatar ?? '⭐'}</span>
-        <div style={{ flex: 1, textAlign: 'left' }}>
-          <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#333', margin: 0 }}>
-            {currentChild?.name ?? '小朋友'}
-          </p>
-          <p style={{ fontSize: '13px', color: '#999', margin: '2px 0 0' }}>
-            {currentChild?.age ?? 5}岁 · 点击切换/添加孩子
-          </p>
-        </div>
-        <span style={{ fontSize: '20px', color: '#BDBDBD' }}>›</span>
-      </motion.button>
-
-      {/* Logo */}
       <motion.h1
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         transition={{ type: 'spring', stiffness: 200 }}
-        style={{ fontSize: '40px', color: '#7C4DFF', margin: '0 0 8px' }}
+        style={{
+          fontSize: '48px',
+          color: '#7C4DFF',
+          marginBottom: '16px',
+        }}
       >
         ⭐ 小星辰
       </motion.h1>
-      <p style={{ fontSize: '16px', color: '#666', marginBottom: '24px' }}>
+      <p style={{ fontSize: '18px', color: '#666', marginBottom: '32px' }}>
         和小星老师一起快乐学习！
       </p>
 
-      {/* 评测状态区域 */}
-      {!hasAllTests && (
+      {!hasPlacementTest ? (
+        /* 首次使用：显示入学测评入口 */
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
           style={{
-            width: '100%',
-            maxWidth: '480px',
-            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-            borderRadius: '20px',
-            padding: '20px',
-            marginBottom: '20px',
-            boxShadow: '0 2px 12px rgba(0, 0, 0, 0.06)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '16px',
           }}
         >
-          <p style={{ fontSize: '16px', fontWeight: 'bold', color: '#333', margin: '0 0 4px' }}>
-            🌟 入学测评
-          </p>
-          <p style={{ fontSize: '13px', color: '#999', margin: '0 0 16px' }}>
-            {hasAnyTest
-              ? '完成任意一科即可开始学习，也可以继续评测其他科目'
-              : '选一个科目，让小星老师先了解一下你吧！'}
-          </p>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            style={{
+              fontSize: '16px',
+              color: '#7C4DFF',
+              fontWeight: 600,
+              textAlign: 'center',
+            }}
+          >
+            🌟 让小星老师先了解一下你吧！
+          </motion.p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-            {SUBJECT_CONFIG.map((s) => {
-              const tested = testedSubjects.has(s.key)
-              return (
-                <motion.button
-                  key={s.key}
-                  whileTap={tested ? undefined : { scale: 0.95 }}
-                  onClick={() => !tested && handleStartTest(s.key)}
-                  style={{
-                    padding: '14px 8px',
-                    borderRadius: '14px',
-                    border: tested ? '2px solid #4CAF50' : '2px solid #E0E0E0',
-                    backgroundColor: tested ? '#E8F5E9' : s.color,
-                    cursor: tested ? 'default' : 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '4px',
-                    opacity: tested ? 0.8 : 1,
-                  }}
-                >
-                  <span style={{ fontSize: '28px' }}>{tested ? '✅' : s.emoji}</span>
-                  <span style={{ fontSize: '14px', fontWeight: 'bold', color: tested ? '#4CAF50' : '#333' }}>
-                    {s.label}
-                  </span>
-                  <span style={{ fontSize: '11px', color: tested ? '#4CAF50' : '#999' }}>
-                    {tested ? '已完成' : '去测评'}
-                  </span>
-                </motion.button>
-              )
-            })}
-          </div>
+          <motion.button
+            data-testid="placement-test-entry-btn"
+            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.05 }}
+            onClick={handlePlacementTest}
+            style={{
+              padding: '24px 56px',
+              borderRadius: '28px',
+              border: 'none',
+              backgroundColor: '#FF6B35',
+              color: 'white',
+              fontSize: '24px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              boxShadow: '0 6px 24px rgba(255, 107, 53, 0.4)',
+              minWidth: '220px',
+              minHeight: '88px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+            }}
+          >
+            <span style={{ fontSize: '32px' }}>🚀</span>
+            入学测评
+          </motion.button>
+
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+            style={{
+              fontSize: '13px',
+              color: '#999',
+              textAlign: 'center',
+            }}
+          >
+            只需几分钟，轻轻松松 ☺️
+          </motion.p>
         </motion.div>
-      )}
-
-      {/* 已有评测 → 显示开始学习 + 服务状态 */}
-      {hasAnyTest && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', width: '100%', maxWidth: '480px' }}>
-          {renderServiceStatus()}
+      ) : (
+        /* 已完成测评：显示开始学习 + 缓存状态 */
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+          {/* 缓存课程状态 */}
+          <div
+            data-testid="cache-status"
+            style={{
+              padding: '8px 20px',
+              borderRadius: '16px',
+              backgroundColor: cachedCount > 0 ? '#E8F5E9' : '#FFF3E0',
+              fontSize: '14px',
+              color: cachedCount > 0 ? '#4CAF50' : '#FF9800',
+            }}
+          >
+            {cachedCount > 0
+              ? `📚 ${cachedCount} 节课已就绪`
+              : '📝 课程准备中...'}
+          </div>
 
           <motion.button
             whileTap={{ scale: 0.95 }}
@@ -344,50 +189,18 @@ export function Home() {
               padding: '16px 48px',
               borderRadius: '24px',
               border: 'none',
-              backgroundColor: serviceStatus === 'offline' ? '#BDBDBD' : '#7C4DFF',
+              backgroundColor: '#7C4DFF',
               color: 'white',
               fontSize: '22px',
               fontWeight: 'bold',
-              cursor: serviceStatus === 'offline' ? 'not-allowed' : 'pointer',
-              boxShadow: serviceStatus === 'offline' ? 'none' : '0 4px 16px rgba(124, 77, 255, 0.4)',
-              opacity: serviceStatus === 'offline' ? 0.6 : 1,
+              cursor: 'pointer',
+              boxShadow: '0 4px 16px rgba(124, 77, 255, 0.4)',
             }}
-            disabled={serviceStatus === 'offline'}
           >
             开始学习
           </motion.button>
-
-          {/* 如果还有未评测的科目，显示继续评测入口 */}
-          {hasAllTests && (
-            <p style={{ fontSize: '13px', color: '#4CAF50', margin: 0 }}>
-              ✅ 三科评测已全部完成
-            </p>
-          )}
-
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate('/history')}
-            style={{
-              padding: '12px 36px',
-              borderRadius: '20px',
-              border: '2px solid #7C4DFF',
-              backgroundColor: 'white',
-              color: '#7C4DFF',
-              fontSize: '16px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-            }}
-          >
-            📖 学习记录
-          </motion.button>
         </div>
       )}
-
-      {/* 孩子切换器 */}
-      <ChildSwitcher
-        visible={showChildSwitcher}
-        onClose={() => setShowChildSwitcher(false)}
-      />
     </div>
   )
 }

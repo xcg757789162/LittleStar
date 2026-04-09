@@ -1,17 +1,19 @@
 /**
  * useInitializeApp Hook
  * App 启动时执行一次性初始化：
- * 1. 从 localStorage 恢复用户登录状态 (authStore.restoreAuth)
- * 2. 若已登录，根据 userId 从 Dexie.js 加载该用户的孩子列表到 childStore
+ * 1. 通过 authStore 恢复认证状态（验证 localStorage 中的 JWT token）
+ * 2. 认证成功后通过 API 加载孩子列表到 childStore
  * 3. 管理 loading 状态 (isInitialized)
  *
- * 不再自动创建默认孩子，改为引导用户登录 → 创建孩子
+ * 迁移说明：原 Dexie.js 版本直接从 IndexedDB 加载数据，
+ * 现改为通过 Auth API 验证 token → React Query hooks 按需加载数据。
  */
 
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { useChildStore } from '@/stores/childStore'
-import { db } from '@/db/database'
+import { apiClient } from '@/services/api'
+import type { Child } from '@/types/models'
 
 /** Hook 返回值 */
 export interface InitializeAppState {
@@ -22,43 +24,39 @@ export interface InitializeAppState {
 export function useInitializeApp(): InitializeAppState {
   const [isInitialized, setIsInitialized] = useState(false)
   const restoreAuth = useAuthStore((s) => s.restoreAuth)
-  const isAuthLoaded = useAuthStore((s) => s.isAuthLoaded)
-  const currentUser = useAuthStore((s) => s.currentUser)
+  const isRestored = useAuthStore((s) => s.isRestored)
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const addChild = useChildStore((s) => s.addChild)
-  const resetChildren = useChildStore((s) => s.reset)
 
-  // Step 1: 恢复认证状态
+  // 第一步：恢复认证状态
   useEffect(() => {
     restoreAuth()
   }, [restoreAuth])
 
-  // Step 2: 认证加载完成后，根据用户加载孩子
+  // 第二步：认证恢复后，如果已登录则加载孩子列表
   useEffect(() => {
-    if (!isAuthLoaded) return
+    if (!isRestored) return
 
     let cancelled = false
 
     async function loadChildren() {
+      if (!isAuthenticated) {
+        // 未认证，初始化完成（将跳转到登录页）
+        if (!cancelled) setIsInitialized(true)
+        return
+      }
+
       try {
-        // 先重置 childStore，确保切换用户时清空
-        resetChildren()
+        // 从 API 加载当前用户的孩子列表
+        const children = await apiClient.get<Child>('/children')
+        if (cancelled) return
 
-        if (currentUser?.id) {
-          // 已登录 → 按 userId 加载该用户的孩子
-          const children = await db.children
-            .where('userId')
-            .equals(currentUser.id)
-            .toArray()
-
-          if (cancelled) return
-
-          for (const child of children) {
-            addChild(child)
-          }
+        // 加载到 childStore
+        for (const child of children) {
+          addChild(child)
         }
-        // 未登录 → 不加载任何孩子（路由守卫会引导到 /auth）
       } catch {
-        // 加载失败静默处理
+        // API 调用失败，静默处理（页面组件会通过 React Query 重试）
       } finally {
         if (!cancelled) {
           setIsInitialized(true)
@@ -71,7 +69,7 @@ export function useInitializeApp(): InitializeAppState {
     return () => {
       cancelled = true
     }
-  }, [isAuthLoaded, currentUser?.id, addChild, resetChildren])
+  }, [isRestored, isAuthenticated, addChild])
 
   return { isInitialized }
 }
