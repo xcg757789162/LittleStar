@@ -223,11 +223,27 @@ async function request<T>(options: RequestOptions): Promise<T> {
     requestHeaders['Prefer'] = preferParts.join(', ')
   }
 
-  const response = await fetch(url, {
-    method,
-    headers: requestHeaders,
-    body: body ? JSON.stringify(keysToSnakeCase(body)) : undefined,
-  })
+  // 8 秒超时保底，避免后端不可达时无限等待
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 8000)
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method,
+      headers: requestHeaders,
+      body: body ? JSON.stringify(keysToSnakeCase(body)) : undefined,
+      signal: controller.signal,
+    })
+  } catch (error) {
+    clearTimeout(timeout)
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ApiError(0, '连接超时，请检查后端服务是否正在运行')
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
 
   // 401 处理：尝试刷新 Token
   if (response.status === 401 && !isRetry) {

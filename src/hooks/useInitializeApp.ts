@@ -56,7 +56,9 @@ export function useInitializeApp(): InitializeAppState {
           addChild(child)
         }
       } catch {
-        // API 调用失败，静默处理（页面组件会通过 React Query 重试）
+        // API 调用失败（后端离线或网络问题），静默处理
+        // 页面组件会通过 React Query 按需重试
+        // 首页/评测页等会显示各自的错误提示
       } finally {
         if (!cancelled) {
           setIsInitialized(true)

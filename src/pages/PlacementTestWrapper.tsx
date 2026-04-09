@@ -38,12 +38,11 @@ export function PlacementTestWrapper() {
     ? (grade as GradeLevel)
     : null
 
-  /** 完成当前科目测评后，检查下一个未完成的科目 */
+  /** 完成当前科目测评后，回到科目选择页让用户自由选择下一科 */
   const handleComplete = useCallback(async (_result: PlacementResult) => {
     try {
       const child = useChildStore.getState().currentChild
       const childId = child?.id ?? 'default'
-      const gradeLevel = child?.gradeLevel ?? 'middle-kindergarten'
 
       // 查询已完成的科目
       const tests = await apiClient.get<PlacementTest>('/placement_tests', {
@@ -51,18 +50,18 @@ export function PlacementTestWrapper() {
       })
       const completedSubjects = new Set(tests.map((t) => t.subject))
 
-      // 找下一个未完成的科目
-      const nextSubject = SUBJECT_ORDER.find((s) => !completedSubjects.has(s))
+      // 检查是否三科都完成了
+      const allDone = SUBJECT_ORDER.every((s) => completedSubjects.has(s))
 
-      if (nextSubject) {
-        // 还有未完成的科目 → 导航到下一科
-        navigate(`/placement-test/${nextSubject}/${gradeLevel}`, { replace: true })
-      } else {
+      if (allDone) {
         // 全部完成 → 回首页
         navigate('/', { replace: true })
+      } else {
+        // 还有未完成的科目 → 回到科目选择页让用户自由选择
+        navigate('/placement-test-select', { replace: true })
       }
     } catch {
-      navigate('/')
+      navigate('/placement-test-select', { replace: true })
     }
   }, [navigate])
 

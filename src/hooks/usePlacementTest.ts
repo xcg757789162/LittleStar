@@ -12,7 +12,7 @@ import type { TestSession, TestPlanItem } from '@/engine/placement-test-engine'
 import type { GradeLevel, Subject, PlacementResult } from '@/types/models'
 
 /** 测评阶段 */
-export type PlacementPhase = 'intro' | 'welcome' | 'testing' | 'completing' | 'result'
+export type PlacementPhase = 'intro' | 'welcome' | 'testing' | 'completing' | 'result' | 'error'
 
 /** 反馈状态 */
 export interface AnswerFeedback {
@@ -42,6 +42,8 @@ export interface PlacementTestState {
   consecutiveCorrect: number
   /** 是否加载中 */
   isLoading: boolean
+  /** 错误信息 */
+  errorMessage: string | null
   /** 开始引导 */
   startIntro: () => void
   /** 开始测评 */
@@ -69,6 +71,7 @@ export function usePlacementTest(
   const [result, setResult] = useState<PlacementResult | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [consecutiveCorrect, setConsecutiveCorrect] = useState(0)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const engine = useMemo(() => new PlacementTestEngine(), [])
   const consecutiveRef = useRef(0)
@@ -92,22 +95,33 @@ export function usePlacementTest(
   /** 开始测评 */
   const startTest = useCallback(async () => {
     setIsLoading(true)
+    setErrorMessage(null)
     try {
       const curriculum = await loadCurriculum(gradeLevel, subject)
       if (!curriculum) {
+        setErrorMessage('后端服务连接失败或未找到课程数据，请检查服务是否正常运行后重试')
+        setPhase('error')
         setIsLoading(false)
         return
       }
 
       const plan = engine.generateTestPlan(curriculum.modules)
+      if (plan.length === 0) {
+        setErrorMessage('该科目暂无测评题目')
+        setPhase('error')
+        setIsLoading(false)
+        return
+      }
+
       const newSession = engine.createSession(plan)
       setSession(newSession)
       setTotalQuestions(plan.length)
       setCurrentQuestion(engine.getCurrentQuestion(newSession))
       setPhase('testing')
-    } catch {
-      // 降级处理
-      setPhase('testing')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '未知错误'
+      setErrorMessage(`加载课程数据失败：${message}`)
+      setPhase('error')
     } finally {
       setIsLoading(false)
     }
@@ -150,11 +164,28 @@ export function usePlacementTest(
       const finalize = async () => {
         try {
           const curriculum = await loadCurriculum(gradeLevel, subject)
-          if (curriculum) {
-            const testResult = engine.completeTest(session, curriculum.modules)
-            setResult(testResult)
+          if (!curriculum) {
+            // 课程数据加载失败（可能后端暂时断开），但答题数据已有
+            // 构建一个基于已答数据的简单结果
+            const correctCount = session.answers.filter(a => a.isCorrect).length
+            const overallScore = session.answers.length > 0
+              ? Math.round((correctCount / session.answers.length) * 100)
+              : 0
+            const fallbackResult: PlacementResult = {
+              masteredNodes: session.answers.filter(a => a.isCorrect).map(a => a.nodeId),
+              startingNodes: session.answers.filter(a => !a.isCorrect).map(a => a.nodeId).slice(0, 1),
+              overallScore,
+            }
+            setResult(fallbackResult)
+            setPhase('result')
+            return
+          }
 
-            // 写入 DB（通过 PostgREST API）
+          const testResult = engine.completeTest(session, curriculum.modules)
+          setResult(testResult)
+
+          // 写入 DB（通过 PostgREST API）
+          try {
             const child = useChildStore.getState().currentChild
             const childId = child?.id ? Number(child.id) : 0
             await apiClient.post('/placement_tests', {
@@ -172,11 +203,14 @@ export function usePlacementTest(
               completedAt: new Date().toISOString(),
               result: testResult,
             })
-
-            setPhase('result')
-            // onComplete 在 finishAndNavigate（用户点击"开始学习"）中统一调用
+          } catch {
+            // DB 写入失败不阻塞结果显示（用户可以看到结果但数据未持久化）
+            console.warn('测评结果写入数据库失败，将在下次连接时重试')
           }
+
+          setPhase('result')
         } catch {
+          // 最终兜底：即使出错也显示结果页
           setPhase('result')
         }
       }
@@ -204,6 +238,7 @@ export function usePlacementTest(
     recommendedLevel,
     consecutiveCorrect,
     isLoading,
+    errorMessage,
     startIntro,
     startTest,
     submitAnswer,

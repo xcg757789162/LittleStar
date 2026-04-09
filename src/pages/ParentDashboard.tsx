@@ -93,6 +93,7 @@ export function ParentDashboard() {
   })
   const [serviceOnline, setServiceOnline] = useState<boolean | null>(null)
   const [subjectMasteries, setSubjectMasteries] = useState<SubjectMastery[]>([])
+  const [apiError, setApiError] = useState(false)
 
   // 高级配置表单状态
   const [openmaicUrl, setOpenmaicUrl] = useState(() => {
@@ -153,7 +154,8 @@ export function ParentDashboard() {
             : 0,
         })
       } catch {
-        // 加载失败使用默认值
+        // API 加载失败，标记后端连接问题
+        setApiError(true)
       }
     }
 
@@ -305,6 +307,26 @@ export function ParentDashboard() {
           </button>
         </div>
       </div>
+
+      {/* 后端 API 连接失败提示 */}
+      {apiError && (
+        <div
+          style={{
+            padding: '12px 16px',
+            borderRadius: '12px',
+            backgroundColor: '#FFF3E0',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <span style={{ fontSize: '16px' }}>⚠️</span>
+          <span style={{ fontSize: '13px', color: '#E65100', flex: 1 }}>
+            后端数据服务连接失败，以下数据可能不准确
+          </span>
+        </div>
+      )}
 
       {/* 统计卡片 */}
       <div

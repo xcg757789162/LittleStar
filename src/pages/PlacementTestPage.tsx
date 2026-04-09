@@ -128,6 +128,7 @@ export function PlacementTestPage({
     recommendedLevel,
     // consecutiveCorrect 暂未使用，后续可用于UI展示连续答对数
     isLoading,
+    errorMessage,
     startTest,
     submitAnswer,
     dismissFeedback,
@@ -480,6 +481,86 @@ export function PlacementTestPage({
           <p style={{ fontSize: '18px', color: '#7C4DFF', fontWeight: 'bold' }}>
             小星老师正在分析你的表现...
           </p>
+        </div>
+      )}
+
+      {/* 错误状态 */}
+      {phase === 'error' && (
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '16px',
+            textAlign: 'center',
+            padding: '24px',
+          }}
+        >
+          <div style={{ fontSize: '64px' }}>😥</div>
+          <h2
+            style={{
+              fontSize: '22px',
+              color: '#D32F2F',
+              fontWeight: 'bold',
+            }}
+          >
+            哎呀，出了点问题
+          </h2>
+          <p
+            style={{
+              fontSize: '14px',
+              color: '#888',
+              maxWidth: '320px',
+              lineHeight: 1.6,
+            }}
+          >
+            {errorMessage ?? '加载课程数据时遇到问题'}
+          </p>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              width: '100%',
+              maxWidth: '280px',
+              marginTop: '12px',
+            }}
+          >
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={startTest}
+              disabled={isLoading}
+              style={{
+                padding: '16px 32px',
+                fontSize: '18px',
+                fontWeight: 700,
+                color: '#fff',
+                backgroundColor: '#7C4DFF',
+                border: 'none',
+                borderRadius: '20px',
+                cursor: 'pointer',
+                boxShadow: '0 4px 16px rgba(124, 77, 255, 0.3)',
+              }}
+            >
+              {isLoading ? '重试中...' : '🔄 重试'}
+            </motion.button>
+            <button
+              onClick={onExit}
+              style={{
+                padding: '12px 24px',
+                fontSize: '14px',
+                color: '#999',
+                backgroundColor: 'transparent',
+                border: '1px solid #E0E0E0',
+                borderRadius: '16px',
+                cursor: 'pointer',
+              }}
+            >
+              返回选择科目
+            </button>
+          </div>
         </div>
       )}
 

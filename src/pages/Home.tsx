@@ -35,7 +35,7 @@ export function Home() {
   }, [cacheInstance])
 
   // 通过 React Query 查询入学测评记录（仅在有 childId 时查询）
-  const { data: placementTests, isLoading: isLoadingTests } = usePlacementTests(childId)
+  const { data: placementTests, isLoading: isLoadingTests, isError: isTestsError, refetch: refetchTests } = usePlacementTests(childId)
 
   // 当 childId 为 undefined（无孩子/未登录）时，query 不会执行（enabled: false）
   // 此时 placementTests 为 undefined → hasPlacementTest = false（直接当未测评处理）
@@ -56,15 +56,13 @@ export function Home() {
     loadCacheStatus()
   }, [cacheInstance])
 
-  const gradeLevel = currentChild?.gradeLevel ?? 'middle-kindergarten'
-
   const handlePlacementTest = () => {
-    // 默认从数学科目开始入学测评
-    navigate(`/placement-test/math/${gradeLevel}`)
+    // 导航到科目选择页面，让用户自由选择学科
+    navigate('/placement-test-select')
   }
 
   // 加载中状态（仅当有 childId 且 React Query 正在查询时才显示）
-  if (childId && (isLoadingTests || hasPlacementTest === null)) {
+  if (childId && isLoadingTests && !isTestsError && hasPlacementTest === null) {
     return (
       <div
         data-testid="home-page"
@@ -83,6 +81,67 @@ export function Home() {
         >
           🌟
         </motion.div>
+      </div>
+    )
+  }
+
+  // API 查询失败时显示错误提示
+  if (childId && isTestsError) {
+    return (
+      <div
+        data-testid="home-page"
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(180deg, #E8EAF6 0%, #F3E5F5 100%)',
+          padding: '24px',
+          gap: '16px',
+        }}
+      >
+        <motion.h1
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: 'spring', stiffness: 200 }}
+          style={{ fontSize: '48px', color: '#7C4DFF', marginBottom: '8px' }}
+        >
+          ⭐ 小星辰
+        </motion.h1>
+        <div
+          style={{
+            padding: '20px 24px',
+            borderRadius: '16px',
+            backgroundColor: '#FFF3E0',
+            textAlign: 'center',
+            maxWidth: '360px',
+          }}
+        >
+          <p style={{ fontSize: '16px', color: '#E65100', fontWeight: 600, marginBottom: '8px' }}>
+            😥 后端服务连接失败
+          </p>
+          <p style={{ fontSize: '13px', color: '#999', lineHeight: 1.6 }}>
+            请检查 Docker 后端服务是否正在运行
+          </p>
+        </div>
+        <motion.button
+          whileTap={{ scale: 0.95 }}
+          onClick={() => refetchTests()}
+          style={{
+            padding: '16px 48px',
+            borderRadius: '24px',
+            border: 'none',
+            backgroundColor: '#7C4DFF',
+            color: 'white',
+            fontSize: '18px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            boxShadow: '0 4px 16px rgba(124, 77, 255, 0.4)',
+          }}
+        >
+          🔄 重试连接
+        </motion.button>
       </div>
     )
   }

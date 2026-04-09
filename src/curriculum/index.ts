@@ -60,38 +60,48 @@ function toGradeCurriculum(data: Curriculum): GradeCurriculum {
  *
  * @param gradeLevel 年级
  * @param subject 科目
- * @returns 大纲数据
+ * @returns 大纲数据，加载失败时返回 null
  */
 export async function loadCurriculum(
   gradeLevel: GradeLevel,
   subject: Subject,
-): Promise<GradeCurriculum> {
+): Promise<GradeCurriculum | null> {
   const cacheKey = getCacheKey(gradeLevel, subject)
 
   // 检查缓存
   const cached = curriculumCache.get(cacheKey)
   if (cached) return cached
 
-  // 从 API 加载（PostgREST 嵌套 select）
-  const data = await apiClient.getOne<Curriculum>('/curricula', {
-    filters: [
-      { column: 'gradeLevel', operator: 'eq', value: gradeLevel },
-      { column: 'subject', operator: 'eq', value: subject },
-      { column: 'isActive', operator: 'eq', value: true },
-    ],
-    select: '*, curriculum_modules(*, curriculum_nodes(*))',
-  })
+  try {
+    // 从 API 加载（PostgREST 嵌套 select），添加 8 秒超时
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 8000)
 
-  if (!data) {
-    throw new Error(`Curriculum not found: ${gradeLevel} / ${subject}`)
+    const data = await apiClient.getOne<Curriculum>('/curricula', {
+      filters: [
+        { column: 'gradeLevel', operator: 'eq', value: gradeLevel },
+        { column: 'subject', operator: 'eq', value: subject },
+        { column: 'isActive', operator: 'eq', value: true },
+      ],
+      select: '*, curriculum_modules(*, curriculum_nodes(*))',
+    })
+
+    clearTimeout(timeout)
+
+    if (!data) {
+      return null
+    }
+
+    const curriculum = toGradeCurriculum(data)
+
+    // 缓存
+    curriculumCache.set(cacheKey, curriculum)
+
+    return curriculum
+  } catch {
+    // API 不可达、超时或其他错误 → 返回 null
+    return null
   }
-
-  const curriculum = toGradeCurriculum(data)
-
-  // 缓存
-  curriculumCache.set(cacheKey, curriculum)
-
-  return curriculum
 }
 
 /**

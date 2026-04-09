@@ -44,11 +44,27 @@ async function authRequest<T>(
     headers['Authorization'] = `Bearer ${options.token}`
   }
 
-  const response = await fetch(url, {
-    method,
-    headers,
-    body: options?.body ? JSON.stringify(options.body) : undefined,
-  })
+  // 5 秒超时保底，避免后端不可达时无限等待
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 5000)
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      body: options?.body ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
+    })
+  } catch (error) {
+    clearTimeout(timeout)
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ApiError(0, '连接超时，请检查后端服务是否正在运行')
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
 
   // 错误处理
   if (!response.ok) {

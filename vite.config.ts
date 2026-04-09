@@ -25,46 +25,37 @@ export default defineConfig({
       },
 
       // === OpenMAIC AI 课堂代理 ===
-      // API 代理：LittleStar → OpenMAIC API（已有路径，保持兼容）
+      // 所有 OpenMAIC 请求统一通过 Nginx 网关（8080）转发
+      // Nginx 会将 /openmaic/* 路由到容器内部的 openmaic:3002
+      //
+      // API 代理：LittleStar → Nginx → OpenMAIC API
       '/openmaic-proxy': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:8080',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/openmaic-proxy/, ''),
+        // /openmaic-proxy/api/xxx → /openmaic/api/xxx（Nginx 再转发到 openmaic:3002）
+        rewrite: (path) => path.replace(/^\/openmaic-proxy/, '/openmaic'),
       },
-      // OpenMAIC API 代理（iframe 内页面的 fetch 请求使用 /api/... 路径）
-      // 注意：放在 /api/auth 和 /api/rest 之后，避免拦截后端 API
-      '/api': {
-        target: 'http://localhost:3000',
+      // iframe 代理：嵌入 OpenMAIC 原生前端（通过 Nginx，自动剥离 X-Frame-Options 头）
+      '/openmaic': {
+        target: 'http://localhost:8080',
         changeOrigin: true,
       },
-      // OpenMAIC Next.js 静态资源代理（iframe 内页面引用的 CSS/JS/字体）
+      // OpenMAIC 前端静态资源代理（iframe 内页面引用的 CSS/JS/字体/图片）
+      // 这些资源以绝对路径引用（/_next/...、/avatars/...），需要通过 Nginx 转发到 OpenMAIC 服务
       '/_next': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:8080',
         changeOrigin: true,
+        rewrite: (path: string) => `/openmaic${path}`,
       },
-      // OpenMAIC 公共资源代理（头像、logo 等）
       '/avatars': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:8080',
         changeOrigin: true,
+        rewrite: (path: string) => `/openmaic${path}`,
       },
       '/logo': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:8080',
         changeOrigin: true,
-      },
-      // iframe 代理：嵌入 OpenMAIC 原生前端（剥离 X-Frame-Options 头）
-      '/openmaic': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/openmaic/, ''),
-        configure: (proxy) => {
-          proxy.on('proxyRes', (proxyRes) => {
-            // 移除阻止 iframe 嵌入的响应头
-            delete proxyRes.headers['x-frame-options']
-            delete proxyRes.headers['content-security-policy']
-            // 允许同源 iframe 嵌入
-            proxyRes.headers['x-frame-options'] = 'SAMEORIGIN'
-          })
-        },
+        rewrite: (path: string) => `/openmaic${path}`,
       },
     },
   },

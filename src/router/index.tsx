@@ -13,6 +13,7 @@ import { StarMap } from '@/pages/StarMap'
 import { ParentDashboard } from '@/pages/ParentDashboard'
 import { ParentSettings } from '@/pages/ParentSettings'
 import { PlacementTestWrapper } from '@/pages/PlacementTestWrapper'
+import { PlacementTestSelectPage } from '@/pages/PlacementTestSelectPage'
 import { LearningReportPage } from '@/pages/LearningReportPage'
 import { ReportDetailPage } from '@/pages/ReportDetailPage'
 import { AuthPage } from '@/pages/AuthPage'
@@ -72,6 +73,7 @@ export function AppRoutes() {
           <Route path="/starmap" element={<StarMap />} />
           <Route path="/parent" element={<ParentDashboard />} />
           <Route path="/parent/settings" element={<ParentSettings />} />
+          <Route path="/placement-test-select" element={<PlacementTestSelectPage />} />
           <Route path="/placement-test/:subject/:grade" element={<PlacementTestWrapper />} />
           <Route path="/reports" element={<LearningReportPage />} />
           <Route path="/reports/:reportId" element={<ReportDetailPage />} />
