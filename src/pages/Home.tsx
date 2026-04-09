@@ -5,19 +5,34 @@
  * 触发教导处预生成（后台异步）
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
 import { usePlacementTests } from '@/hooks/queries'
 import { ClassroomCache } from '@/services/openmaic/cache'
+import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
 
 export function Home() {
   const navigate = useNavigate()
   const currentChild = useChildStore((s) => s.currentChild)
   const childId = currentChild?.id
   const [cachedCount, setCachedCount] = useState<number>(0)
-  const cacheRef = useRef(new ClassroomCache())
+
+  // 按 childId 初始化持久化缓存（登录后有值），否则用内存缓存兜底
+  const cacheRef = useRef<ClassroomCache | null>(null)
+
+  // 使用 useMemo 根据 childId 变化创建缓存实例（避免在 render 中直接写 ref）
+  const cacheInstance = useMemo(() => {
+    return childId
+      ? new ClassroomCache(new PostgresCacheStore(Number(childId)))
+      : new ClassroomCache()
+  }, [childId])
+
+  // 在 effect 中更新 ref
+  useEffect(() => {
+    cacheRef.current = cacheInstance
+  }, [cacheInstance])
 
   // 通过 React Query 查询入学测评记录（仅在有 childId 时查询）
   const { data: placementTests, isLoading: isLoadingTests } = usePlacementTests(childId)
@@ -28,18 +43,18 @@ export function Home() {
     ? (placementTests ? placementTests.length > 0 : null)
     : false
 
-  // 加载缓存课程数量（独立于测评状态，首次渲染即加载）
+  // 加载缓存课程数量（独立于测评状态，childId 变化时重新加载）
   useEffect(() => {
     const loadCacheStatus = async () => {
       try {
-        const size = await cacheRef.current.getCacheSize()
+        const size = await cacheInstance.getCacheSize()
         setCachedCount(size)
       } catch {
         setCachedCount(0)
       }
     }
     loadCacheStatus()
-  }, [])
+  }, [cacheInstance])
 
   const gradeLevel = currentChild?.gradeLevel ?? 'middle-kindergarten'
 

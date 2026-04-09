@@ -52,6 +52,21 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON api.report_data TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.mastery_snapshots TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.classroom_history TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.classroom_snapshots TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON api.classroom_cache TO authenticated;
+
+-- 公共只读表：亲子活动、TPR 指令、课程大纲、媒体文件
+GRANT SELECT ON api.parent_activities TO anon;
+GRANT SELECT ON api.parent_activities TO authenticated;
+GRANT SELECT ON api.tpr_instructions TO anon;
+GRANT SELECT ON api.tpr_instructions TO authenticated;
+GRANT SELECT ON api.curricula TO anon;
+GRANT SELECT ON api.curricula TO authenticated;
+GRANT SELECT ON api.curriculum_modules TO anon;
+GRANT SELECT ON api.curriculum_modules TO authenticated;
+GRANT SELECT ON api.curriculum_nodes TO anon;
+GRANT SELECT ON api.curriculum_nodes TO authenticated;
+GRANT SELECT ON api.media_files TO anon;
+GRANT SELECT ON api.media_files TO authenticated;
 
 -- 视图权限（课堂历史是私有数据，不对 anon 开放）
 GRANT SELECT ON api.classroom_history_list TO authenticated;

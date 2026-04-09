@@ -58,14 +58,15 @@
 - [x] 7.5 迁移 `src/pages/Home.tsx`：`db.placementTests.where()` 改用 `usePlacementTests()` React Query hook
 - [x] 7.6 迁移 `src/pages/StarMap.tsx`：`db.masteryRecords` 改用 `useMasteryRecords()` + useMemo
 - [x] 7.7 迁移 `src/pages/ParentDashboard.tsx`：所有 db 查询改用 apiClient 直接调用
-- [x] 7.8 N/A — `src/pages/CreateChildPage.tsx` 不存在于当前分支
-- [x] 7.9 迁移 `src/engine/review-manager.ts`：db 操作改用 apiClient 调用（get/getOne/patch）
-- [x] 7.10 N/A — `src/services/review-learning.ts` 不存在于当前分支
+- [x] 7.8 迁移 `src/pages/CreateChildPage.tsx`：改用 `apiClient.post()` 创建孩子，修复 post 返回值处理（单对象而非数组）
+- [x] 7.9 迁移 `src/engine/review-manager.ts`：db 操作改用 apiClient 调用（get/getOne/patch），更新注释
+- [x] 7.10 迁移 `src/services/review-learning.ts`：完全从 Dexie 重写为 apiClient 调用，修复 PostgRESTFilter 类型和 order 数组格式
 
 ## 8. 清理 + Vite Proxy 更新 + RLS 验证
 
 - [x] 8.1 删除 `src/db/` 目录（database.ts、knowledge-graph.ts 及测试文件）
 - [x] 8.2 删除 `src/data/seed/index.ts`（seedDatabase 函数）和 `src/data/__tests__/`
+- [x] 8.2b 删除 6 个无引用的旧种子数据文件（chinese/english/math/songs/letters/dialogues），保留 2 个仍被组件引用的（english-parent-activities/english-tpr）
 - [x] 8.3 `npm uninstall dexie fake-indexeddb`
 - [x] 8.4 更新 `vite.config.ts`：开发环境代理到 Nginx（:8080），路由 /api/auth、/api/rest、/openmaic
 - [ ] 8.5 RLS 安全验证：创建两个测试用户，验证用户 A 无法通过 PostgREST 查看/修改用户 B 的数据（需部署环境）

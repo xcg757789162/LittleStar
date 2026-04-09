@@ -1,10 +1,16 @@
 /**
  * 知识点大纲按需加载入口
- * 使用动态 import 实现代码分割
+ *
+ * 从 PostgREST API 加载课程大纲数据（curricula → modules → nodes 三级结构），
+ * 通过内存 Map 缓存避免重复请求。
+ *
+ * 替代原先的 Vite 动态 import 方式，数据源从 TS 文件迁移到 PostgreSQL 数据库。
  */
 
 import type { GradeLevel, Subject } from '@/types/models'
-import type { GradeCurriculum } from './types'
+import type { GradeCurriculum, CurriculumModule, CurriculumTemplatePrompt } from './types'
+import { apiClient } from '@/services/api'
+import type { Curriculum, CurriculumModuleApi, CurriculumNodeApi } from '@/services/api/types'
 
 export type { GradeCurriculum, CurriculumModule, CurriculumKnowledgeNode, CurriculumTemplatePrompt } from './types'
 
@@ -16,46 +22,41 @@ function getCacheKey(gradeLevel: GradeLevel, subject: Subject): string {
   return `${gradeLevel}:${subject}`
 }
 
-/** 年级到目录名的映射 */
-function getGradeDir(gradeLevel: GradeLevel): string {
-  switch (gradeLevel) {
-    case 'middle-kindergarten':
-    case 'senior-kindergarten':
-      return 'kindergarten'
-    case 'grade-1':
-      return 'grade-1'
-    case 'grade-2':
-      return 'grade-2'
-    case 'grade-3':
-      return 'grade-3'
-    case 'grade-4':
-      return 'grade-4'
-    case 'grade-5':
-      return 'grade-5'
-    case 'grade-6':
-      return 'grade-6'
-    default:
-      throw new Error(`Unknown grade level: ${gradeLevel}`)
-  }
-}
+/**
+ * 将 API 响应转换为前端 GradeCurriculum 类型
+ */
+function toGradeCurriculum(data: Curriculum): GradeCurriculum {
+  const modules: CurriculumModule[] = (data.curriculumModules ?? [])
+    .sort((a: CurriculumModuleApi, b: CurriculumModuleApi) => a.orderIndex - b.orderIndex)
+    .map((mod: CurriculumModuleApi) => ({
+      id: mod.id,
+      name: mod.name,
+      description: mod.description,
+      order: mod.orderIndex,
+      knowledgeNodes: (mod.curriculumNodes ?? []).map((node: CurriculumNodeApi) => ({
+        id: node.id,
+        name: node.name,
+        description: node.description,
+        difficulty: node.difficulty,
+        contentTypes: node.contentTypes as GradeCurriculum['modules'][0]['knowledgeNodes'][0]['contentTypes'],
+        prerequisites: node.prerequisites,
+        templatePrompts: (node.templatePrompts as CurriculumTemplatePrompt[]) ?? [],
+      })),
+    }))
 
-/** 科目到文件名的映射 */
-function getSubjectFile(subject: Subject): string {
-  switch (subject) {
-    case 'math':
-      return 'math'
-    case 'chinese':
-      return 'chinese'
-    case 'english':
-      return 'english'
-    default:
-      throw new Error(`Unknown subject: ${subject}`)
+  return {
+    gradeLevel: data.gradeLevel as GradeLevel,
+    subject: data.subject as Subject,
+    version: data.version,
+    reference: data.reference,
+    modules,
   }
 }
 
 /**
  * 按需加载指定年级和科目的知识点大纲
- * 使用动态 import 实现代码分割，已加载的大纲会被缓存
+ * 从 PostgREST API 加载，利用嵌套 select 一次获取三级数据。
+ * 已加载的大纲会被缓存。
  *
  * @param gradeLevel 年级
  * @param subject 科目
@@ -71,43 +72,21 @@ export async function loadCurriculum(
   const cached = curriculumCache.get(cacheKey)
   if (cached) return cached
 
-  const gradeDir = getGradeDir(gradeLevel)
-  const subjectFile = getSubjectFile(subject)
+  // 从 API 加载（PostgREST 嵌套 select）
+  const data = await apiClient.getOne<Curriculum>('/curricula', {
+    filters: [
+      { column: 'gradeLevel', operator: 'eq', value: gradeLevel },
+      { column: 'subject', operator: 'eq', value: subject },
+      { column: 'isActive', operator: 'eq', value: true },
+    ],
+    select: '*, curriculum_modules(*, curriculum_nodes(*))',
+  })
 
-  // 动态 import 实现按需加载
-  const moduleMap: Record<string, () => Promise<{ default: GradeCurriculum }>> = {
-    'kindergarten:math': () => import('./kindergarten/math'),
-    'kindergarten:chinese': () => import('./kindergarten/chinese'),
-    'kindergarten:english': () => import('./kindergarten/english'),
-    'grade-1:math': () => import('./grade-1/math'),
-    'grade-1:chinese': () => import('./grade-1/chinese'),
-    'grade-1:english': () => import('./grade-1/english'),
-    'grade-2:math': () => import('./grade-2/math'),
-    'grade-2:chinese': () => import('./grade-2/chinese'),
-    'grade-2:english': () => import('./grade-2/english'),
-    'grade-3:math': () => import('./grade-3/math'),
-    'grade-3:chinese': () => import('./grade-3/chinese'),
-    'grade-3:english': () => import('./grade-3/english'),
-    'grade-4:math': () => import('./grade-4/math'),
-    'grade-4:chinese': () => import('./grade-4/chinese'),
-    'grade-4:english': () => import('./grade-4/english'),
-    'grade-5:math': () => import('./grade-5/math'),
-    'grade-5:chinese': () => import('./grade-5/chinese'),
-    'grade-5:english': () => import('./grade-5/english'),
-    'grade-6:math': () => import('./grade-6/math'),
-    'grade-6:chinese': () => import('./grade-6/chinese'),
-    'grade-6:english': () => import('./grade-6/english'),
-  }
-
-  const importKey = `${gradeDir}:${subjectFile}`
-  const importer = moduleMap[importKey]
-
-  if (!importer) {
+  if (!data) {
     throw new Error(`Curriculum not found: ${gradeLevel} / ${subject}`)
   }
 
-  const module = await importer()
-  const curriculum = module.default
+  const curriculum = toGradeCurriculum(data)
 
   // 缓存
   curriculumCache.set(cacheKey, curriculum)

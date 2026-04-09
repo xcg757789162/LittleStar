@@ -3,14 +3,11 @@
  * 包含今日收获、亲子小任务推荐、线下延伸建议、鼓励语、回到首页按钮
  */
 
-import { useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { OfflineExtensionCard } from './OfflineExtensionCard'
-import {
-  getRandomActivity,
-  englishParentActivities,
-} from '@/data/seed/english-parent-activities'
-import type { ParentActivity } from '@/data/seed/english-parent-activities'
+import { useParentActivities } from '@/hooks/queries/useParentActivities'
+import type { ParentActivity } from '@/services/api/types'
 import type { Subject } from '@/types/models'
 import type { SessionSummary as SessionSummaryData } from '@/hooks/useLearningFlow'
 
@@ -67,17 +64,26 @@ export function SessionSummary({
     [],
   )
 
-  // 推荐的亲子活动
-  const recommendedActivity = useMemo<ParentActivity>(
-    () => getRandomActivity(),
-    [],
-  )
+  // 从数据库加载亲子活动数据
+  const { data: allActivities } = useParentActivities()
+
+  // 推荐的亲子活动（从 API 数据中随机选取）
+  const [recommendedActivity, setRecommendedActivity] = useState<ParentActivity | null>(null)
 
   // 线下延伸建议活动
-  const extensionActivities = useMemo<ParentActivity[]>(() => {
-    const shuffled = [...englishParentActivities].sort(() => Math.random() - 0.5)
-    return shuffled.slice(0, 2)
-  }, [])
+  const [extensionActivities, setExtensionActivities] = useState<ParentActivity[]>([])
+
+  useEffect(() => {
+    if (allActivities && allActivities.length > 0) {
+      // 随机选一个推荐活动
+      const idx = Math.floor(Math.random() * allActivities.length)
+      setRecommendedActivity(allActivities[idx])
+
+      // 随机选 2 个线下延伸活动
+      const shuffled = [...allActivities].sort(() => Math.random() - 0.5)
+      setExtensionActivities(shuffled.slice(0, 2))
+    }
+  }, [allActivities])
 
   return (
     <motion.div
@@ -217,7 +223,7 @@ export function SessionSummary({
       </motion.div>
 
       {/* 亲子小任务推荐 */}
-      {subject === 'english' && (
+      {subject === 'english' && recommendedActivity && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

@@ -149,3 +149,115 @@ export const API_REST_BASE = '/api/rest'
 
 /** Auth Service API 基础路径 */
 export const API_AUTH_BASE = '/api/auth'
+
+// ============================================================
+// 亲子活动类型
+// ============================================================
+
+/** 亲子活动类型 */
+export type ParentActivityType = 'sing' | 'find' | 'play' | 'draw' | 'talk'
+
+/** 亲子活动数据 */
+export interface ParentActivity {
+  id: string
+  relatedNodeIds: string[]
+  taskDescription: string
+  parentGuide: string
+  guidanceCard: string
+  offlineExtension: string
+  type: ParentActivityType
+  estimatedMinutes: number
+  subject: string
+  isActive: boolean
+}
+
+// ============================================================
+// TPR 指令类型
+// ============================================================
+
+/** TPR 动画类型 */
+export type TPRAnimationType = 'up' | 'down' | 'jump' | 'clap' | 'turn' | 'touch' | 'wave'
+
+/** TPR 指令数据 */
+export interface TPRInstruction {
+  id: string
+  command: string
+  translation: string
+  action: string
+  emoji: string
+  difficulty: number
+  category: 'body' | 'move' | 'face' | 'object'
+  animationType: TPRAnimationType | null
+  isActive: boolean
+}
+
+/** TPR 指令命令（供 TPRActivity 组件使用） */
+export interface TPRCommand {
+  id: string
+  command: string
+  chineseHint: string
+  emoji: string
+  animationType: TPRAnimationType
+}
+
+// ============================================================
+// 课程大纲类型
+// ============================================================
+
+/** 课程大纲主表 */
+export interface Curriculum {
+  id: number
+  gradeLevel: string
+  subject: string
+  version: string
+  reference: string
+  isActive: boolean
+  curriculumModules?: CurriculumModuleApi[]
+}
+
+/** 大纲模块 */
+export interface CurriculumModuleApi {
+  id: string
+  curriculumId: number
+  name: string
+  description: string
+  orderIndex: number
+  curriculumNodes?: CurriculumNodeApi[]
+}
+
+/** 大纲知识点 */
+export interface CurriculumNodeApi {
+  id: string
+  moduleId: string
+  name: string
+  description: string
+  difficulty: number
+  contentTypes: string[]
+  prerequisites: string[]
+  templatePrompts: CurriculumTemplatePromptApi[]
+}
+
+/** 大纲 AI 出题模板 */
+export interface CurriculumTemplatePromptApi {
+  type: string
+  prompt: string
+  constraints: Record<string, unknown>
+}
+
+// ============================================================
+// 媒体文件类型
+// ============================================================
+
+/** 媒体文件索引 */
+export interface MediaFile {
+  id: number
+  originalUrl: string
+  localPath: string | null
+  fileType: string
+  fileSize: number | null
+  mimeType: string | null
+  source: string
+  status: 'pending' | 'downloading' | 'completed' | 'failed'
+  createdAt: string
+  downloadedAt: string | null
+}

@@ -166,12 +166,12 @@ vi.mock('@/services/ai/teacher', () => ({
   }),
 }))
 
-vi.mock('@/data/seed/english-parent-activities', () => ({
-  getRandomActivity: vi.fn().mockReturnValue({ id: 'act-1', name: 'test', instruction: 'do this' }),
+vi.mock('@/hooks/queries/useParentActivities', () => ({
+  fetchRandomActivity: vi.fn().mockResolvedValue({ id: 'act-1', name: 'test', instruction: 'do this' }),
 }))
 
-vi.mock('@/data/seed/english-tpr', () => ({
-  getRandomTPR: vi.fn().mockReturnValue({ id: 'tpr-1', command: 'jump', instruction: 'jump up' }),
+vi.mock('@/hooks/queries/useTPRInstructions', () => ({
+  fetchRandomTPR: vi.fn().mockResolvedValue({ id: 'tpr-1', command: 'jump', instruction: 'jump up' }),
 }))
 
 import { useLearningFlow } from '../useLearningFlow'

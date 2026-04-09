@@ -4,7 +4,7 @@
  */
 
 import { motion, AnimatePresence } from 'framer-motion'
-import type { ParentActivity } from '@/data/seed/english-parent-activities'
+import type { ParentActivity } from '@/services/api/types'
 
 /** 活动类型 emoji 映射 */
 const TYPE_EMOJI: Record<string, string> = {

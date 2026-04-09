@@ -267,7 +267,30 @@ CREATE POLICY classroom_snapshots_delete ON api.classroom_snapshots
     WHERE ch.child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id())
   ));
 
+-- classroom_cache
+ALTER TABLE api.classroom_cache ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY classroom_cache_select ON api.classroom_cache
+  FOR SELECT TO authenticated
+  USING (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()));
+
+CREATE POLICY classroom_cache_insert ON api.classroom_cache
+  FOR INSERT TO authenticated
+  WITH CHECK (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()));
+
+CREATE POLICY classroom_cache_update ON api.classroom_cache
+  FOR UPDATE TO authenticated
+  USING (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()))
+  WITH CHECK (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()));
+
+CREATE POLICY classroom_cache_delete ON api.classroom_cache
+  FOR DELETE TO authenticated
+  USING (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()));
+
 -- ============================================================
 -- 公共表不启用 RLS — anon 角色通过 GRANT 控制访问
--- knowledge_nodes, questions, question_templates 保持开放
+-- knowledge_nodes, questions, question_templates,
+-- parent_activities, tpr_instructions,
+-- curricula, curriculum_modules, curriculum_nodes,
+-- media_files 保持开放
 -- ============================================================

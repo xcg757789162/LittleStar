@@ -5,7 +5,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import type { ParentActivity } from '@/data/seed/english-parent-activities'
+import type { ParentActivity } from '@/services/api/types'
 
 export interface OfflineExtensionCardProps {
   /** 推荐的亲子活动列表 */

@@ -281,6 +281,127 @@ CREATE TABLE api.classroom_snapshots (
 );
 
 -- ============================================================
+-- 16. classroom_cache — 课堂缓存表（AI 生成的课堂持久化缓存）
+-- ============================================================
+CREATE TABLE api.classroom_cache (
+  id SERIAL PRIMARY KEY,
+  child_id INTEGER NOT NULL REFERENCES api.children(id) ON DELETE CASCADE,
+  knowledge_node_id VARCHAR(100) NOT NULL,
+  date VARCHAR(10) NOT NULL,
+  cache_key VARCHAR(220) NOT NULL,
+  classroom_data JSONB NOT NULL,
+  cached_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ,
+  CONSTRAINT classroom_cache_child_key_unique UNIQUE (child_id, cache_key)
+);
+
+CREATE INDEX idx_classroom_cache_child ON api.classroom_cache(child_id);
+CREATE INDEX idx_classroom_cache_key ON api.classroom_cache(cache_key);
+CREATE INDEX idx_classroom_cache_child_date ON api.classroom_cache(child_id, date);
+CREATE INDEX idx_classroom_cache_expires ON api.classroom_cache(expires_at);
+
+-- ============================================================
+-- 17. parent_activities — 亲子互动活动表（公共只读）
+-- ============================================================
+CREATE TABLE api.parent_activities (
+  id VARCHAR(100) PRIMARY KEY,
+  related_node_ids JSONB NOT NULL DEFAULT '[]',
+  task_description TEXT NOT NULL,
+  parent_guide TEXT NOT NULL,
+  guidance_card TEXT NOT NULL,
+  offline_extension TEXT NOT NULL,
+  type VARCHAR(20) NOT NULL,
+  estimated_minutes INTEGER NOT NULL DEFAULT 5,
+  subject VARCHAR(20) NOT NULL DEFAULT 'english',
+  is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE INDEX idx_parent_activities_type ON api.parent_activities(type);
+CREATE INDEX idx_parent_activities_subject ON api.parent_activities(subject);
+
+-- ============================================================
+-- 18. tpr_instructions — TPR 全身反应指令表（公共只读）
+-- ============================================================
+CREATE TABLE api.tpr_instructions (
+  id VARCHAR(100) PRIMARY KEY,
+  command TEXT NOT NULL,
+  translation TEXT NOT NULL,
+  action TEXT NOT NULL,
+  emoji VARCHAR(10) NOT NULL,
+  difficulty INTEGER NOT NULL DEFAULT 1,
+  category VARCHAR(20) NOT NULL,
+  animation_type VARCHAR(20),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE INDEX idx_tpr_instructions_category ON api.tpr_instructions(category);
+CREATE INDEX idx_tpr_instructions_difficulty ON api.tpr_instructions(difficulty);
+
+-- ============================================================
+-- 19. curricula — 课程大纲主表（公共只读）
+-- ============================================================
+CREATE TABLE api.curricula (
+  id SERIAL PRIMARY KEY,
+  grade_level VARCHAR(30) NOT NULL,
+  subject VARCHAR(20) NOT NULL,
+  version VARCHAR(20) NOT NULL,
+  reference TEXT NOT NULL DEFAULT '',
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  CONSTRAINT curricula_grade_subject_unique UNIQUE (grade_level, subject)
+);
+
+-- ============================================================
+-- 20. curriculum_modules — 大纲模块/章节表（公共只读）
+-- ============================================================
+CREATE TABLE api.curriculum_modules (
+  id VARCHAR(100) PRIMARY KEY,
+  curriculum_id INTEGER NOT NULL REFERENCES api.curricula(id) ON DELETE CASCADE,
+  name VARCHAR(200) NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  order_index INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_curriculum_modules_curriculum ON api.curriculum_modules(curriculum_id);
+CREATE INDEX idx_curriculum_modules_order ON api.curriculum_modules(order_index);
+
+-- ============================================================
+-- 21. curriculum_nodes — 大纲知识点表（含 AI 出题模板，公共只读）
+-- ============================================================
+CREATE TABLE api.curriculum_nodes (
+  id VARCHAR(100) PRIMARY KEY,
+  module_id VARCHAR(100) NOT NULL REFERENCES api.curriculum_modules(id) ON DELETE CASCADE,
+  name VARCHAR(200) NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  difficulty INTEGER NOT NULL DEFAULT 1,
+  content_types JSONB NOT NULL DEFAULT '[]',
+  prerequisites JSONB NOT NULL DEFAULT '[]',
+  template_prompts JSONB NOT NULL DEFAULT '[]'
+);
+
+CREATE INDEX idx_curriculum_nodes_module ON api.curriculum_nodes(module_id);
+CREATE INDEX idx_curriculum_nodes_difficulty ON api.curriculum_nodes(difficulty);
+
+-- ============================================================
+-- 22. media_files — 媒体文件索引表（公共只读）
+-- ============================================================
+CREATE TABLE api.media_files (
+  id SERIAL PRIMARY KEY,
+  original_url TEXT NOT NULL,
+  local_path TEXT,
+  file_type VARCHAR(20) NOT NULL,
+  file_size BIGINT,
+  mime_type VARCHAR(100),
+  source VARCHAR(50) NOT NULL DEFAULT 'openmaic',
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  downloaded_at TIMESTAMPTZ,
+  CONSTRAINT media_files_url_unique UNIQUE (original_url)
+);
+
+CREATE INDEX idx_media_files_status ON api.media_files(status);
+CREATE INDEX idx_media_files_source ON api.media_files(source);
+
+-- ============================================================
 -- 视图：classroom_history_list（列表查询，不含 classroomData）
 -- security_invoker=true 确保 RLS 使用调用者权限（PostgreSQL 15+）
 -- ============================================================

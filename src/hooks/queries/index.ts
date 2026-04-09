@@ -119,3 +119,24 @@ export {
   masterySnapshotKeys,
 } from './useMasterySnapshots'
 export type { CreateMasterySnapshotInput } from './useMasterySnapshots'
+
+// 亲子活动
+export {
+  useParentActivities,
+  useActivitiesByNodeIds,
+  fetchRandomActivity,
+  fetchOfflineExtensions,
+} from './useParentActivities'
+
+// TPR 指令
+export {
+  useTPRInstructions,
+  fetchRandomTPRSequence,
+  fetchRandomTPR,
+} from './useTPRInstructions'
+
+// 课程大纲
+export {
+  useCurriculum,
+  useCurriculaList,
+} from './useCurriculum'

@@ -10,6 +10,7 @@ import { useChildStore } from '@/stores/childStore'
 import { useAuthStore } from '@/stores/authStore'
 import { apiClient } from '@/services/api'
 import { ClassroomCache } from '@/services/openmaic/cache'
+import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
 import { OpenMAICClient } from '@/services/openmaic/client'
 import { PinVerification } from '@/components/parent/PinVerification'
 
@@ -104,7 +105,12 @@ export function ParentDashboard() {
 
   // M1: 惰性初始化 refs，避免每次渲染创建新实例
   const cacheRef = useRef<ClassroomCache | null>(null)
-  if (cacheRef.current == null) cacheRef.current = new ClassroomCache()
+  if (cacheRef.current == null) {
+    const child = useChildStore.getState().currentChild
+    cacheRef.current = child
+      ? new ClassroomCache(new PostgresCacheStore(Number(child.id)))
+      : new ClassroomCache()
+  }
   const clientRef = useRef<OpenMAICClient | null>(null)
   if (clientRef.current == null) clientRef.current = new OpenMAICClient()
 

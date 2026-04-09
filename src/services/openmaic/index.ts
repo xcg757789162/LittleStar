@@ -53,3 +53,4 @@ export type { OpenMAICClientConfig, PollOptions } from './client'
 // Cache
 export { ClassroomCache } from './cache'
 export type { CacheEntry, CacheListItem, CacheStore } from './cache'
+export { PostgresCacheStore } from './postgres-cache-store'

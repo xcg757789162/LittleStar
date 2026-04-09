@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import type { TPRCommand, TPRAnimationType } from '@/data/seed/english-tpr'
+import type { TPRCommand, TPRAnimationType } from '@/services/api/types'
 
 /** 动画配置映射 */
 const ANIMATION_CONFIGS: Record<

@@ -1,12 +1,12 @@
 /**
  * 课堂缓存管理
  *
- * 管理 OpenMAIC 生成的课堂 JSON 数据的本地缓存。
+ * 管理 OpenMAIC 生成的课堂 JSON 数据的缓存。
  * 按 knowledgeNodeId + date 索引，支持 3 天预生成缓存策略。
  *
  * 存储抽象：通过 CacheStore 接口解耦存储实现。
  * 默认使用内存 Map（兼容 jsdom 测试环境），
- * 生产环境可注入 IndexedDB 或其他持久化实现。
+ * 生产环境使用 PostgresCacheStore（持久化到 classroom_cache 表）。
  */
 
 import type { Classroom } from './types'

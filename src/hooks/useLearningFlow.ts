@@ -8,7 +8,6 @@
  */
 
 import { useState, useCallback, useRef } from 'react'
-import { AdaptiveRouter } from '@/engine/adaptive-router'
 import { QwenProvider } from '@/services/ai/qwen-provider'
 import { AITeacher } from '@/services/ai/teacher'
 import { AchievementEngine } from '@/engine/achievement'
@@ -17,14 +16,14 @@ import { generateDailySnapshot } from '@/engine/mastery-snapshot'
 import { ReviewManager } from '@/engine/review-manager'
 import { RuleEngine } from '@/engine/rule-engine'
 import { ClassroomCache } from '@/services/openmaic/cache'
+import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
 import { DynamicAdjuster } from '@/services/lesson-planner'
 import { useLearningStore } from '@/stores/learningStore'
 import { useChildStore } from '@/stores/childStore'
 import { apiClient } from '@/services/api'
-import { getRandomActivity } from '@/data/seed/english-parent-activities'
-import { getRandomTPR } from '@/data/seed/english-tpr'
-import type { ParentActivity } from '@/data/seed/english-parent-activities'
-import type { TPRCommand } from '@/data/seed/english-tpr'
+import { fetchRandomActivity } from '@/hooks/queries/useParentActivities'
+import { fetchRandomTPR } from '@/hooks/queries/useTPRInstructions'
+import type { ParentActivity, TPRCommand } from '@/services/api/types'
 import type { FeedbackType } from '@/components/feedback/FeedbackAnimation'
 import type { QuizAnswerData } from '@/components/classroom/QuizSlide'
 import type { Subject, Question, KnowledgeNode, MasteryRecord, Achievement } from '@/types/models'
@@ -133,7 +132,6 @@ export function useLearningFlow(): LearningFlowState {
   const [classroomAnswerCount, setClassroomAnswerCount] = useState(0)
 
   // 引擎实例（useRef 避免重复创建）
-  const routerRef = useRef(new AdaptiveRouter())
   const reviewManagerRef = useRef(new ReviewManager())
   const ruleEngineRef = useRef(new RuleEngine())
   const achievementEngineRef = useRef(new AchievementEngine())
@@ -143,7 +141,14 @@ export function useLearningFlow(): LearningFlowState {
   const subjectRef = useRef<Subject>('math')
 
   // 新流程：缓存和调整器实例
-  const classroomCacheRef = useRef(new ClassroomCache())
+  // 使用 PostgresCacheStore 持久化到数据库（如果有 childId），否则 fallback 内存 Map
+  const classroomCacheRef = useRef<ClassroomCache | null>(null)
+  if (classroomCacheRef.current == null) {
+    const child = useChildStore.getState().currentChild
+    classroomCacheRef.current = child?.id
+      ? new ClassroomCache(new PostgresCacheStore(Number(child.id)))
+      : new ClassroomCache()
+  }
   const dynamicAdjusterRef = useRef(new DynamicAdjuster())
 
   // 追踪连续正确/错误
@@ -190,12 +195,12 @@ export function useLearningFlow(): LearningFlowState {
 
     try {
       // 2. 尝试从缓存加载课堂（新流程）
-      const cachedList = await classroomCacheRef.current.listCachedClassrooms()
+      const cachedList = await classroomCacheRef.current!.listCachedClassrooms()
 
       if (cachedList.length > 0) {
         // 有缓存 → 加载第一个课堂
         const firstItem = cachedList[0]
-        const classroom = await classroomCacheRef.current.getClassroom(
+        const classroom = await classroomCacheRef.current!.getClassroom(
           firstItem.knowledgeNodeId,
           firstItem.date,
         )
@@ -436,16 +441,24 @@ export function useLearningFlow(): LearningFlowState {
     ) {
       answeredSinceInterstitialRef.current = 0
 
-      // 随机选择插入亲子活动或 TPR
+      // 随机选择插入亲子活动或 TPR（异步获取数据）
       if (Math.random() < 0.5) {
-        setCurrentInterstitial({
-          type: 'parent-activity',
-          parentActivity: getRandomActivity(),
+        fetchRandomActivity().then((activity) => {
+          setCurrentInterstitial({
+            type: 'parent-activity',
+            parentActivity: activity,
+          })
+        }).catch(() => {
+          // 获取失败时静默跳过
         })
       } else {
-        setCurrentInterstitial({
-          type: 'tpr',
-          tprCommand: getRandomTPR(),
+        fetchRandomTPR().then((command) => {
+          setCurrentInterstitial({
+            type: 'tpr',
+            tprCommand: command,
+          })
+        }).catch(() => {
+          // 获取失败时静默跳过
         })
       }
       return
