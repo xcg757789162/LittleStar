@@ -65,6 +65,7 @@ export function CreateChildPage() {
       }
 
       const childData = {
+        userId: user.id,
         name: name.trim(),
         avatar,
         age,

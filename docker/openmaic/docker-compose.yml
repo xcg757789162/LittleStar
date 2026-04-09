@@ -60,11 +60,11 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/ || exit 1"]
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/3000"]
       interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
     deploy:
       resources:
@@ -92,11 +92,11 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:3001/auth/health || exit 1"]
+      test: ["CMD-SHELL", "node -e \"const h=require('http');h.get('http://localhost:3001/auth/health',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))\""]
       interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
     deploy:
       resources:
@@ -128,11 +128,11 @@ services:
       openmaic:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost/health || wget -q --spider http://localhost/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
     deploy:
       resources:
@@ -158,10 +158,10 @@ services:
       - openmaic-data:/app/data
       - openmaic-logs:/app/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3002"]
-      interval: 30s
+      test: ["CMD", "node", "-e", "const h=require('http');h.get('http://localhost:3002',r=>{process.exit(r.statusCode<400?0:1)}).on('error',()=>process.exit(1))"]
+      interval: 15s
       timeout: 10s
-      retries: 3
+      retries: 5
       start_period: 20s
     restart: unless-stopped
     deploy:
