@@ -38,12 +38,15 @@ export interface SessionSummaryProps {
   onGoHome: () => void
   /** 当前科目 */
   subject: Subject
+  /** 查看学习记录 */
+  onViewHistory?: () => void
 }
 
 export function SessionSummary({
   summary,
   onGoHome,
   subject,
+  onViewHistory,
 }: SessionSummaryProps) {
   // 根据正确率计算星星数
   const starCount = useMemo(() => {
@@ -288,6 +291,30 @@ export function SessionSummary({
       >
         🌟 {tomorrowPreview}
       </motion.div>
+
+      {/* 查看学习记录按钮 */}
+      {onViewHistory && (
+        <motion.button
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.1 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={onViewHistory}
+          style={{
+            padding: '14px 40px',
+            borderRadius: '24px',
+            border: '2px solid #7C4DFF',
+            backgroundColor: 'white',
+            color: '#7C4DFF',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+          }}
+        >
+          📖 查看学习记录
+        </motion.button>
+      )}
 
       {/* 回到首页按钮 */}
       <motion.button

@@ -34,8 +34,11 @@ export function StarMap() {
         const child = useChildStore.getState().currentChild
         if (!child) return
 
-        const records = await db.masteryRecords.toArray()
-        const childRecords = records.filter((r) => r.childId === child.id)
+        const records = await db.masteryRecords
+          .where('childId')
+          .equals(child.id!)
+          .toArray()
+        const childRecords = records
 
         // 按知识点 ID 前缀分组（math-1 → math, chinese-1 → chinese）
         const subjectMap = new Map<Subject, number[]>()

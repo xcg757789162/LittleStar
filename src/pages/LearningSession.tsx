@@ -1,21 +1,31 @@
 /**
  * 每日学习流程页面
- * 整合课堂渲染器(新流程)/手写板组件，连接自适应引擎和 store
+ * 整合 OpenMAIC 课堂渲染器，连接自适应引擎和 store
  * 集成庆祝动画、鼓励覆盖层、音效系统
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useLearningFlow } from '@/hooks/useLearningFlow'
 import { useSoundEffects } from '@/hooks/useSoundEffects'
+import { ClassroomIframe } from '@/components/classroom/ClassroomIframe'
 import { ClassroomView } from '@/components/classroom/ClassroomView'
-import { WritingPad } from '@/components/learning/WritingPad'
 import { FeedbackAnimation } from '@/components/feedback/FeedbackAnimation'
 import { CelebrationAnimation } from '@/components/feedback/CelebrationAnimation'
 import { EncouragementOverlay } from '@/components/feedback/EncouragementOverlay'
 import type { CelebrationLevel } from '@/components/feedback/CelebrationAnimation'
 import type { Subject } from '@/types/models'
+import type { ReLearnMode } from '@/services/review-learning'
+
+/** Location state for review mode entry */
+interface ReviewLocationState {
+  reviewMode?: ReLearnMode
+  historyId?: string
+  knowledgeNodeId?: string
+  knowledgeNodeName?: string
+  subject?: Subject
+}
 
 const SUBJECTS: { key: Subject; label: string; emoji: string; color: string }[] = [
   { key: 'math', label: '数学', emoji: '🔢', color: '#E3F2FD' },
@@ -25,41 +35,68 @@ const SUBJECTS: { key: Subject; label: string; emoji: string; color: string }[] 
 
 export function LearningSession() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null)
+
+  // 从 location state 获取重学参数
+  const reviewState = (location.state as ReviewLocationState) ?? {}
+  const reviewInitRef = useRef(false)
 
   // 庆祝/鼓励动画状态
   const [showCelebration, setShowCelebration] = useState(false)
   const [showEncouragement, setShowEncouragement] = useState(false)
-  const [celebrationLevel, setCelebrationLevel] = useState<CelebrationLevel>('normal')
+  const [celebrationLevel, _setCelebrationLevel] = useState<CelebrationLevel>('normal')
   const [showCompleteCelebration, setShowCompleteCelebration] = useState(false)
   const consecutiveCorrectRef = useRef(0)
+
+  // iframe 降级标记：当 iframe 加载失败时切换到 ClassroomView
+  const [useIframeFallback, setUseIframeFallback] = useState(false)
 
   const {
     isActive,
     isLoading,
-    currentQuestion,
     showFeedback,
     feedbackType,
     isComplete,
     sessionSummary,
     encouragement,
     currentClassroom,
-    isCacheEmpty,
+    isGenerating,
+    generationProgress,
+    generationError,
+    isReviewMode,
     startFlow,
+    startReview,
     stopFlow,
-    handleAnswer,
     handleClassroomAnswer,
     handleClassroomComplete,
     dismissFeedback,
   } = useLearningFlow()
 
   const {
-    playCorrect,
-    playWrong,
-    playCelebration,
-    playStar,
     playLevelUp,
   } = useSoundEffects()
+
+  // 自动启动重学流程（从学习历史页面跳转过来时）
+  useEffect(() => {
+    if (
+      reviewState.reviewMode &&
+      reviewState.knowledgeNodeId &&
+      reviewState.knowledgeNodeName &&
+      reviewState.subject &&
+      !reviewInitRef.current
+    ) {
+      reviewInitRef.current = true
+      setSelectedSubject(reviewState.subject)
+      void startReview({
+        knowledgeNodeId: reviewState.knowledgeNodeId,
+        knowledgeNodeName: reviewState.knowledgeNodeName,
+        subject: reviewState.subject,
+        mode: reviewState.reviewMode,
+        historyId: reviewState.historyId,
+      })
+    }
+  }, [reviewState, startReview])
 
   const handleStart = useCallback(async () => {
     if (selectedSubject) {
@@ -74,41 +111,6 @@ export function LearningSession() {
     }
     navigate('/')
   }, [isActive, stopFlow, navigate])
-
-  /** 包装答题处理，增加音效和庆祝逻辑 */
-  const handleAnswerWithEffects = useCallback(
-    (isCorrect: boolean) => {
-      handleAnswer(isCorrect)
-
-      if (isCorrect) {
-        consecutiveCorrectRef.current++
-        playCorrect()
-        playStar()
-
-        // 根据连续答对次数决定庆祝等级
-        const streak = consecutiveCorrectRef.current
-        if (streak >= 5 && streak % 5 === 0) {
-          setCelebrationLevel('streak5')
-          setShowCelebration(true)
-          playCelebration()
-        } else if (streak >= 3 && streak % 3 === 0) {
-          setCelebrationLevel('streak3')
-          setShowCelebration(true)
-          playCelebration()
-        }
-        // 普通答对由 FeedbackAnimation 处理
-      } else {
-        consecutiveCorrectRef.current = 0
-        playWrong()
-        setShowEncouragement(true)
-      }
-    },
-    [handleAnswer, playCorrect, playWrong, playCelebration, playStar],
-  )
-
-  const handleWritingSubmit = useCallback(() => {
-    handleAnswerWithEffects(true) // 手写提交默认为完成
-  }, [handleAnswerWithEffects])
 
   // 会话完成时显示完整庆祝动画
   useEffect(() => {
@@ -130,26 +132,6 @@ export function LearningSession() {
     setShowCompleteCelebration(false)
   }, [])
 
-  // 渲染题目组件
-  const renderQuestion = () => {
-    if (!currentQuestion) return null
-
-    switch (currentQuestion.type) {
-      case 'handwriting':
-        return (
-          <WritingPad
-            prompt={currentQuestion.content.text}
-            onSubmit={handleWritingSubmit}
-            onClear={() => {}}
-            onUndo={() => {}}
-          />
-        )
-
-      default:
-        return null
-    }
-  }
-
   return (
     <div
       data-testid="learning-session"
@@ -170,7 +152,9 @@ export function LearningSession() {
       >
         <div data-testid="session-progress" style={{ fontSize: '16px', color: '#666' }}>
           {isActive
-            ? `正在学习 ${SUBJECTS.find((s) => s.key === selectedSubject)?.label ?? ''}`
+            ? isReviewMode
+              ? `正在复习 ${SUBJECTS.find((s) => s.key === selectedSubject)?.label ?? ''}`
+              : `正在学习 ${SUBJECTS.find((s) => s.key === selectedSubject)?.label ?? ''}`
             : isComplete
               ? '学习完成！'
               : '选择要学习的科目'}
@@ -295,36 +279,184 @@ export function LearningSession() {
           {isLoading ? (
             <p style={{ fontSize: '20px', color: '#666' }}>正在准备题目...</p>
           ) : currentClassroom ? (
-            /* 新流程：渲染 ClassroomView */
-            <ClassroomView
-              classroom={currentClassroom}
-              subject={selectedSubject ?? undefined}
-              onComplete={handleClassroomComplete}
-              onAnswer={handleClassroomAnswer}
-            />
-          ) : isCacheEmpty ? (
-            /* 缓存为空：课程准备中提示 */
+            /* 三级降级课堂渲染：
+             * Level 1: ClassroomIframe — 有 classroomUrl 且未降级时，用 iframe 嵌入原生前端
+             * Level 2: ClassroomView — 无 classroomUrl 或 iframe 加载失败后降级
+             */
+            currentClassroom.classroomUrl && !useIframeFallback ? (
+              <ClassroomIframe
+                classroom={currentClassroom}
+                subject={selectedSubject ?? undefined}
+                onComplete={handleClassroomComplete}
+                onAnswer={(data) => handleClassroomAnswer({
+                  selectedIndex: data.selectedAnswer,
+                  isCorrect: data.isCorrect,
+                  responseTime: 0,
+                })}
+                onFallback={() => setUseIframeFallback(true)}
+                loadTimeoutMs={15000}
+              />
+            ) : (
+              <ClassroomView
+                classroom={currentClassroom}
+                subject={selectedSubject ?? undefined}
+                onComplete={handleClassroomComplete}
+                onAnswer={handleClassroomAnswer}
+              />
+            )
+          ) : isGenerating ? (
+            /* 正在实时生成课堂 — 带进度条 */
             <div
-              data-testid="cache-empty-hint"
+              data-testid="generating-hint"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '20px',
+                padding: '48px 32px',
+                maxWidth: '400px',
+                width: '100%',
+              }}
+            >
+              <motion.span
+                style={{ fontSize: '48px' }}
+                animate={{ rotate: [0, 10, -10, 0] }}
+                transition={{ repeat: Infinity, duration: 2 }}
+              >
+                🎨
+              </motion.span>
+
+              {/* 阶段描述 */}
+              <p style={{ fontSize: '18px', color: '#333', textAlign: 'center', fontWeight: 600 }}>
+                {generationProgress?.stage ?? 'AI 老师正在为你创建专属课堂...'}
+              </p>
+
+              {/* 进度条 */}
+              <div
+                style={{
+                  width: '100%',
+                  height: '12px',
+                  backgroundColor: '#E0E0E0',
+                  borderRadius: '6px',
+                  overflow: 'hidden',
+                  position: 'relative',
+                }}
+              >
+                <motion.div
+                  initial={{ width: '0%' }}
+                  animate={{ width: `${generationProgress?.percent ?? 5}%` }}
+                  transition={{ duration: 0.6, ease: 'easeOut' }}
+                  style={{
+                    height: '100%',
+                    borderRadius: '6px',
+                    background: 'linear-gradient(90deg, #7C4DFF, #B388FF)',
+                  }}
+                />
+              </div>
+
+              {/* 百分比 + 时间 */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  fontSize: '13px',
+                  color: '#999',
+                }}
+              >
+                <span>{generationProgress?.percent ?? 0}%</span>
+                <span>
+                  {generationProgress?.elapsedSeconds
+                    ? generationProgress.elapsedSeconds < 60
+                      ? `已用时 ${generationProgress.elapsedSeconds} 秒`
+                      : `已用时 ${Math.floor(generationProgress.elapsedSeconds / 60)}分${generationProgress.elapsedSeconds % 60}秒`
+                    : ''}
+                </span>
+              </div>
+
+              {/* 提示信息 */}
+              <p style={{ fontSize: '13px', color: '#BDBDBD', textAlign: 'center' }}>
+                首次生成可能需要 30-60 秒，请耐心等待 ☺️
+              </p>
+
+              {/* 重试中网络提示 */}
+              {generationProgress?.stageKey === 'polling' && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  style={{ fontSize: '13px', color: '#FF9800', textAlign: 'center' }}
+                >
+                  ⚠️ 网络波动，正在重试连接...
+                </motion.p>
+              )}
+            </div>
+          ) : generationError ? (
+            /* 生成失败 — 带错误详情和重试 */
+            <div
+              data-testid="generation-error"
               style={{
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 gap: '16px',
                 padding: '48px 32px',
+                maxWidth: '400px',
+                width: '100%',
               }}
             >
-              <span style={{ fontSize: '48px' }}>📚</span>
-              <p style={{ fontSize: '20px', color: '#666', textAlign: 'center' }}>
-                课程准备中，请稍后再试
+              <span style={{ fontSize: '48px' }}>😞</span>
+              <p style={{ fontSize: '20px', color: '#333', textAlign: 'center', fontWeight: 600 }}>
+                课堂生成遇到问题
               </p>
-              <p style={{ fontSize: '14px', color: '#999', textAlign: 'center' }}>
-                教导处正在为你生成个性化课堂内容
-              </p>
+              <div
+                style={{
+                  padding: '12px 16px',
+                  backgroundColor: '#FFF3E0',
+                  borderRadius: '12px',
+                  width: '100%',
+                }}
+              >
+                <p style={{ fontSize: '13px', color: '#E65100', margin: 0 }}>
+                  💡 {generationError.includes('timed out')
+                    ? '生成超时，OpenMAIC 服务可能正忙，请稍后重试'
+                    : generationError.includes('fetch')
+                      ? '无法连接到 OpenMAIC 服务，请检查 Docker 是否启动'
+                      : generationError}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={() => selectedSubject && startFlow(selectedSubject)}
+                  style={{
+                    padding: '12px 32px',
+                    borderRadius: '16px',
+                    border: 'none',
+                    backgroundColor: '#7C4DFF',
+                    color: 'white',
+                    fontSize: '16px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  🔄 重试
+                </button>
+                <button
+                  onClick={handleExit}
+                  style={{
+                    padding: '12px 32px',
+                    borderRadius: '16px',
+                    border: '2px solid #BDBDBD',
+                    backgroundColor: '#F5F5F5',
+                    fontSize: '16px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  返回首页
+                </button>
+              </div>
             </div>
           ) : (
-            /* 手写板组件渲染 */
-            renderQuestion()
+            /* 无课堂数据且未在生成 — 空状态 */
+            <p style={{ fontSize: '16px', color: '#999' }}>暂无课堂数据</p>
           )}
         </div>
       )}
@@ -447,6 +579,23 @@ export function LearningSession() {
             }}
           >
             回到首页
+          </button>
+
+          <button
+            onClick={() => navigate('/history')}
+            style={{
+              marginTop: '8px',
+              padding: '12px 32px',
+              borderRadius: '16px',
+              border: '2px solid #7C4DFF',
+              backgroundColor: 'white',
+              color: '#7C4DFF',
+              fontSize: '15px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+            }}
+          >
+            📖 查看学习记录
           </button>
         </div>
       )}

@@ -15,6 +15,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { key: 'home', label: '首页', icon: '🏠', path: '/' },
+  { key: 'history', label: '复习', icon: '📖', path: '/history' },
   { key: 'starmap', label: '星空', icon: '⭐', path: '/starmap' },
   { key: 'parent', label: '家长', icon: '👨‍👩‍👧', path: '/parent' },
 ]

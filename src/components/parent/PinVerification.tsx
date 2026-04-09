@@ -157,13 +157,32 @@ export function PinVerification({
     <div
       data-testid="pin-container"
       style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        zIndex: 9999,
         display: 'flex',
-        flexDirection: 'column',
+        justifyContent: 'center',
         alignItems: 'center',
-        padding: '32px',
-        gap: '24px',
       }}
     >
+      <div
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: '24px',
+          padding: '32px',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          maxWidth: '360px',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '24px',
+        }}
+      >
       <h2 style={{ fontSize: '22px', color: '#333' }}>{title}</h2>
 
       {/* 错误提示 */}
@@ -294,6 +313,7 @@ export function PinVerification({
         >
           取消
         </button>
+      </div>
       </div>
     </div>
   )

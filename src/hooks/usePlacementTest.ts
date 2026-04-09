@@ -156,7 +156,8 @@ export function usePlacementTest(
 
             // 写入 DB
             const child = useChildStore.getState().currentChild
-            const childId = child?.id ?? 'default'
+            const childId = child?.id
+            if (!childId) return
             await db.placementTests.add({
               childId,
               subject,

@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie'
 import type {
+  User,
   Child,
   KnowledgeNode,
   LearningRecord,
@@ -12,6 +13,7 @@ import type {
   PlacementTest,
   ReportData,
   MasterySnapshot,
+  ClassroomHistory,
 } from '@/types/models'
 
 /**
@@ -19,6 +21,8 @@ import type {
  * 基于 Dexie.js (IndexedDB) 实现
  */
 export class LittleStarDB extends Dexie {
+  /** 用户表 */
+  users!: EntityTable<User, 'id'>
   /** 孩子表 */
   children!: EntityTable<Child, 'id'>
   /** 知识点表 */
@@ -43,6 +47,8 @@ export class LittleStarDB extends Dexie {
   reportData!: EntityTable<ReportData, 'id'>
   /** 掌握度每日快照表 */
   masterySnapshots!: EntityTable<MasterySnapshot, 'id'>
+  /** 课堂学习历史表 */
+  classroomHistory!: EntityTable<ClassroomHistory, 'id'>
 
   constructor(databaseName: string = 'LittleStarDB') {
     super(databaseName)
@@ -86,6 +92,20 @@ export class LittleStarDB extends Dexie {
 
       // 掌握度每日快照表：自增主键，按孩子+日期+科目联合索引
       masterySnapshots: '++id, childId, [childId+date+subject], [childId+subject+gradeLevel], date',
+    })
+
+    // Phase 3: 新增课堂学习历史表（支持重新学习/复习功能）
+    this.version(3).stores({
+      // 课堂学习历史表：自增主键，按孩子+知识点+日期索引
+      classroomHistory: '++id, childId, knowledgeNodeId, subject, [childId+subject], [childId+knowledgeNodeId], date, completedAt',
+    })
+
+    // Phase 4: 新增用户表，children 表增加 userId 索引（多用户多孩子隔离）
+    this.version(4).stores({
+      // 用户表：自增主键，username 唯一索引
+      users: '++id, &username',
+      // 孩子表增加 userId 索引
+      children: '++id, name, gradeLevel, userId, [userId+name]',
     })
   }
 }
