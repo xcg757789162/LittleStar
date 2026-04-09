@@ -1,158 +1,144 @@
 /**
- * 用户认证 Store
- * 管理登录状态、当前用户信息
- * 使用 Dexie.js (IndexedDB) 存储用户数据
- * 登录状态通过 localStorage 持久化
+ * authStore — 认证状态管理
+ *
+ * 通过 Auth Service API 实现：
+ * - register: 注册 → 自动登录
+ * - login: 登录 → 存 JWT token
+ * - logout: 清除 token + 重置状态
+ * - restoreAuth: 应用启动时从 localStorage 恢复认证状态
+ *
+ * JWT token 存储在 localStorage，由 apiClient 自动注入到请求 header
  */
 
 import { create } from 'zustand'
-import { db } from '@/db/database'
-import type { User } from '@/types/models'
-
-/** localStorage key */
-const AUTH_USER_ID_KEY = 'littlestar_auth_user_id'
-
-/** 简易密码编码（非安全哈希，生产环境应使用 bcrypt） */
-function hashPassword(password: string): string {
-  return btoa(encodeURIComponent(password))
-}
-
-function verifyPassword(password: string, hash: string): boolean {
-  return hashPassword(password) === hash
-}
+import { authApi } from '@/services/api/auth'
+import { TOKEN_STORAGE_KEY } from '@/services/api/types'
+import type { AuthUser, LoginRequest, RegisterRequest } from '@/services/api/types'
 
 /** authStore 状态接口 */
 export interface AuthState {
-  /** 当前登录用户 */
-  currentUser: User | null
-  /** 是否已加载完成（从 localStorage 恢复） */
-  isAuthLoaded: boolean
-  /** 是否登录中 */
-  isLoggingIn: boolean
-  /** 错误信息 */
-  authError: string | null
+  /** 当前用户信息 */
+  user: AuthUser | null
+  /** 是否已认证 */
+  isAuthenticated: boolean
+  /** 是否正在加载（登录/注册/恢复中） */
+  isLoading: boolean
+  /** 错误消息 */
+  error: string | null
+  /** 是否已尝试恢复认证（应用启动时） */
+  isRestored: boolean
 }
 
 /** authStore 操作接口 */
 export interface AuthActions {
-  /** 从 localStorage 恢复登录状态 */
-  restoreAuth: () => Promise<void>
-  /** 注册新用户 */
-  register: (username: string, password: string, nickname: string) => Promise<boolean>
-  /** 登录 */
-  login: (username: string, password: string) => Promise<boolean>
-  /** 登出 */
+  /** 用户注册（注册后自动登录） */
+  register: (data: RegisterRequest) => Promise<void>
+  /** 用户登录 */
+  login: (data: LoginRequest) => Promise<void>
+  /** 用户登出 */
   logout: () => void
+  /** 恢复认证状态（应用启动时调用） */
+  restoreAuth: () => Promise<void>
   /** 清除错误 */
-  clearAuthError: () => void
-  /** 重置 */
-  reset: () => void
+  clearError: () => void
 }
 
+/** 初始状态 */
 const initialState: AuthState = {
-  currentUser: null,
-  isAuthLoaded: false,
-  isLoggingIn: false,
-  authError: null,
+  user: null,
+  isAuthenticated: false,
+  isLoading: false,
+  error: null,
+  isRestored: false,
 }
 
+/**
+ * 认证状态 Store
+ *
+ * 使用方式：
+ * ```tsx
+ * const { user, isAuthenticated, login, logout } = useAuthStore()
+ * ```
+ */
 export const useAuthStore = create<AuthState & AuthActions>()((set) => ({
   ...initialState,
 
-  restoreAuth: async () => {
+  register: async (data: RegisterRequest) => {
+    set({ isLoading: true, error: null })
     try {
-      const savedUserId = localStorage.getItem(AUTH_USER_ID_KEY)
-      if (savedUserId) {
-        // Dexie ++id 自增主键实际为 number，从 localStorage 恢复时需转换
-        const user = await db.users.get(Number(savedUserId) as unknown as string)
-        if (user) {
-          set({ currentUser: user, isAuthLoaded: true })
-          return
-        }
-      }
-    } catch {
-      // 恢复失败，视为未登录
-    }
-    set({ isAuthLoaded: true })
-  },
-
-  register: async (username, password, nickname) => {
-    set({ isLoggingIn: true, authError: null })
-    try {
-      // 检查用户名是否已存在
-      const existing = await db.users.where('username').equals(username).first()
-      if (existing) {
-        set({ authError: '用户名已被注册', isLoggingIn: false })
-        return false
-      }
-
-      // 创建新用户
-      const now = new Date()
-      const id = await db.users.add({
-        username,
-        passwordHash: hashPassword(password),
-        nickname,
-        createdAt: now,
-        lastLoginAt: now,
+      const response = await authApi.register(data)
+      // 存储 JWT token
+      localStorage.setItem(TOKEN_STORAGE_KEY, response.token)
+      set({
+        user: response.user,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
       })
-
-      const newUser: User = {
-        id: String(id),
-        username,
-        passwordHash: hashPassword(password),
-        nickname,
-        createdAt: now,
-        lastLoginAt: now,
-      }
-
-      // 持久化登录状态
-      localStorage.setItem(AUTH_USER_ID_KEY, String(id))
-      set({ currentUser: newUser, isLoggingIn: false })
-      return true
-    } catch {
-      set({ authError: '注册失败，请重试', isLoggingIn: false })
-      return false
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '注册失败'
+      set({ isLoading: false, error: message })
+      throw error
     }
   },
 
-  login: async (username, password) => {
-    set({ isLoggingIn: true, authError: null })
+  login: async (data: LoginRequest) => {
+    set({ isLoading: true, error: null })
     try {
-      const user = await db.users.where('username').equals(username).first()
-      if (!user) {
-        set({ authError: '用户名不存在', isLoggingIn: false })
-        return false
-      }
-
-      if (!verifyPassword(password, user.passwordHash)) {
-        set({ authError: '密码错误', isLoggingIn: false })
-        return false
-      }
-
-      // 更新最后登录时间
-      const now = new Date()
-      await db.users.update(user.id!, { lastLoginAt: now })
-      const updatedUser = { ...user, lastLoginAt: now }
-
-      // 持久化登录状态
-      localStorage.setItem(AUTH_USER_ID_KEY, String(user.id))
-      set({ currentUser: updatedUser, isLoggingIn: false })
-      return true
-    } catch {
-      set({ authError: '登录失败，请重试', isLoggingIn: false })
-      return false
+      const response = await authApi.login(data)
+      // 存储 JWT token
+      localStorage.setItem(TOKEN_STORAGE_KEY, response.token)
+      set({
+        user: response.user,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '登录失败'
+      set({ isLoading: false, error: message })
+      throw error
     }
   },
 
   logout: () => {
-    localStorage.removeItem(AUTH_USER_ID_KEY)
-    set({ currentUser: null, authError: null })
+    // 清除 JWT token
+    localStorage.removeItem(TOKEN_STORAGE_KEY)
+    set({
+      user: null,
+      isAuthenticated: false,
+      error: null,
+    })
   },
 
-  clearAuthError: () => set({ authError: null }),
+  restoreAuth: async () => {
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+    if (!token) {
+      set({ isRestored: true })
+      return
+    }
 
-  reset: () => {
-    localStorage.removeItem(AUTH_USER_ID_KEY)
-    set(initialState)
+    set({ isLoading: true })
+    try {
+      // 验证 token 有效性
+      const user = await authApi.me()
+      set({
+        user,
+        isAuthenticated: true,
+        isLoading: false,
+        isRestored: true,
+      })
+    } catch {
+      // Token 无效，清除
+      localStorage.removeItem(TOKEN_STORAGE_KEY)
+      set({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        isRestored: true,
+      })
+    }
   },
+
+  clearError: () => set({ error: null }),
 }))

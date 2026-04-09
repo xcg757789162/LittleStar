@@ -41,13 +41,13 @@
 
 ## 6. React Query Hooks + authStore 重写
 
-- [ ] 6.1 创建 `src/hooks/queries/useChildren.ts`：`useChildren()` 查询、`useCreateChild()` / `useUpdateChild()` mutation
-- [ ] 6.2 创建 `src/hooks/queries/useKnowledgeNodes.ts`：`useKnowledgeNodes()` 查询（公共数据，长 staleTime）
-- [ ] 6.3 创建 `src/hooks/queries/useLearningRecords.ts`：按 childId 查询、创建 mutation
-- [ ] 6.4 创建 `src/hooks/queries/useMasteryRecords.ts`：按 childId+knowledgeNodeId 查询、upsert mutation
-- [ ] 6.5 创建 `src/hooks/queries/useClassroomHistory.ts`：列表查询（不含 classroomData）、详情查询（含 snapshot）、创建 mutation
-- [ ] 6.6 创建其他 hooks：`useQuestions`、`useDailySessions`、`useAchievements`、`useGradeUnlocks`、`usePlacementTests`、`useReportData`、`useMasterySnapshots`
-- [ ] 6.7 重写 `src/stores/authStore.ts`：register/login/logout/restoreAuth 改为调用 Auth API，JWT token 存 localStorage
+- [x] 6.1 创建 `src/hooks/queries/useChildren.ts`：`useChildren()` 查询、`useCreateChild()` / `useUpdateChild()` mutation
+- [x] 6.2 创建 `src/hooks/queries/useKnowledgeNodes.ts`：`useKnowledgeNodes()` 查询（公共数据，长 staleTime）
+- [x] 6.3 创建 `src/hooks/queries/useLearningRecords.ts`：按 childId 查询、创建 mutation
+- [x] 6.4 创建 `src/hooks/queries/useMasteryRecords.ts`：按 childId+knowledgeNodeId 查询、upsert mutation
+- [x] 6.5 创建 `src/hooks/queries/useClassroomHistory.ts`：列表查询（不含 classroomData）、详情查询（含 snapshot）、创建 mutation
+- [x] 6.6 创建其他 hooks：`useQuestions`、`useDailySessions`、`useAchievements`、`useGradeUnlocks`、`usePlacementTests`、`useReportData`、`useMasterySnapshots`
+- [x] 6.7 重写 `src/stores/authStore.ts`：register/login/logout/restoreAuth 改为调用 Auth API，JWT token 存 localStorage
 
 ## 7. 前端迁移 — 替换 Dexie 调用（11 个文件）
 
