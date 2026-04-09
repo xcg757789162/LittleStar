@@ -34,10 +34,10 @@
 
 ## 5. 前端 API Client + React Query 基础
 
-- [ ] 5.1 `npm install @tanstack/react-query`，在 `src/main.tsx` 中配置 `QueryClientProvider`（staleTime: 5min, retry: 1, refetchOnWindowFocus: false）
-- [ ] 5.2 创建 `src/services/api/client.ts`：PostgREST API Client，封装 GET/POST/PATCH/DELETE，自动 Token 注入、camelCase↔snake_case 转换、401 Token 刷新、统一错误处理
-- [ ] 5.3 创建 `src/services/api/auth.ts`：Auth Service API Client，封装 register/login/refresh/me
-- [ ] 5.4 创建 `src/services/api/types.ts`：API 请求/响应类型定义
+- [x] 5.1 `npm install @tanstack/react-query`，在 `src/main.tsx` 中配置 `QueryClientProvider`（staleTime: 5min, retry: 1, refetchOnWindowFocus: false）
+- [x] 5.2 创建 `src/services/api/client.ts`：PostgREST API Client，封装 GET/POST/PATCH/DELETE，自动 Token 注入、camelCase↔snake_case 转换、401 Token 刷新、统一错误处理
+- [x] 5.3 创建 `src/services/api/auth.ts`：Auth Service API Client，封装 register/login/refresh/me
+- [x] 5.4 创建 `src/services/api/types.ts`：API 请求/响应类型定义
 
 ## 6. React Query Hooks + authStore 重写
 

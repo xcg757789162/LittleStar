@@ -1,20 +1,32 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App } from './App'
-import { db } from './db/database'
-import { seedDatabase } from './data/seed'
 import './styles/global.css'
 
-// 应用启动时初始化种子数据（幂等：已有数据则跳过）
-seedDatabase(db).catch((err) => {
-  console.error('Failed to seed database:', err)
+/**
+ * React Query 全局配置
+ * - staleTime: 5 分钟（数据 5 分钟内视为新鲜，不重新请求）
+ * - retry: 1 次（失败后最多重试 1 次）
+ * - refetchOnWindowFocus: false（切换窗口不自动重新请求）
+ */
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
 })
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </QueryClientProvider>
   </React.StrictMode>,
 )
