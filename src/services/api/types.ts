@@ -139,7 +139,6 @@ export interface PaginatedResponse<T> {
 
 /** JWT Token 存储键名 */
 export const TOKEN_STORAGE_KEY = 'littlestar_jwt_token'
-export const REFRESH_TOKEN_STORAGE_KEY = 'littlestar_refresh_token'
 
 // ============================================================
 // API 基础路径

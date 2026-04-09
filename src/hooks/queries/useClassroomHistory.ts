@@ -62,6 +62,8 @@ export function useClassroomHistoryDetail(historyId: number | undefined) {
     queryKey: classroomHistoryKeys.detail(historyId!),
     queryFn: () =>
       apiClient.getOne<ClassroomHistoryDetail>('/classroom_history', {
+        // PostgREST select 语法要求使用数据库原始列名（snake_case），
+        // 不经过 camelCase 转换，因为 select 直接拼入 URL 查询参数
         select: '*,classroom_snapshots(id,history_id,classroom_data)',
         filters: [{ column: 'id', operator: 'eq', value: historyId! }],
       }),

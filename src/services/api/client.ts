@@ -24,9 +24,12 @@ import { authApi } from './auth'
 // camelCase ↔ snake_case 转换工具
 // ============================================================
 
-/** camelCase → snake_case */
+/** camelCase → snake_case（正确处理连续大写字母如 isAIGenerated → is_ai_generated） */
 export function toSnakeCase(str: string): string {
-  return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+  return str
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .replace(/([a-z\d])([A-Z])/g, '$1_$2')
+    .toLowerCase()
 }
 
 /** snake_case → camelCase */
@@ -93,6 +96,8 @@ async function refreshTokenIfNeeded(): Promise<string | null> {
       if (!token) return null
 
       const response = await authApi.refresh(token)
+      // 存储刷新后的新 token 到 localStorage
+      localStorage.setItem(TOKEN_STORAGE_KEY, response.token)
       return response.token
     } catch {
       // 刷新失败，清除 token
@@ -181,10 +186,12 @@ interface RequestOptions {
   isRetry?: boolean
   /** PostgREST 查询选项 */
   query?: PostgRESTQueryOptions
+  /** 可选回调：在解析 body 前访问原始 Response（用于读取 headers） */
+  onResponse?: (response: Response) => void
 }
 
 async function request<T>(options: RequestOptions): Promise<T> {
-  const { method, path, body, headers = {}, isRetry = false, query } = options
+  const { method, path, body, headers = {}, isRetry = false, query, onResponse } = options
 
   const token = getToken()
   const url = `${API_REST_BASE}${path}${buildQueryString(query)}`
@@ -198,12 +205,15 @@ async function request<T>(options: RequestOptions): Promise<T> {
     requestHeaders['Authorization'] = `Bearer ${token}`
   }
 
-  // PostgREST: Prefer header
+  // PostgREST: Prefer header（合并自定义 Prefer 而非覆盖）
   const preferParts: string[] = []
-  if (method === 'POST') {
+  if (headers?.['Prefer']) {
+    preferParts.push(headers['Prefer'])
+  }
+  if (method === 'POST' && !preferParts.some(p => p.includes('return='))) {
     preferParts.push('return=representation')
   }
-  if (method === 'PATCH' || method === 'PUT') {
+  if ((method === 'PATCH' || method === 'PUT') && !preferParts.some(p => p.includes('return='))) {
     preferParts.push('return=representation')
   }
   if (query?.count) {
@@ -230,11 +240,6 @@ async function request<T>(options: RequestOptions): Promise<T> {
     throw new ApiError(401, '认证已过期，请重新登录')
   }
 
-  // 204 No Content
-  if (response.status === 204) {
-    return undefined as T
-  }
-
   // 错误处理
   if (!response.ok) {
     let errorMessage = `请求失败 (${response.status})`
@@ -254,6 +259,16 @@ async function request<T>(options: RequestOptions): Promise<T> {
     }
 
     throw new ApiError(response.status, errorMessage, errorDetails, errorCode)
+  }
+
+  // 回调：在解析 body 前让调用方访问 response headers
+  if (onResponse) {
+    onResponse(response)
+  }
+
+  // 204 No Content
+  if (response.status === 204) {
+    return undefined as T
   }
 
   // 解析响应
@@ -318,53 +333,30 @@ export const apiClient = {
 
   /**
    * GET 请求 — 分页查询（带总数）
+   * 使用 Prefer: count=exact 并解析 Content-Range header 获取总数
    */
   async getPaginated<T>(
     path: string,
     options?: PostgRESTQueryOptions,
   ): Promise<PaginatedResponse<T>> {
-    const queryOptions = { ...options, count: true }
-    const token = getToken()
-    const url = `${API_REST_BASE}${path}${buildQueryString(queryOptions)}`
+    let count: number | null = null
 
-    const requestHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Prefer: 'count=exact',
-    }
-    if (token) {
-      requestHeaders['Authorization'] = `Bearer ${token}`
-    }
-
-    const response = await fetch(url, {
+    const data = await request<T[]>({
       method: 'GET',
-      headers: requestHeaders,
+      path,
+      query: { ...options, count: true },
+      onResponse: (response) => {
+        const contentRange = response.headers.get('Content-Range')
+        if (contentRange) {
+          const match = contentRange.match(/\/(\d+|\*)/)
+          if (match && match[1] !== '*') {
+            count = parseInt(match[1], 10)
+          }
+        }
+      },
     })
 
-    if (!response.ok) {
-      let errorMessage = `请求失败 (${response.status})`
-      try {
-        const errorBody = await response.json()
-        if (errorBody.message) errorMessage = errorBody.message
-      } catch {
-        // ignore
-      }
-      throw new ApiError(response.status, errorMessage)
-    }
-
-    const data = await response.json()
-    const contentRange = response.headers.get('Content-Range')
-    let count: number | null = null
-    if (contentRange) {
-      const match = contentRange.match(/\/(\d+|\*)/)
-      if (match && match[1] !== '*') {
-        count = parseInt(match[1], 10)
-      }
-    }
-
-    return {
-      data: keysToCamelCase(data) as T[],
-      count,
-    }
+    return { data, count }
   },
 
   /**
@@ -422,6 +414,43 @@ export const apiClient = {
       method: 'POST',
       path: `/rpc/${funcName}`,
       body: args,
+    })
+  },
+
+  /**
+   * Upsert 单条数据（POST + Prefer: resolution=merge-duplicates）
+   *
+   * 利用 PostgREST 的 upsert 语义：当 UNIQUE 约束冲突时更新，否则插入。
+   * @param path - PostgREST 资源路径（如 '/mastery_records'）
+   * @param body - 请求体（camelCase，自动转换为 snake_case）
+   */
+  async upsert<T>(path: string, body: unknown): Promise<T> {
+    const result = await request<T[]>({
+      method: 'POST',
+      path,
+      body,
+      headers: {
+        Prefer: 'resolution=merge-duplicates',
+      },
+    })
+    return Array.isArray(result) ? result[0] : result
+  },
+
+  /**
+   * Upsert 批量数据（POST 数组 + Prefer: resolution=merge-duplicates）
+   *
+   * 与 upsert 相同，但接受数组输入。
+   * @param path - PostgREST 资源路径
+   * @param bodies - 请求体数组（camelCase，自动转换为 snake_case）
+   */
+  async batchUpsert<T>(path: string, bodies: unknown[]): Promise<T[]> {
+    return request<T[]>({
+      method: 'POST',
+      path,
+      body: bodies,
+      headers: {
+        Prefer: 'resolution=merge-duplicates',
+      },
     })
   },
 }

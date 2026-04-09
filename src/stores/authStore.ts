@@ -13,6 +13,7 @@
 import { create } from 'zustand'
 import { authApi } from '@/services/api/auth'
 import { TOKEN_STORAGE_KEY } from '@/services/api/types'
+import { queryClient } from '@/lib/queryClient'
 import type { AuthUser, LoginRequest, RegisterRequest } from '@/services/api/types'
 
 /** authStore 状态接口 */
@@ -104,6 +105,8 @@ export const useAuthStore = create<AuthState & AuthActions>()((set) => ({
   logout: () => {
     // 清除 JWT token
     localStorage.removeItem(TOKEN_STORAGE_KEY)
+    // 清除所有 React Query 缓存（防止用户切换后看到旧数据）
+    queryClient.clear()
     set({
       user: null,
       isAuthenticated: false,

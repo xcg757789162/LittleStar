@@ -16,7 +16,6 @@ export { authApi } from './auth'
 export {
   ApiError,
   TOKEN_STORAGE_KEY,
-  REFRESH_TOKEN_STORAGE_KEY,
   API_REST_BASE,
   API_AUTH_BASE,
 } from './types'

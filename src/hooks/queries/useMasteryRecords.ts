@@ -61,45 +61,14 @@ export interface UpsertMasteryRecordInput {
 /**
  * Upsert 掌握率记录
  *
- * 利用 PostgREST 的 `on_conflict` 参数和 mastery_records 表的
+ * 利用 PostgREST 的 `resolution=merge-duplicates` 和 mastery_records 表的
  * UNIQUE(child_id, knowledge_node_id) 约束实现 upsert。
- *
- * PostgREST upsert: POST with Prefer: resolution=merge-duplicates
  */
 export function useUpsertMasteryRecord() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (input: UpsertMasteryRecordInput) => {
-      // 使用 PostgREST upsert: POST + Prefer: resolution=merge-duplicates
-      // 需要自定义请求因为标准 apiClient.post 不支持 merge-duplicates
-      const token = localStorage.getItem('littlestar_jwt_token')
-      const { toSnakeCase } = await import('@/services/api/client')
-
-      // 手动构造 snake_case body
-      const body: Record<string, unknown> = {}
-      for (const [key, value] of Object.entries(input)) {
-        body[toSnakeCase(key)] = value instanceof Date ? value.toISOString() : value
-      }
-
-      const response = await fetch('/api/rest/mastery_records', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates, return=representation',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(body),
-      })
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}))
-        throw new Error(error.message || `Upsert failed: ${response.status}`)
-      }
-
-      const data = await response.json()
-      const { keysToCamelCase } = await import('@/services/api/client')
-      return keysToCamelCase(Array.isArray(data) ? data[0] : data) as MasteryRecord
-    },
+    mutationFn: (input: UpsertMasteryRecordInput) =>
+      apiClient.upsert<MasteryRecord>('/mastery_records', input),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: masteryRecordKeys.byChild(variables.childId),
@@ -115,36 +84,8 @@ export function useUpsertMasteryRecord() {
 export function useBatchUpsertMasteryRecords() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (inputs: UpsertMasteryRecordInput[]) => {
-      const token = localStorage.getItem('littlestar_jwt_token')
-      const { toSnakeCase, keysToCamelCase } = await import('@/services/api/client')
-
-      const bodies = inputs.map((input) => {
-        const body: Record<string, unknown> = {}
-        for (const [key, value] of Object.entries(input)) {
-          body[toSnakeCase(key)] = value instanceof Date ? value.toISOString() : value
-        }
-        return body
-      })
-
-      const response = await fetch('/api/rest/mastery_records', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates, return=representation',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(bodies),
-      })
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}))
-        throw new Error(error.message || `Batch upsert failed: ${response.status}`)
-      }
-
-      const data = await response.json()
-      return keysToCamelCase(data) as MasteryRecord[]
-    },
+    mutationFn: (inputs: UpsertMasteryRecordInput[]) =>
+      apiClient.batchUpsert<MasteryRecord>('/mastery_records', inputs),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: masteryRecordKeys.all })
     },
