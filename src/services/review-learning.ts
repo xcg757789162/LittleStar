@@ -177,6 +177,8 @@ export class ReviewLearningService {
 
     const filters: PostgRESTFilter[] = [
       { column: 'childId', operator: 'eq', value: childId },
+      // 排除无实质答题的"幽灵记录"（中途退出产生的脏数据）
+      { column: 'questionsCompleted', operator: 'gt', value: 0 },
     ]
 
     if (knowledgeNodeId) {

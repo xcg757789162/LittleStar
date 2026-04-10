@@ -238,6 +238,7 @@ export function useLearningFlow(): LearningFlowState {
     subject: Subject,
     stats: { questionsCompleted: number; correctCount: number },
     classroom?: Classroom | null,
+    isCompleted: boolean = false,
   ) => {
     try {
       const child = useChildStore.getState().currentChild
@@ -246,7 +247,7 @@ export function useLearningFlow(): LearningFlowState {
       const childId = child.id ? Number(child.id) : 0
       const gradeLevel = child.gradeLevel
 
-      // 1. 写入 DailySession
+      // 1. 写入 DailySession（无论是否完成都记录）
       const today = new Date()
       const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
       await apiClient.post('/daily_sessions', {
@@ -260,7 +261,9 @@ export function useLearningFlow(): LearningFlowState {
       })
 
       // 2. 写入 classroom_history（课堂学习历史）
-      if (classroom) {
+      // 仅在正常完成（isCompleted=true）或有实质答题（questionsCompleted > 0）时写入
+      // 中途退出且无答题 → 跳过，避免"幽灵记录"出现在复习列表中
+      if (classroom && (isCompleted || stats.questionsCompleted > 0)) {
         const knowledgeNodeId = currentKnowledgeNodeIdRef.current || classroom.id || 'unknown'
         const accuracy = stats.questionsCompleted > 0
           ? Math.round((stats.correctCount / stats.questionsCompleted) * 100)
@@ -426,11 +429,12 @@ export function useLearningFlow(): LearningFlowState {
       subject,
     })
 
-    // 异步写入 DB（传递课堂数据，中途退出也记录学习历史）
+    // 异步写入 DB（传递课堂数据）
+    // isCompleted=false: 中途退出，若无实质答题则跳过课堂相关记录写入
     onSessionEnd(subject, {
       questionsCompleted: stats.questionsCompleted,
       correctCount: stats.correctCount,
-    }, classroom)
+    }, classroom, false)
   }, [endSession, onSessionEnd, currentClassroom])
 
   /**
@@ -650,10 +654,11 @@ export function useLearningFlow(): LearningFlowState {
 
     // 异步写入 DB（传递课堂数据用于写入 classroom_history 和 mastery_records）
     // 写入完成后删除已消费缓存 + 触发新一轮预生成
+    // isCompleted=true: 正常完成课堂，写入所有记录
     onSessionEnd(subject, {
       questionsCompleted: stats.questionsCompleted,
       correctCount: stats.correctCount,
-    }, currentClassroom).then(() => {
+    }, currentClassroom, true).then(() => {
       // ① 删除已消费的缓存条目（避免下次 startFlow 加载同一堂课）
       const nodeId = currentKnowledgeNodeIdRef.current
       const cacheDate = currentCacheDateRef.current
