@@ -60,7 +60,7 @@ export class OpenMAICPipelineClient {
 
   constructor(config?: PipelineClientConfig) {
     const isBrowser = typeof window !== 'undefined'
-    this.baseUrl = (config?.baseUrl || (isBrowser ? '/openmaic-proxy' : 'http://localhost:3000')).replace(/\/+$/, '')
+    this.baseUrl = (config?.baseUrl || (isBrowser ? '/openmaic' : 'http://localhost:3000')).replace(/\/+$/, '')
     this.timeoutMs = config?.timeoutMs ?? 60000
     this.maxRetries = config?.maxRetries ?? 2
   }

@@ -96,7 +96,7 @@ export function getBackendImageConfig() {
 
 export function getOpenMAICConfig() {
   return {
-    url: getLS('littlestar_openmaic_url') || 'http://localhost:3000',
+    url: getLS('littlestar_openmaic_url') || '/openmaic',
     apiKey: getLS('littlestar_openmaic_api_key') || '',
   }
 }

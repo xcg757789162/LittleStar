@@ -12,7 +12,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // === PostgreSQL 后端代理（通过 Nginx 网关） ===
+      // === LittleStar 后端 API（通过 Nginx 网关） ===
       // Auth Service：登录/注册/刷新 token
       '/api/auth': {
         target: 'http://localhost:8080',
@@ -24,19 +24,37 @@ export default defineConfig({
         changeOrigin: true,
       },
 
-      // === OpenMAIC AI 课堂代理 ===
-      // LittleStar 自身的 API 调用（非 iframe）通过 Vite proxy 转发到 Nginx
-      // Nginx 会将 /openmaic/* 路由到容器内部的 openmaic:3002
-      '/openmaic-proxy': {
+      // === OpenMAIC 代理（同源架构，无需 path rewrite） ===
+      // 前端 API 调用和 iframe 嵌入统一走 /openmaic 路径
+      '/openmaic': {
         target: 'http://localhost:8080',
         changeOrigin: true,
-        // /openmaic-proxy/api/xxx → /openmaic/api/xxx（Nginx 再转发到 openmaic:3002）
-        rewrite: (path) => path.replace(/^\/openmaic-proxy/, '/openmaic'),
       },
-      // 注：iframe 嵌入 OpenMAIC 原生前端时不走 Vite proxy，
-      // 而是直接指向 Nginx 网关（localhost:8080），
-      // 确保 OpenMAIC Next.js 前端内部的 API 请求能正确路由到后端。
-      // 详见 ClassroomIframe.tsx 中的 toEmbedUrl() 函数。
+      // OpenMAIC Next.js 静态资源（iframe 内部请求）
+      '/_next': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      // OpenMAIC 公共资源（iframe 内部绝对路径请求）
+      '/avatars': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      // 媒体文件
+      '/media': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      // iframe 桥接脚本
+      '/iframe-bridge.js': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      // 健康检查
+      '/health': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
     },
   },
 })

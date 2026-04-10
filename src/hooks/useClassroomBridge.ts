@@ -122,16 +122,12 @@ function isTTSRequestPayload(value: unknown): value is TTSRequestPayload {
 // 构建 origin 白名单
 // ============================================================
 
-/** 构建允许的 origin 列表（支持环境变量配置） */
+/** 构建允许的 origin 列表（同源架构下只需当前 origin） */
 function getAllowedOrigins(): string[] {
   const origins = [
-    window.location.origin,  // 同源（生产环境）
+    window.location.origin,  // 同源（前端和 OpenMAIC 通过同一 Nginx 端口服务）
   ]
-  // 开发环境允许 Nginx 网关
-  if (import.meta.env.DEV) {
-    origins.push('http://localhost:8080')
-  }
-  // 支持通过环境变量配置额外的生产环境 origin
+  // 支持通过环境变量配置额外的 origin（用于非标准部署场景）
   const extraOrigin = import.meta.env.VITE_OPENMAIC_ORIGIN
   if (extraOrigin && typeof extraOrigin === 'string') {
     origins.push(extraOrigin)
@@ -287,11 +283,9 @@ export function useClassroomBridge(
         return
       }
 
-      // iframe 在开发环境指向 Nginx (localhost:8080)，生产环境同源
-      // 支持通过环境变量配置生产域名
-      const targetOrigin = import.meta.env.DEV
-        ? 'http://localhost:8080'
-        : (import.meta.env.VITE_OPENMAIC_ORIGIN || window.location.origin)
+      // 同源架构：前端和 OpenMAIC 通过同一端口服务
+      // 支持通过环境变量配置非标准部署域名
+      const targetOrigin = import.meta.env.VITE_OPENMAIC_ORIGIN || window.location.origin
 
       iframe.contentWindow.postMessage(
         { type, payload },

@@ -10,8 +10,8 @@
  * - 悬浮"完成课堂"按钮
  * - postMessage 通信桥监听答题和完成事件
  *
- * 架构：iframe 直接指向 Nginx 网关（开发环境 localhost:8080），
- * 确保 OpenMAIC Next.js 前端内部的所有 API 请求能正确到达后端。
+ * 架构：前端和 OpenMAIC 同源（同一 Nginx 端口），iframe 使用相对路径 /openmaic/...，
+ * 开发环境通过 Vite proxy 转发，生产环境由 Nginx 直接路由。
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -55,25 +55,18 @@ const SUBJECT_COLORS: Record<string, { primary: string; bg: string }> = {
 /**
  * 将后端返回的 classroomUrl 转换为可嵌入 iframe 的完整 URL
  *
- * **关键设计**：iframe 必须直接指向 Nginx 网关（localhost:8080），而不是通过 Vite proxy。
- * 原因：OpenMAIC 是 Next.js 应用，iframe 加载后其内部 JS 会发起 /api/... 等请求。
- * 如果 iframe src 走 Vite proxy（localhost:5173），这些内部请求也会打到 Vite，
- * 但 Vite 没有代理 OpenMAIC 的 /api/classroom 等路由 → 请求失败 → 页面卡在"加载中"。
- * 直接指向 Nginx 可以保证 iframe 内所有请求都走 Nginx → OpenMAIC 服务。
+ * **同源架构**：前端和 OpenMAIC 都通过 Nginx 同端口服务，
+ * iframe 直接使用相对路径 /openmaic/...，所有请求由 Nginx 路由。
+ * 开发环境下 Vite proxy 会将 /openmaic 转发到 Nginx 网关。
  */
 function toEmbedUrl(classroomUrl: string): string {
-  // Nginx 网关地址（开发环境 8080，生产环境由 window.location 决定）
-  const nginxOrigin = import.meta.env.DEV
-    ? 'http://localhost:8080'
-    : window.location.origin
-
   // 如果已经是完整 URL，提取路径部分
   if (classroomUrl.startsWith('http')) {
     try {
       const url = new URL(classroomUrl)
-      return `${nginxOrigin}/openmaic${url.pathname}${url.search}`
+      return `/openmaic${url.pathname}${url.search}`
     } catch {
-      return `${nginxOrigin}/openmaic${classroomUrl}`
+      return `/openmaic${classroomUrl}`
     }
   }
 
@@ -86,7 +79,7 @@ function toEmbedUrl(classroomUrl: string): string {
     path = `/${path}`
   }
 
-  return `${nginxOrigin}/openmaic${path}`
+  return `/openmaic${path}`
 }
 
 export function ClassroomIframe({

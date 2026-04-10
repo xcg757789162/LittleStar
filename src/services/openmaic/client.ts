@@ -17,7 +17,7 @@ import type {
 
 /** Client 配置 */
 export interface OpenMAICClientConfig {
-  /** OpenMAIC 服务地址，浏览器环境默认走 Vite proxy (/openmaic-proxy)，Node 环境默认 http://localhost:3000 */
+  /** OpenMAIC 服务地址，浏览器环境默认走 /openmaic（Nginx 代理），Node 环境默认 http://localhost:3000 */
   baseUrl?: string
   /** 请求超时时间（毫秒），默认 30000 */
   timeoutMs?: number
@@ -68,9 +68,9 @@ export class OpenMAICClient {
   private readonly timeoutMs: number
 
   constructor(config?: OpenMAICClientConfig) {
-    // 浏览器环境通过 Vite proxy 避免跨域，Node 环境直连
+    // 浏览器环境通过 /openmaic（Nginx 代理或 Vite proxy）避免跨域，Node 环境直连
     const isBrowser = typeof window !== 'undefined'
-    this.baseUrl = (config?.baseUrl || (isBrowser ? '/openmaic-proxy' : 'http://localhost:3000')).replace(/\/+$/, '')
+    this.baseUrl = (config?.baseUrl || (isBrowser ? '/openmaic' : 'http://localhost:3000')).replace(/\/+$/, '')
     this.timeoutMs = config?.timeoutMs || 30000
   }
 
@@ -644,8 +644,7 @@ export class OpenMAICClient {
   /**
    * 检查 OpenMAIC 服务健康状态
    *
-   * 使用明确的 API 端点而非根路径，避免 Nginx location 匹配问题。
-   * 请求链路：/openmaic-proxy/api/health → Nginx /openmaic/api/health → openmaic:3002/api/health
+   * 请求链路：/openmaic/ → Nginx → openmaic:3002/
    *
    * 如果 /api/health 不存在，fallback 到根路径（带尾随 /）。
    * @returns true 如果服务在线，false 如果离线
