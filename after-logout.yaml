@@ -1,0 +1,18 @@
+- generic [ref=e136]:
+  - generic [ref=e137]: ⭐
+  - heading "小星辰" [level=1] [ref=e138]
+  - paragraph [ref=e139]: 和小星老师一起快乐学习！
+  - generic [ref=e140]:
+    - generic [ref=e141]:
+      - button "登录" [ref=e142] [cursor=pointer]
+      - button "注册" [ref=e143] [cursor=pointer]
+    - generic [ref=e144]:
+      - generic [ref=e145]:
+        - generic [ref=e146]: 👤 用户名
+        - textbox "👤 用户名" [ref=e147]:
+          - /placeholder: 请输入用户名
+      - generic [ref=e148]:
+        - generic [ref=e149]: 🔒 密码
+        - textbox "🔒 密码" [ref=e150]:
+          - /placeholder: 请输入密码
+      - button "🚀 登录" [ref=e151] [cursor=pointer]

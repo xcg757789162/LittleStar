@@ -54,3 +54,7 @@ PreCI/
 .codecc/
 .playwright-mcp/
 .codecc.playwright-mcp/
+
+# Playwright binaries
+.playwright-cli/
+playwright-*.tar.gz
