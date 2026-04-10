@@ -9,6 +9,8 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useLearningFlow } from '@/hooks/useLearningFlow'
 import { useSoundEffects } from '@/hooks/useSoundEffects'
+import { usePlacementTests } from '@/hooks/queries'
+import { useChildStore } from '@/stores/childStore'
 import { ClassroomIframe } from '@/components/classroom/ClassroomIframe'
 import { ClassroomView } from '@/components/classroom/ClassroomView'
 import { FeedbackAnimation } from '@/components/feedback/FeedbackAnimation'
@@ -37,6 +39,16 @@ export function LearningSession() {
   const navigate = useNavigate()
   const location = useLocation()
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null)
+  const currentChild = useChildStore((s) => s.currentChild)
+  const childId = currentChild?.id
+  const gradeLevel = currentChild?.gradeLevel ?? 'middle-kindergarten'
+
+  // 查询评测记录，计算已完成评测的科目集合
+  const { data: placementTests } = usePlacementTests(childId)
+  const completedSubjects = useMemo(() => {
+    if (!placementTests) return new Set<Subject>()
+    return new Set(placementTests.map((t) => t.subject as Subject))
+  }, [placementTests])
 
   // 从 location state 获取重学参数（用 useMemo 避免每次渲染创建新对象）
   const reviewState = useMemo(() => (location.state as ReviewLocationState) ?? {}, [location.state])
@@ -61,6 +73,7 @@ export function LearningSession() {
     sessionSummary,
     encouragement,
     currentClassroom,
+    classroomAnswerCount,
     startFlow,
     stopFlow,
     handleClassroomAnswer,
@@ -193,43 +206,65 @@ export function LearningSession() {
               maxWidth: '480px',
             }}
           >
-            {SUBJECTS.map((subject) => (
-              <motion.button
-                key={subject.key}
-                onClick={() => setSelectedSubject(subject.key)}
-                whileTap={{ scale: 0.95 }}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  padding: '20px 12px',
-                  borderRadius: '20px',
-                  border:
-                    selectedSubject === subject.key
-                      ? '3px solid #7C4DFF'
-                      : '3px solid transparent',
-                  backgroundColor: subject.color,
-                  cursor: 'pointer',
-                  boxShadow:
-                    selectedSubject === subject.key
-                      ? '0 4px 12px rgba(124, 77, 255, 0.3)'
-                      : 'none',
-                }}
-              >
-                <span style={{ fontSize: '40px', marginBottom: '8px' }}>
-                  {subject.emoji}
-                </span>
-                <span
+            {SUBJECTS.map((subject) => {
+              const isCompleted = completedSubjects.has(subject.key)
+              return (
+                <motion.button
+                  key={subject.key}
+                  onClick={() => {
+                    if (isCompleted) {
+                      setSelectedSubject(subject.key)
+                    }
+                  }}
+                  whileTap={isCompleted ? { scale: 0.95 } : undefined}
                   style={{
-                    fontSize: '18px',
-                    fontWeight: 'bold',
-                    color: '#333',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    padding: '20px 12px',
+                    borderRadius: '20px',
+                    border:
+                      selectedSubject === subject.key
+                        ? '3px solid #7C4DFF'
+                        : '3px solid transparent',
+                    backgroundColor: isCompleted ? subject.color : '#F0F0F0',
+                    cursor: isCompleted ? 'pointer' : 'not-allowed',
+                    boxShadow:
+                      selectedSubject === subject.key
+                        ? '0 4px 12px rgba(124, 77, 255, 0.3)'
+                        : 'none',
+                    opacity: isCompleted ? 1 : 0.5,
+                    position: 'relative',
                   }}
                 >
-                  {subject.label}
-                </span>
-              </motion.button>
-            ))}
+                  <span style={{ fontSize: '40px', marginBottom: '8px', filter: isCompleted ? 'none' : 'grayscale(100%)' }}>
+                    {subject.emoji}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '18px',
+                      fontWeight: 'bold',
+                      color: isCompleted ? '#333' : '#999',
+                    }}
+                  >
+                    {subject.label}
+                  </span>
+                  {/* 未评测标签 */}
+                  {!isCompleted && (
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        color: '#FF6B35',
+                        marginTop: '4px',
+                        fontWeight: 600,
+                      }}
+                    >
+                      🔒 未评测
+                    </span>
+                  )}
+                </motion.button>
+              )
+            })}
           </div>
 
           <motion.button
@@ -283,6 +318,7 @@ export function LearningSession() {
                 })}
                 onFallback={() => setUseIframeFallback(true)}
                 loadTimeoutMs={15000}
+                answerCount={classroomAnswerCount}
               />
             ) : (
               <ClassroomView
@@ -321,7 +357,7 @@ export function LearningSession() {
               </p>
             </div>
           ) : (
-            /* 无课堂数据 — 空状态 */
+            /* 无课堂数据 — 根据评测状态显示不同提示 */
             <div
               style={{
                 display: 'flex',
@@ -331,37 +367,83 @@ export function LearningSession() {
                 padding: '48px 32px',
               }}
             >
-              <span style={{ fontSize: '48px' }}>📚</span>
-              <p style={{ fontSize: '16px', color: '#999' }}>暂无课堂数据</p>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button
-                  onClick={() => selectedSubject && startFlow(selectedSubject)}
-                  style={{
-                    padding: '12px 32px',
-                    borderRadius: '16px',
-                    border: 'none',
-                    backgroundColor: '#7C4DFF',
-                    color: 'white',
-                    fontSize: '16px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  🔄 重试
-                </button>
-                <button
-                  onClick={handleExit}
-                  style={{
-                    padding: '12px 32px',
-                    borderRadius: '16px',
-                    border: '2px solid #BDBDBD',
-                    backgroundColor: '#F5F5F5',
-                    fontSize: '16px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  返回首页
-                </button>
-              </div>
+              {selectedSubject && !completedSubjects.has(selectedSubject) ? (
+                /* 未完成评测 → 引导去评测 */
+                <>
+                  <span style={{ fontSize: '48px' }}>🔒</span>
+                  <p style={{ fontSize: '18px', color: '#FF6B35', fontWeight: 600 }}>
+                    请先完成能力评测
+                  </p>
+                  <p style={{ fontSize: '14px', color: '#999', textAlign: 'center' }}>
+                    完成{SUBJECTS.find(s => s.key === selectedSubject)?.label}评测后，AI 老师才能为你定制课堂
+                  </p>
+                  <button
+                    onClick={() => navigate(`/placement-test/${selectedSubject}/${gradeLevel}`)}
+                    style={{
+                      padding: '14px 36px',
+                      borderRadius: '20px',
+                      border: 'none',
+                      backgroundColor: '#FF6B35',
+                      color: 'white',
+                      fontSize: '16px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 16px rgba(255, 107, 53, 0.3)',
+                    }}
+                  >
+                    🚀 去评测
+                  </button>
+                  <button
+                    onClick={handleExit}
+                    style={{
+                      marginTop: '4px',
+                      padding: '10px 28px',
+                      borderRadius: '14px',
+                      border: '2px solid #BDBDBD',
+                      backgroundColor: '#F5F5F5',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    返回首页
+                  </button>
+                </>
+              ) : (
+                /* 已评测但无课堂数据 → 原有重试逻辑 */
+                <>
+                  <span style={{ fontSize: '48px' }}>📚</span>
+                  <p style={{ fontSize: '16px', color: '#999' }}>暂无课堂数据</p>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button
+                      onClick={() => selectedSubject && startFlow(selectedSubject)}
+                      style={{
+                        padding: '12px 32px',
+                        borderRadius: '16px',
+                        border: 'none',
+                        backgroundColor: '#7C4DFF',
+                        color: 'white',
+                        fontSize: '16px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      🔄 重试
+                    </button>
+                    <button
+                      onClick={handleExit}
+                      style={{
+                        padding: '12px 32px',
+                        borderRadius: '16px',
+                        border: '2px solid #BDBDBD',
+                        backgroundColor: '#F5F5F5',
+                        fontSize: '16px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      返回首页
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

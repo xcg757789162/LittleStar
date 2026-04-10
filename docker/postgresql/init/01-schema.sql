@@ -14,7 +14,8 @@ CREATE TABLE api.users (
   password_hash VARCHAR(255) NOT NULL,
   nickname VARCHAR(100) NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  last_login_at TIMESTAMPTZ
+  last_login_at TIMESTAMPTZ,
+  parent_pin VARCHAR(4)
 );
 
 -- ============================================================

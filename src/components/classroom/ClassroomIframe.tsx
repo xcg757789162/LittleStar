@@ -31,6 +31,8 @@ export interface ClassroomIframeProps {
   onFallback?: () => void
   /** iframe 加载超时（毫秒），默认 15000 */
   loadTimeoutMs?: number
+  /** 课堂中已答题数量（用于判断是否可以完成课堂） */
+  answerCount?: number
 }
 
 /** iframe 加载状态 */
@@ -71,9 +73,11 @@ export function ClassroomIframe({
   onAnswer,
   onFallback,
   loadTimeoutMs = 15000,
+  answerCount = 0,
 }: ClassroomIframeProps) {
   const [loadState, setLoadState] = useState<LoadState>('loading')
   const [showCompleteBtn, setShowCompleteBtn] = useState(false)
+  const [minTimeReached, setMinTimeReached] = useState(false)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const iframeLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -128,20 +132,31 @@ export function ClassroomIframe({
 
   // iframe onLoad 事件（备用 — postMessage ready 信号更可靠）
   const handleIframeLoad = useCallback(() => {
-    // 给 OpenMAIC 前端一点时间初始化
-    // 如果 3 秒后还没收到 ready 消息，也标记为 loaded
+    // 给 OpenMAIC 前端更多时间初始化
+    // 如果 8 秒后还没收到 ready 消息，也标记为 loaded
     iframeLoadTimerRef.current = setTimeout(() => {
       setLoadState((prev) => (prev === 'loading' ? 'loaded' : prev))
-    }, 3000)
+    }, 8000)
   }, [])
 
-  // 5 秒后显示"完成课堂"按钮（给用户时间浏览内容）
+  // 60 秒后设置"最小浏览时间已到"标志（给用户足够时间浏览课堂内容）
   useEffect(() => {
     if (loadState === 'loaded') {
-      const timer = setTimeout(() => setShowCompleteBtn(true), 5000)
+      const timer = setTimeout(() => setMinTimeReached(true), 60000)
       return () => clearTimeout(timer)
     }
   }, [loadState])
+
+  // "完成课堂"按钮显示条件：
+  // 1. iframe 已加载 (loaded)
+  // 2. 并且满足以下任一条件：
+  //    a) 用户已答过至少 1 题（说明已与课堂交互）
+  //    b) 最小浏览时间已到（60 秒，用于没有答题的纯浏览课堂）
+  useEffect(() => {
+    if (loadState === 'loaded' && (answerCount > 0 || minTimeReached)) {
+      setShowCompleteBtn(true)
+    }
+  }, [loadState, answerCount, minTimeReached])
 
   // 组件卸载时清理所有计时器
   useEffect(() => {

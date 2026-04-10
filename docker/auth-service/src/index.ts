@@ -156,6 +156,7 @@ app.post('/auth/register', async (req: Request, res: Response, next: NextFunctio
         username: user.username,
         nickname: user.nickname,
         createdAt: user.created_at,
+        parentPin: null,
       },
     })
   } catch (err) {
@@ -172,7 +173,7 @@ app.post('/auth/login', async (req: Request, res: Response, next: NextFunction) 
 
     // 查询用户
     const result = await pool.query(
-      'SELECT id, username, nickname, password_hash, created_at FROM api.users WHERE username = $1',
+      'SELECT id, username, nickname, password_hash, created_at, parent_pin FROM api.users WHERE username = $1',
       [username]
     )
     if (result.rows.length === 0) {
@@ -206,6 +207,7 @@ app.post('/auth/login', async (req: Request, res: Response, next: NextFunction) 
         username: user.username,
         nickname: user.nickname,
         createdAt: user.created_at,
+        parentPin: user.parent_pin || null,
       },
     })
   } catch (err) {
@@ -271,7 +273,7 @@ app.get('/auth/me', async (req: Request, res: Response, next: NextFunction) => {
     }
 
     const result = await pool.query(
-      'SELECT id, username, nickname, created_at, last_login_at FROM api.users WHERE id = $1',
+      'SELECT id, username, nickname, created_at, last_login_at, parent_pin FROM api.users WHERE id = $1',
       [parseInt(payload.user_id, 10)]
     )
     if (result.rows.length === 0) {
@@ -285,6 +287,7 @@ app.get('/auth/me', async (req: Request, res: Response, next: NextFunction) => {
       nickname: user.nickname,
       createdAt: user.created_at,
       lastLoginAt: user.last_login_at,
+      parentPin: user.parent_pin || null,
     })
   } catch (err) {
     next(err)

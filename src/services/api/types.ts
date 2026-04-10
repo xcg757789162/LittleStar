@@ -85,6 +85,8 @@ export interface AuthUser {
   nickname: string
   createdAt: string
   lastLoginAt: string | null
+  /** 家长 PIN 密码（4 位数字），null 表示未设置 */
+  parentPin: string | null
 }
 
 // ============================================================

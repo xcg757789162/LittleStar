@@ -58,6 +58,7 @@ export type {
   GenerationTaskInput,
   GenerationTask,
   TaskStatus,
+  TaskProgressInfo,
 } from './scheduler'
 
 // Dynamic Adjuster

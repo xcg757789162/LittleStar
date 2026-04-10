@@ -16,9 +16,6 @@ import { PinVerification } from '@/components/parent/PinVerification'
 
 import type { Subject, DailySession, KnowledgeNode, MasteryRecord } from '@/types/models'
 
-/** localStorage key for parent PIN */
-const PIN_STORAGE_KEY = 'littlestar_parent_pin'
-
 /** localStorage keys for OpenMAIC 配置 */
 const OPENMAIC_URL_KEY = 'littlestar_openmaic_url'
 const OPENMAIC_API_KEY_KEY = 'littlestar_openmaic_api_key'
@@ -89,7 +86,7 @@ export function ParentDashboard() {
   const [showPinVerify, setShowPinVerify] = useState(false)
   const [isAdvancedUnlocked, setIsAdvancedUnlocked] = useState(false)
   const [savedPin, setSavedPin] = useState<string | null>(() => {
-    try { return localStorage.getItem(PIN_STORAGE_KEY) } catch { return null }
+    return user?.parentPin ?? null
   })
   const [serviceOnline, setServiceOnline] = useState<boolean | null>(null)
   const [subjectMasteries, setSubjectMasteries] = useState<SubjectMastery[]>([])
@@ -176,19 +173,20 @@ export function ParentDashboard() {
     loadCacheStatus()
   }, [])
 
-  // 检查 OpenMAIC 服务健康状态
-  useEffect(() => {
-    async function checkServiceHealth() {
-      try {
-        const isHealthy = await clientRef.current!.checkHealth()
-        setServiceOnline(isHealthy)
-      } catch {
-        setServiceOnline(false)
-      }
+  // 检查 OpenMAIC 服务健康状态（支持手动重试）
+  const checkServiceHealth = useCallback(async () => {
+    setServiceOnline(null) // 重置为检测中
+    try {
+      const isHealthy = await clientRef.current!.checkHealth()
+      setServiceOnline(isHealthy)
+    } catch {
+      setServiceOnline(false)
     }
-
-    checkServiceHealth()
   }, [])
+
+  useEffect(() => {
+    checkServiceHealth()
+  }, [checkServiceHealth])
 
   // I1: 加载各学科掌握率
   useEffect(() => {
@@ -245,15 +243,30 @@ export function ParentDashboard() {
     }
   }, [])
 
-  // PIN 设置完成回调（setup 模式）
-  const handleSetPin = useCallback((pin: string) => {
+  // PIN 设置完成回调（setup 模式）— 持久化到数据库
+  const handleSetPin = useCallback(async (pin: string) => {
     try {
-      localStorage.setItem(PIN_STORAGE_KEY, pin)
+      // 通过 PostgREST API 更新 users 表的 parent_pin 字段
+      if (user?.id) {
+        await apiClient.patch('/users', { parentPin: pin }, {
+          filters: [{ column: 'id', operator: 'eq', value: user.id }],
+        })
+      }
       setSavedPin(pin)
+      // 同步更新 authStore 中的 user 信息
+      useAuthStore.setState((state) => ({
+        user: state.user ? { ...state.user, parentPin: pin } : null,
+      }))
     } catch {
-      // localStorage 不可用时忽略持久化
+      // API 失败时回退到 localStorage 保底
+      try {
+        localStorage.setItem('littlestar_parent_pin_fallback', pin)
+      } catch {
+        // localStorage 也不可用，忽略
+      }
+      setSavedPin(pin)
     }
-  }, [])
+  }, [user?.id])
 
   const handlePinCancel = useCallback(() => {
     setShowPinVerify(false)
@@ -384,20 +397,25 @@ export function ParentDashboard() {
       {/* 基础展示层：OpenMAIC 服务状态 */}
       <div
         data-testid="service-status"
+        onClick={serviceOnline === false ? checkServiceHealth : undefined}
         style={{
           ...infoCardStyle,
           backgroundColor: serviceOnline === false ? '#FFEBEE' : '#F3E5F5',
           marginBottom: '12px',
+          cursor: serviceOnline === false ? 'pointer' : 'default',
         }}
       >
         <span style={{ fontSize: '16px' }}>{serviceOnline === null ? '⏳' : serviceOnline ? '🤖' : '⚠️'}</span>
-        <span style={{ fontSize: '14px', color: serviceOnline === false ? '#D32F2F' : '#6A1B9A' }}>
+        <span style={{ fontSize: '14px', color: serviceOnline === false ? '#D32F2F' : '#6A1B9A', flex: 1 }}>
           {serviceOnline === null
             ? 'OpenMAIC 服务检测中...'
             : serviceOnline
               ? 'OpenMAIC 服务已就绪'
               : 'OpenMAIC 服务离线'}
         </span>
+        {serviceOnline === false && (
+          <span style={{ fontSize: '12px', color: '#999' }}>点击重试</span>
+        )}
       </div>
 
       {/* 基础展示层：缓存课程数 */}

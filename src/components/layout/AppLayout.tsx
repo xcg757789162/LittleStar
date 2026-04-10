@@ -20,7 +20,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const hideNav = HIDDEN_NAV_PATHS.some((p) => location.pathname.startsWith(p))
 
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: hideNav ? 0 : '56px' }}>
+    <div style={{ minHeight: '100vh', paddingBottom: hideNav ? 0 : '64px' }}>
       {children}
       {!hideNav && <BottomNav />}
     </div>

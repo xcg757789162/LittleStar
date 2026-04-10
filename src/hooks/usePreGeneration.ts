@@ -32,6 +32,10 @@ export interface PreGenerationState {
   pendingCount: number
   /** 已完成的任务数 */
   completedCount: number
+  /** 任务总数（提交后确定） */
+  totalCount: number
+  /** 当前阶段文案（中文，适合直接展示） */
+  stageText: string
   /** 错误信息 */
   error: string | null
   /** 手动触发预生成 */
@@ -48,6 +52,8 @@ export function usePreGeneration(
   const [status, setStatus] = useState<PreGenerationStatus>('idle')
   const [pendingCount, setPendingCount] = useState(0)
   const [completedCount, setCompletedCount] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
+  const [stageText, setStageText] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   // 防止重复触发
@@ -61,6 +67,7 @@ export function usePreGeneration(
     if (!childId || isRunningRef.current) return
     isRunningRef.current = true
     setStatus('checking')
+    setStageText('正在分析学习情况...')
     setError(null)
 
     try {
@@ -98,6 +105,7 @@ export function usePreGeneration(
 
       // 3. 对每个已完成评测的科目生成课堂
       setStatus('generating')
+      setStageText('正在规划课程...')
       const client = new OpenMAICClient()
       const planner = new LessonPlanner()
       const reqGenerator = new RequirementGenerator()
@@ -106,6 +114,12 @@ export function usePreGeneration(
         retryIntervals: [3000, 10000],
         pollIntervalMs: 5000,
         maxPollAttempts: 120,
+        onTaskProgress: (info) => {
+          setCompletedCount(info.completedCount)
+          setPendingCount(info.totalCount - info.completedCount - info.failedCount)
+          setTotalCount(info.totalCount)
+          setStageText(info.stageText)
+        },
       })
 
       // 4. 获取掌握率
@@ -182,6 +196,7 @@ export function usePreGeneration(
       }
 
       setPendingCount(totalTasks)
+      setTotalCount(totalTasks)
 
       if (totalTasks === 0) {
         // 无知识点数据，回退到简单生成
@@ -203,6 +218,7 @@ export function usePreGeneration(
           totalTasks++
         }
         setPendingCount(totalTasks)
+        setTotalCount(totalTasks)
       }
 
       if (totalTasks > 0) {
@@ -219,17 +235,23 @@ export function usePreGeneration(
         }
 
         setStatus(completed > 0 ? 'completed' : 'failed')
+        if (completed > 0) {
+          setStageText(`${completed} 节课堂已就绪！`)
+        }
         if (completed === 0) {
           setError(`所有 ${totalTasks} 个生成任务失败`)
+          setStageText('课程生成失败，请重试')
         }
       } else {
         setStatus('completed')
+        setStageText('备课完成！')
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.error('[PreGeneration] 预生成失败:', message)
       setError(message)
       setStatus('failed')
+      setStageText('课程生成失败，请重试')
     } finally {
       isRunningRef.current = false
     }
@@ -283,6 +305,8 @@ export function usePreGeneration(
     status,
     pendingCount,
     completedCount,
+    totalCount,
+    stageText,
     error,
     triggerGeneration,
   }

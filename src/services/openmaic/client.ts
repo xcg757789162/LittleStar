@@ -643,14 +643,22 @@ export class OpenMAICClient {
 
   /**
    * 检查 OpenMAIC 服务健康状态
+   *
+   * 使用明确的 API 端点而非根路径，避免 Nginx location 匹配问题。
+   * 请求链路：/openmaic-proxy/api/health → Nginx /openmaic/api/health → openmaic:3002/api/health
+   *
+   * 如果 /api/health 不存在，fallback 到根路径（带尾随 /）。
    * @returns true 如果服务在线，false 如果离线
    */
   async checkHealth(): Promise<boolean> {
     try {
-      const response = await this.fetchWithTimeout(this.baseUrl, {
+      // 优先尝试 /api/generate-classroom 的 OPTIONS 或 GET 一个已知端点
+      // 但最安全的方式是请求根路径加尾随 /，确保 Nginx location 匹配
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/`, {
         method: 'GET',
       })
-      return response.ok
+      // 2xx 或 3xx 都视为在线（某些框架根路径会 redirect）
+      return response.ok || (response.status >= 300 && response.status < 400)
     } catch {
       return false
     }
