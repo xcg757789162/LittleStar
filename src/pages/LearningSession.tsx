@@ -358,10 +358,10 @@ export function LearningSession() {
               {cachedLessons.length > 0 ? (
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-                  gap: '20px',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+                  gap: '14px',
                   width: '100%',
-                  maxWidth: '560px',
+                  maxWidth: '720px',
                   justifyItems: 'center',
                 }}>
                   {cachedLessons.map((lesson, idx) => (

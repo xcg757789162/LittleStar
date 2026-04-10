@@ -32,6 +32,20 @@ export interface CacheListItem {
   cachedAt: number
   /** 课堂缩略图 URL（从 scenes/slides 中提取的第一个非空 imageUrl） */
   thumbnailUrl?: string
+  /** 从 knowledgeNodeId 推断的科目（math/chinese/english） */
+  subject?: string
+}
+
+/**
+ * 从 knowledgeNodeId 推断科目
+ * 知识点 ID 格式：math-xxx / chinese-xxx / english-xxx / default-math 等
+ */
+function inferSubjectFromNodeId(knowledgeNodeId: string): string | undefined {
+  const id = knowledgeNodeId.toLowerCase()
+  if (id.startsWith('math') || id.endsWith('-math')) return 'math'
+  if (id.startsWith('chinese') || id.endsWith('-chinese')) return 'chinese'
+  if (id.startsWith('english') || id.endsWith('-english')) return 'english'
+  return undefined
 }
 
 /**
@@ -144,14 +158,19 @@ export class ClassroomCache {
   /**
    * 列出缓存的课堂
    * @param date 可选，按日期过滤
+   * @param subject 可选，按科目过滤（通过 knowledgeNodeId 前缀推断）
    * @returns 缓存列表项数组
    */
-  async listCachedClassrooms(date?: string): Promise<CacheListItem[]> {
+  async listCachedClassrooms(date?: string, subject?: string): Promise<CacheListItem[]> {
     const items: CacheListItem[] = []
     const entries = await this.store.entries()
 
     for (const [, entry] of entries) {
       if (date && entry.date !== date) continue
+
+      // 按科目过滤：通过 knowledgeNodeId 推断科目
+      const inferredSubject = inferSubjectFromNodeId(entry.knowledgeNodeId)
+      if (subject && inferredSubject && inferredSubject !== subject) continue
 
       // 从 scenes/slides 中提取第一个非空 imageUrl 作为缩略图
       let thumbnailUrl: string | undefined
@@ -176,6 +195,7 @@ export class ClassroomCache {
         classroomTitle: entry.classroom.title,
         cachedAt: entry.cachedAt,
         thumbnailUrl,
+        subject: inferredSubject,
       })
     }
 

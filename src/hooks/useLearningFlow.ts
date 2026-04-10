@@ -267,7 +267,7 @@ export function useLearningFlow(): LearningFlowState {
     subjectRef.current = subject
 
     try {
-      const cachedList = await classroomCacheRef.current!.listCachedClassrooms()
+      const cachedList = await classroomCacheRef.current!.listCachedClassrooms(undefined, subject)
 
       if (cachedList.length > 0) {
         // 有缓存课程 → 展示课程选择器

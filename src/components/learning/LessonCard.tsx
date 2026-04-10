@@ -79,8 +79,8 @@ export function LessonCard({
       style={{
         position: 'relative',
         width: '100%',
-        maxWidth: 220,
-        borderRadius: 28,
+        maxWidth: 160,
+        borderRadius: 22,
         overflow: 'hidden',
         cursor: isLocked ? 'not-allowed' : 'pointer',
         background: '#FFFFFF',
@@ -94,7 +94,7 @@ export function LessonCard({
       {/* 缩略图区域 */}
       <div style={{
         width: '100%',
-        height: 140,
+        height: 100,
         background: gradient,
         display: 'flex',
         alignItems: 'center',
@@ -104,7 +104,7 @@ export function LessonCard({
       }}>
         {showEmoji ? (
           <span style={{
-            fontSize: 56,
+            fontSize: 40,
             filter: isLocked ? 'grayscale(0.6)' : 'none',
             transition: 'filter 0.3s ease',
           }}>
@@ -128,17 +128,17 @@ export function LessonCard({
         {/* 课程序号徽标 */}
         <div style={{
           position: 'absolute',
-          top: 10,
-          left: 10,
-          width: 32,
-          height: 32,
+          top: 8,
+          left: 8,
+          width: 26,
+          height: 26,
           borderRadius: '50%',
           background: isLocked ? '#B8B8B8' : accentColor,
           color: '#FFFFFF',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 15,
+          fontSize: 12,
           fontWeight: 800,
           fontFamily: "'Baloo 2', 'Nunito', sans-serif",
           boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
@@ -153,9 +153,9 @@ export function LessonCard({
             transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
             style={{
               position: 'absolute',
-              top: 10,
-              right: 10,
-              fontSize: 20,
+              top: 8,
+              right: 8,
+              fontSize: 16,
             }}
           >
             ✨
@@ -165,13 +165,13 @@ export function LessonCard({
 
       {/* 标题区域 */}
       <div style={{
-        padding: '14px 16px',
+        padding: '10px 12px',
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
+        gap: 6,
       }}>
         <p style={{
-          fontSize: 15,
+          fontSize: 13,
           fontWeight: 700,
           fontFamily: "'Nunito', 'PingFang SC', sans-serif",
           color: isLocked ? '#B8B8B8' : '#2D3142',
@@ -188,7 +188,7 @@ export function LessonCard({
           <motion.span
             animate={{ x: [0, 4, 0] }}
             transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
-            style={{ fontSize: 16, flexShrink: 0 }}
+            style={{ fontSize: 14, flexShrink: 0 }}
           >
             ▶️
           </motion.span>
@@ -210,11 +210,11 @@ export function LessonCard({
             alignItems: 'center',
             justifyContent: 'center',
             gap: 4,
-            borderRadius: 28,
+            borderRadius: 22,
           }}
         >
           <motion.span
-            style={{ fontSize: 36 }}
+            style={{ fontSize: 28 }}
             animate={{ rotate: [-5, 5, -5] }}
             transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
           >
