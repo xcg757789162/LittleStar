@@ -155,7 +155,7 @@ export function LearningSession() {
       data-testid="learning-session"
       style={{
         minHeight: '100vh',
-        padding: isActive ? '8px' : '24px',
+        padding: isActive ? '0' : '24px',
         background: T.bgGradient,
         fontFamily: T.fontBody,
       }}
@@ -163,7 +163,8 @@ export function LearningSession() {
       {/* 顶部栏 */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        marginBottom: isActive ? '8px' : '24px',
+        marginBottom: isActive ? '0' : '24px',
+        padding: isActive ? '8px 12px' : '0',
       }}>
         <div data-testid="session-progress" style={{
           fontSize: '16px', color: T.textMedium,
@@ -276,7 +277,7 @@ export function LearningSession() {
       {/* 学习中 */}
       {isActive && (
         <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+          display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '0',
         }}>
           {isLoading ? (
             <div style={{

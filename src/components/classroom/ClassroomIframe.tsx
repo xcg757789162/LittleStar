@@ -293,7 +293,7 @@ export function ClassroomIframe({
               backgroundColor: colors.bg,
               borderRadius: '20px',
               zIndex: 10,
-              minHeight: 'calc(100vh - 120px)',
+              minHeight: 'calc(100vh - 56px)',
             }}
           >
             {/* 旋转动画 */}
@@ -369,14 +369,14 @@ export function ClassroomIframe({
         src={iframeSrc}
         onLoad={handleIframeLoad}
         title={`OpenMAIC 课堂: ${classroom.title}`}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-        allow="autoplay; microphone; speaker; fullscreen"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-modals"
+        allow="autoplay *; microphone; fullscreen; web-share"
         style={{
           width: '100%',
-          height: 'calc(100vh - 120px)',
+          height: 'calc(100vh - 56px)',
           border: 'none',
-          borderRadius: '20px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+          borderRadius: '0',
+          boxShadow: 'none',
           backgroundColor: '#fff',
           opacity: loadState === 'loaded' ? 1 : 0,
           transition: 'opacity 0.3s ease',
