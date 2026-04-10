@@ -14,6 +14,7 @@
 
 /** Pipeline 步骤名称枚举值 */
 export const PIPELINE_STEP_NAMES = [
+  'agent-profiles',
   'outlines',
   'scene-content',
   'scene-actions',
@@ -140,16 +141,24 @@ export interface SceneAction {
 /**
  * Agent 信息
  *
- * 对应 OpenMAIC agent-profiles 子 API 返回的教师角色信息
- * （本次 MVP 不实现，预留类型）
+ * 对应 OpenMAIC agent-profiles 子 API 返回的角色信息
+ * preset 模式下由前端构建，auto 模式下由后端生成
  */
 export interface AgentInfo {
-  /** 教师名称 */
+  /** 角色唯一 ID */
+  id?: string
+  /** 角色名称 */
   name: string
-  /** 教师性格描述（可选） */
+  /** 角色图标 emoji（可选） */
+  emoji?: string
+  /** 角色描述（可选） */
+  description?: string
+  /** 角色性格描述（可选，auto 模式返回） */
   personality?: string
-  /** 教师头像 URL（可选） */
+  /** 角色头像 URL（可选） */
   avatar?: string
+  /** MiniMax TTS 音色 voice_id（可选） */
+  voiceId?: string
 }
 
 /**

@@ -66,6 +66,14 @@ export interface ChildSettings {
   enableVideoGeneration: boolean
   /** 课堂 Agent 模式：preset(预设角色) | auto(自动生成) */
   classroomAgentMode: ClassroomAgentMode
+  /** 已选中的学生角色 ID 列表（不含 teacher，teacher 始终启用） */
+  selectedAgents: string[]
+  /** 角色音色映射：角色 ID → voice_id（覆盖默认音色） */
+  agentVoiceMap: Record<string, string>
+  /** 教师音色 voice_id（空字符串表示使用默认） */
+  teacherVoice: string
+  /** 课堂讨论最大轮数（1-10） */
+  maxDiscussionRounds: number
   /** 学生自我介绍（传给 OpenMAIC 的 userBio） */
   selfIntroduction: string
   /** LLM 模型标识（如 'openai:gpt-4o'） */
@@ -81,6 +89,7 @@ export const DEFAULT_ADVANCED_SETTINGS: Pick<ChildSettings,
   | 'enableTTS' | 'ttsProviderId' | 'ttsVoice' | 'ttsSpeed'
   | 'enableImageGeneration' | 'enableVideoGeneration'
   | 'classroomAgentMode' | 'selfIntroduction'
+  | 'selectedAgents' | 'agentVoiceMap' | 'teacherVoice' | 'maxDiscussionRounds'
   | 'llmModel' | 'llmApiKey' | 'llmBaseUrl'
 > = {
   enableTTS: true,
@@ -91,6 +100,10 @@ export const DEFAULT_ADVANCED_SETTINGS: Pick<ChildSettings,
   enableVideoGeneration: false,
   classroomAgentMode: 'preset',
   selfIntroduction: '',
+  selectedAgents: ['assistant', 'showoff', 'curious'],
+  agentVoiceMap: {},
+  teacherVoice: '',
+  maxDiscussionRounds: 3,
   llmModel: '',
   llmApiKey: '',
   llmBaseUrl: '',
@@ -385,3 +398,102 @@ export interface MasterySnapshot {
   /** 平均掌握度 */
   averageMastery: number
 }
+
+// ===== MiniMax 音色与预设角色 =====
+
+/** MiniMax TTS 音色定义 */
+export interface MiniMaxVoice {
+  /** MiniMax 官方 voice_id */
+  id: string
+  /** 中文显示名 */
+  label: string
+  /** 性别分类 */
+  gender: 'male' | 'female' | 'boy' | 'girl'
+}
+
+/** 预设课堂角色定义 */
+export interface PresetAgent {
+  /** 角色唯一 ID */
+  id: string
+  /** 角色名称（中文） */
+  name: string
+  /** 角色图标 */
+  emoji: string
+  /** 角色描述 */
+  description: string
+  /** 默认 MiniMax 音色 voice_id */
+  defaultVoice: string
+  /** 是否为教师角色（教师不可取消） */
+  isTeacher: boolean
+}
+
+/** MiniMax 官方系统音色列表（12 个） */
+export const MINIMAX_VOICES: MiniMaxVoice[] = [
+  // 👧 女声
+  { id: 'female-tianmei', label: '甜美女声', gender: 'female' },
+  { id: 'female-chengshu', label: '成熟女声', gender: 'female' },
+  { id: 'female-shaonv', label: '少女音色', gender: 'female' },
+  { id: 'female-yujie', label: '知性女声', gender: 'female' },
+  { id: 'Chinese (Mandarin)_Sweet_Lady', label: '甜美淑女', gender: 'female' },
+  // 👦 男声
+  { id: 'male-qn-qingse', label: '青涩青年', gender: 'male' },
+  { id: 'male-qn-jingying', label: '精英青年', gender: 'male' },
+  { id: 'male-qn-daxuesheng', label: '大学生音色', gender: 'male' },
+  { id: 'Chinese (Mandarin)_Gentleman', label: '温润男声', gender: 'male' },
+  // 🧒 童声
+  { id: 'clever_boy', label: '聪明男童', gender: 'boy' },
+  { id: 'cute_boy', label: '可爱男童', gender: 'boy' },
+  { id: 'lovely_girl', label: '萌萌女童', gender: 'girl' },
+]
+
+/** 预设课堂角色列表（1 教师 + 5 学生） */
+export const PRESET_AGENTS: PresetAgent[] = [
+  {
+    id: 'teacher',
+    name: 'AI 教师',
+    emoji: '👨‍🏫',
+    description: '主讲教师，引导课堂节奏和知识讲解',
+    defaultVoice: 'female-tianmei',
+    isTeacher: true,
+  },
+  {
+    id: 'assistant',
+    name: 'AI 助教',
+    emoji: '🎯',
+    description: '辅助老师，帮忙补充讲解和引导互动',
+    defaultVoice: 'male-qn-jingying',
+    isTeacher: false,
+  },
+  {
+    id: 'showoff',
+    name: '显眼包',
+    emoji: '🌟',
+    description: '活泼爱表现，经常抢答和分享',
+    defaultVoice: 'clever_boy',
+    isTeacher: false,
+  },
+  {
+    id: 'curious',
+    name: '好奇宝宝',
+    emoji: '🤔',
+    description: '爱提问，追根究底，常问"为什么"',
+    defaultVoice: 'lovely_girl',
+    isTeacher: false,
+  },
+  {
+    id: 'notetaker',
+    name: '笔记员',
+    emoji: '📝',
+    description: '认真记录要点，帮助整理和总结',
+    defaultVoice: 'female-shaonv',
+    isTeacher: false,
+  },
+  {
+    id: 'thinker',
+    name: '思考者',
+    emoji: '💭',
+    description: '深度分析，善于总结规律和对比',
+    defaultVoice: 'Chinese (Mandarin)_Gentleman',
+    isTeacher: false,
+  },
+]
