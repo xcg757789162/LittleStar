@@ -30,14 +30,16 @@ export interface ClassroomIframeProps {
   onComplete: () => void
   /** 答题回调（从 iframe 接收答题数据） */
   onAnswer?: (data: { isCorrect: boolean; selectedAnswer: number; correctAnswer: number }) => void
-  /** iframe 加载超时（毫秒），默认 30000 */
-  loadTimeoutMs?: number
   /** 课堂中已答题数量（用于判断是否可以完成课堂） */
   answerCount?: number
 }
 
 /** iframe 加载状态 */
 type LoadState = 'loading' | 'loaded' | 'error' | 'timeout'
+
+/** 分层超时配置 */
+const SLOW_HINT_MS = 30_000   // 30s: 显示"加载较慢"提示 + 重试按钮（iframe 继续加载）
+const HARD_TIMEOUT_MS = 60_000 // 60s: 标记为超时，停止加载
 
 /** 学科配色 — Sunny Playground 风格 */
 const SUBJECT_COLORS: Record<string, { primary: string; bg: string }> = {
@@ -88,13 +90,14 @@ export function ClassroomIframe({
   subject,
   onComplete,
   onAnswer,
-  loadTimeoutMs = 30000,
   answerCount = 0,
 }: ClassroomIframeProps) {
   const [loadState, setLoadState] = useState<LoadState>('loading')
+  const [showSlowHint, setShowSlowHint] = useState(false) // 30s 后显示"加载较慢"横幅
   const [showCompleteBtn, setShowCompleteBtn] = useState(false)
   const [minTimeReached, setMinTimeReached] = useState(false)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const slowHintRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const iframeLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const colors = SUBJECT_COLORS[subject ?? ''] ?? SUBJECT_COLORS.math
@@ -104,15 +107,24 @@ export function ClassroomIframe({
     ? toEmbedUrl(classroom.classroomUrl)
     : null
 
+  // 清除所有超时计时器（抽取为函数，onReady 和 cleanup 共用）
+  const clearAllTimers = useCallback(() => {
+    if (slowHintRef.current) {
+      clearTimeout(slowHintRef.current)
+      slowHintRef.current = null
+    }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+  }, [])
+
   // postMessage 通信桥
   useClassroomBridge(iframeRef, {
     onReady: () => {
       setLoadState('loaded')
-      // 清除超时计时器
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
+      setShowSlowHint(false)
+      clearAllTimers()
     },
     onQuizAnswer: (data: QuizAnswerPayload) => {
       onAnswer?.({
@@ -126,25 +138,28 @@ export function ClassroomIframe({
     },
     onError: () => {
       setLoadState('error')
+      clearAllTimers()
     },
   }, !!iframeSrc)
 
-  // 超时检测
+  // 分层超时检测：
+  // - 30s (SLOW_HINT_MS): 显示"加载较慢"提示 + 重试按钮（iframe 继续加载）
+  // - 60s (HARD_TIMEOUT_MS): 标记为 timeout，停止等待
   useEffect(() => {
-    if (!iframeSrc) return
+    if (!iframeSrc || loadState !== 'loading') return
 
+    // 第一层：30s 显示慢加载提示
+    slowHintRef.current = setTimeout(() => {
+      setShowSlowHint(true)
+    }, SLOW_HINT_MS)
+
+    // 第二层：60s 硬超时
     timeoutRef.current = setTimeout(() => {
-      if (loadState === 'loading') {
-        setLoadState('timeout')
-      }
-    }, loadTimeoutMs)
+      setLoadState((prev) => (prev === 'loading' ? 'timeout' : prev))
+    }, HARD_TIMEOUT_MS)
 
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-    }
-  }, [iframeSrc, loadTimeoutMs, loadState])
+    return clearAllTimers
+  }, [iframeSrc, loadState, clearAllTimers])
 
   // iframe onLoad 事件（备用 — postMessage ready 信号更可靠）
   const handleIframeLoad = useCallback(() => {
@@ -170,16 +185,18 @@ export function ClassroomIframe({
   //    b) 最小浏览时间已到（60 秒，用于没有答题的纯浏览课堂）
   useEffect(() => {
     if (loadState === 'loaded' && (answerCount > 0 || minTimeReached)) {
-      setShowCompleteBtn(true)
+      const timer = setTimeout(() => setShowCompleteBtn(true), 0)
+      return () => clearTimeout(timer)
     }
   }, [loadState, answerCount, minTimeReached])
 
   // 组件卸载时清理所有计时器
   useEffect(() => {
     return () => {
+      clearAllTimers()
       if (iframeLoadTimerRef.current) clearTimeout(iframeLoadTimerRef.current)
     }
-  }, [])
+  }, [clearAllTimers])
 
   // 无 classroomUrl → 显示错误提示
   if (!iframeSrc) {
@@ -226,6 +243,7 @@ export function ClassroomIframe({
         <button
           onClick={() => {
             setLoadState('loading')
+            setShowSlowHint(false)
             // 强制刷新 iframe
             if (iframeRef.current) {
               iframeRef.current.src = iframeSrc
@@ -253,7 +271,7 @@ export function ClassroomIframe({
       style={{
         position: 'relative',
         width: '100%',
-        maxWidth: '960px',
+        maxWidth: '100%',
         margin: '0 auto',
       }}
     >
@@ -275,7 +293,7 @@ export function ClassroomIframe({
               backgroundColor: colors.bg,
               borderRadius: '20px',
               zIndex: 10,
-              minHeight: '500px',
+              minHeight: 'calc(100vh - 120px)',
             }}
           >
             {/* 旋转动画 */}
@@ -292,6 +310,55 @@ export function ClassroomIframe({
             <p style={{ fontSize: '14px', color: '#999' }}>
               AI 老师正在准备教学内容
             </p>
+
+            {/* 30s 慢加载提示：显示提醒 + 重试按钮，但 iframe 仍在后台继续加载 */}
+            <AnimatePresence>
+              {showSlowHint && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  style={{
+                    marginTop: '12px',
+                    padding: '16px 24px',
+                    borderRadius: '16px',
+                    backgroundColor: '#FFF3E7',
+                    border: '2px solid #FFD6A5',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '10px',
+                  }}
+                >
+                  <p style={{ fontSize: '14px', color: '#E67E22', fontWeight: 600, margin: 0 }}>
+                    ⏳ 加载时间较长，可能是网络较慢
+                  </p>
+                  <button
+                    onClick={() => {
+                      setShowSlowHint(false)
+                      setLoadState('loading')
+                      clearAllTimers()
+                      // 强制刷新 iframe
+                      if (iframeRef.current && iframeSrc) {
+                        iframeRef.current.src = iframeSrc
+                      }
+                    }}
+                    style={{
+                      padding: '8px 20px',
+                      borderRadius: '12px',
+                      border: 'none',
+                      backgroundColor: colors.primary,
+                      color: 'white',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    🔄 重试加载
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
@@ -302,10 +369,11 @@ export function ClassroomIframe({
         src={iframeSrc}
         onLoad={handleIframeLoad}
         title={`OpenMAIC 课堂: ${classroom.title}`}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+        allow="autoplay; microphone; speaker; fullscreen"
         style={{
           width: '100%',
-          height: '680px',
+          height: 'calc(100vh - 120px)',
           border: 'none',
           borderRadius: '20px',
           boxShadow: '0 8px 32px rgba(0,0,0,0.1)',

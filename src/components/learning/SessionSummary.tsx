@@ -20,13 +20,17 @@ const ENCOURAGEMENTS = [
   '为你骄傲！继续闪闪发光吧！',
 ]
 
-/** 明天预告 */
+/** 明天预告列表 */
 const TOMORROW_PREVIEWS = [
   '明天我们会学更有趣的内容哦！',
   '明天还有新的冒险等着你！',
   '明天见！我已经准备好新的挑战了！',
   '好好休息，明天继续探索知识星球！',
 ]
+
+/** 模块加载时预选随机索引（避免 render 期间调用不纯函数） */
+const ENCOURAGE_IDX = Math.floor(Math.random() * ENCOURAGEMENTS.length)
+const TOMORROW_IDX = Math.floor(Math.random() * TOMORROW_PREVIEWS.length)
 
 export interface SessionSummaryProps {
   /** 会话总结数据 */
@@ -54,15 +58,9 @@ export function SessionSummary({
     return 1
   }, [summary.accuracy])
 
-  // 随机鼓励语和明天预告
-  const encouragement = useMemo(
-    () => ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)],
-    [],
-  )
-  const tomorrowPreview = useMemo(
-    () => TOMORROW_PREVIEWS[Math.floor(Math.random() * TOMORROW_PREVIEWS.length)],
-    [],
-  )
+  // 随机鼓励语和明天预告（使用模块级预选索引）
+  const encouragement = ENCOURAGEMENTS[ENCOURAGE_IDX]
+  const tomorrowPreview = TOMORROW_PREVIEWS[TOMORROW_IDX]
 
   // 从数据库加载亲子活动数据
   const { data: allActivities } = useParentActivities()
@@ -77,11 +75,15 @@ export function SessionSummary({
     if (allActivities && allActivities.length > 0) {
       // 随机选一个推荐活动
       const idx = Math.floor(Math.random() * allActivities.length)
-      setRecommendedActivity(allActivities[idx])
-
       // 随机选 2 个线下延伸活动
       const shuffled = [...allActivities].sort(() => Math.random() - 0.5)
-      setExtensionActivities(shuffled.slice(0, 2))
+      const extensions = shuffled.slice(0, 2)
+
+      const timer = setTimeout(() => {
+        setRecommendedActivity(allActivities[idx])
+        setExtensionActivities(extensions)
+      }, 0)
+      return () => clearTimeout(timer)
     }
   }, [allActivities])
 

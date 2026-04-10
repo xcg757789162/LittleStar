@@ -406,10 +406,12 @@ export function useLearningFlow(): LearningFlowState {
 
   /**
    * 停止学习流程
+   * 中途退出时也传递课堂数据给 onSessionEnd，确保学习历史被记录
    */
   const stopFlow = useCallback(() => {
     const stats = useLearningStore.getState().sessionStats
     const subject = subjectRef.current
+    const classroom = currentClassroom // 捕获当前课堂数据
 
     endSession()
     setIsActive(false)
@@ -424,15 +426,16 @@ export function useLearningFlow(): LearningFlowState {
       subject,
     })
 
-    // 异步写入 DB（不阻塞 UI）
+    // 异步写入 DB（传递课堂数据，中途退出也记录学习历史）
     onSessionEnd(subject, {
       questionsCompleted: stats.questionsCompleted,
       correctCount: stats.correctCount,
-    })
-  }, [endSession, onSessionEnd])
+    }, classroom)
+  }, [endSession, onSessionEnd, currentClassroom])
 
   /**
    * 处理答题
+   * 使用 getState() 直接读取最新状态，避免闭包捕获 currentQuestion 导致不必要重渲染
    */
   const handleAnswer = useCallback((isCorrect: boolean) => {
     // 记录到 learningStore
@@ -450,8 +453,8 @@ export function useLearningFlow(): LearningFlowState {
     // 更新已回答计数
     answeredSinceInterstitialRef.current++
 
-    // 异步更新复习调度
-    const question = currentQuestion
+    // 异步更新复习调度 — 使用 getState() 获取最新 currentQuestion（避免 stale closure）
+    const question = useLearningStore.getState().currentQuestion
     if (question) {
       const child = useChildStore.getState().currentChild
       const childId = child?.id ?? 'default'
@@ -481,7 +484,7 @@ export function useLearningFlow(): LearningFlowState {
       // 鼓励语生成失败时使用默认值
       setEncouragement(isCorrect ? '你真棒！' : '加油，再试一次！')
     })
-  }, [recordAnswer, currentQuestion])
+  }, [recordAnswer])
 
   /**
    * 关闭反馈动画，检查是否应继续

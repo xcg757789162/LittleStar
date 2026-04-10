@@ -12,6 +12,7 @@ import { useSoundEffects } from '@/hooks/useSoundEffects'
 import { usePlacementTests } from '@/hooks/queries'
 import { useChildStore } from '@/stores/childStore'
 import { ClassroomIframe } from '@/components/classroom/ClassroomIframe'
+import { SessionSummary } from '@/components/learning/SessionSummary'
 import { FeedbackAnimation } from '@/components/feedback/FeedbackAnimation'
 import { CelebrationAnimation } from '@/components/feedback/CelebrationAnimation'
 import { EncouragementOverlay } from '@/components/feedback/EncouragementOverlay'
@@ -154,7 +155,7 @@ export function LearningSession() {
       data-testid="learning-session"
       style={{
         minHeight: '100vh',
-        padding: '24px',
+        padding: isActive ? '8px' : '24px',
         background: T.bgGradient,
         fontFamily: T.fontBody,
       }}
@@ -162,7 +163,7 @@ export function LearningSession() {
       {/* 顶部栏 */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        marginBottom: '24px',
+        marginBottom: isActive ? '8px' : '24px',
       }}>
         <div data-testid="session-progress" style={{
           fontSize: '16px', color: T.textMedium,
@@ -275,7 +276,7 @@ export function LearningSession() {
       {/* 学习中 */}
       {isActive && (
         <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
         }}>
           {isLoading ? (
             <div style={{
@@ -303,7 +304,6 @@ export function LearningSession() {
                 isCorrect: data.isCorrect,
                 responseTime: 0,
               })}
-              loadTimeoutMs={30000}
               answerCount={classroomAnswerCount}
             />
           ) : (
@@ -424,92 +424,14 @@ export function LearningSession() {
       <CelebrationAnimation visible={showCompleteCelebration} level="complete"
         message="学习完成！你太棒了！🎉" onComplete={handleCompleteCelebrationDone} duration={3500} />
 
-      {/* 会话总结 */}
+      {/* 会话总结 — 复用 SessionSummary 组件 */}
       {isComplete && sessionSummary && !showCompleteCelebration && (
-        <motion.div
-          data-testid="session-summary"
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            gap: '16px', padding: '36px', maxWidth: '400px', margin: '0 auto',
-            backgroundColor: T.cardBg, borderRadius: T.cardRadius,
-            boxShadow: T.cardShadow,
-          }}
-        >
-          <motion.span
-            style={{ fontSize: '64px' }}
-            animate={{ rotate: [0, 10, -10, 0] }}
-            transition={{ repeat: Infinity, duration: 2 }}
-          >
-            🎉
-          </motion.span>
-          <h2 style={{
-            fontSize: '26px', fontWeight: 'bold', fontFamily: T.fontDisplay,
-            background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          }}>
-            学习完成！
-          </h2>
-          <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 1fr',
-            gap: '16px', width: '100%',
-          }}>
-            <div style={{
-              textAlign: 'center', padding: '16px', borderRadius: '18px',
-              background: 'linear-gradient(135deg, #FFE0C2, #FFECD2)',
-            }}>
-              <div style={{
-                fontSize: '34px', fontWeight: 'bold', color: T.sunOrange,
-                fontFamily: T.fontDisplay,
-              }}>
-                {sessionSummary.questionsCompleted}
-              </div>
-              <div style={{ fontSize: '13px', color: T.textMedium }}>完成题数</div>
-            </div>
-            <div style={{
-              textAlign: 'center', padding: '16px', borderRadius: '18px',
-              background: 'linear-gradient(135deg, #C8F7F1, #DEFFF9)',
-            }}>
-              <div style={{ fontSize: '28px', fontWeight: 'bold', color: T.grassGreen }}>
-                {Array.from(
-                  { length: Math.round((sessionSummary.accuracy / 100) * 5) },
-                  (_, i) => (<span key={i}>⭐</span>),
-                )}
-              </div>
-              <div style={{ fontSize: '13px', color: T.textMedium }}>表现</div>
-            </div>
-          </div>
-
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate('/')}
-            style={{
-              marginTop: '12px', padding: '16px 44px',
-              borderRadius: T.btnRadius, border: 'none',
-              background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,
-              color: T.textWhite, fontSize: '18px', fontWeight: 'bold',
-              fontFamily: T.fontDisplay, cursor: 'pointer',
-              boxShadow: '0 6px 20px rgba(255, 140, 66, 0.35)',
-            }}
-          >
-            🏠 回到首页
-          </motion.button>
-
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate('/history')}
-            style={{
-              padding: '12px 32px', borderRadius: '18px',
-              border: `2px solid ${T.sunOrange}`,
-              backgroundColor: T.cardBg, color: T.sunOrange,
-              fontSize: '15px', fontWeight: 'bold',
-              fontFamily: T.fontDisplay, cursor: 'pointer',
-            }}
-          >
-            📖 查看学习记录
-          </motion.button>
-        </motion.div>
+        <SessionSummary
+          summary={sessionSummary}
+          subject={sessionSummary.subject}
+          onGoHome={() => navigate('/')}
+          onViewHistory={() => navigate('/history')}
+        />
       )}
     </div>
   )

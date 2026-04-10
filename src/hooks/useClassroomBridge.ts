@@ -4,6 +4,11 @@
  * 管理 LittleStar ↔ OpenMAIC iframe 之间的 postMessage 双向通信。
  * 监听来自 iframe 的事件（答题、课堂完成、导航等），
  * 并提供向 iframe 发送指令的能力。
+ *
+ * 安全机制：
+ * - origin 白名单校验（支持环境变量配置生产域名）
+ * - event.source 校验（确保消息来自目标 iframe，而非其他窗口）
+ * - payload 运行时结构化校验（防止恶意伪造消息）
  */
 
 import { useEffect, useCallback, useRef, useState } from 'react'
@@ -54,6 +59,69 @@ export interface ErrorPayload {
   code?: string
 }
 
+// ============================================================
+// Payload 运行时校验函数
+// ============================================================
+
+/** 校验 QuizAnswerPayload 结构 */
+function isQuizAnswerPayload(value: unknown): value is QuizAnswerPayload {
+  if (value === null || value === undefined || typeof value !== 'object') return false
+  const obj = value as Record<string, unknown>
+  return (
+    typeof obj.sceneId === 'string' &&
+    typeof obj.questionIndex === 'number' &&
+    typeof obj.selectedAnswer === 'number' &&
+    typeof obj.correctAnswer === 'number' &&
+    typeof obj.isCorrect === 'boolean'
+  )
+}
+
+/** 校验 SceneChangePayload 结构 */
+function isSceneChangePayload(value: unknown): value is SceneChangePayload {
+  if (value === null || value === undefined || typeof value !== 'object') return false
+  const obj = value as Record<string, unknown>
+  return (
+    typeof obj.sceneId === 'string' &&
+    typeof obj.sceneIndex === 'number' &&
+    typeof obj.totalScenes === 'number'
+  )
+}
+
+/** 校验 ErrorPayload 结构 */
+function isErrorPayload(value: unknown): value is ErrorPayload {
+  if (value === null || value === undefined || typeof value !== 'object') return false
+  const obj = value as Record<string, unknown>
+  return (
+    typeof obj.message === 'string' &&
+    (obj.code === undefined || typeof obj.code === 'string')
+  )
+}
+
+// ============================================================
+// 构建 origin 白名单
+// ============================================================
+
+/** 构建允许的 origin 列表（支持环境变量配置） */
+function getAllowedOrigins(): string[] {
+  const origins = [
+    window.location.origin,  // 同源（生产环境）
+  ]
+  // 开发环境允许 Nginx 网关
+  if (import.meta.env.DEV) {
+    origins.push('http://localhost:8080')
+  }
+  // 支持通过环境变量配置额外的生产环境 origin
+  const extraOrigin = import.meta.env.VITE_OPENMAIC_ORIGIN
+  if (extraOrigin && typeof extraOrigin === 'string') {
+    origins.push(extraOrigin)
+  }
+  return origins
+}
+
+// ============================================================
+// Hook 类型
+// ============================================================
+
 /** Bridge 事件回调 */
 export interface ClassroomBridgeCallbacks {
   /** iframe 课堂加载就绪 */
@@ -99,19 +167,36 @@ export function useClassroomBridge(
   useEffect(() => {
     if (!enabled) return
 
+    const allowedOrigins = getAllowedOrigins()
+
     const handleMessage = (event: MessageEvent) => {
-      // 安全检查：只接受来自 Nginx 网关或同源的消息
-      // iframe 直接指向 Nginx (localhost:8080)，宿主在 Vite (localhost:5173)
-      const allowedOrigins = [
-        window.location.origin,                 // 同源（生产环境）
-        'http://localhost:8080',                // Nginx 网关（开发环境）
-      ]
+      // 安全检查 1：origin 白名单
       if (!allowedOrigins.includes(event.origin)) return
 
+      // 安全检查 2：event.source 必须来自目标 iframe
+      // 如果 iframeRef.current 为 null（iframe 尚未挂载或已卸载），
+      // 记录警告并拒绝消息，防止其他窗口伪造消息
+      const iframe = iframeRef.current
+      if (!iframe?.contentWindow) {
+        console.warn(
+          '[useClassroomBridge] 收到消息但 iframe 未就绪，已忽略。origin:',
+          event.origin,
+        )
+        return
+      }
+      if (event.source !== iframe.contentWindow) {
+        console.warn(
+          '[useClassroomBridge] 消息 source 不匹配目标 iframe，已拒绝。origin:',
+          event.origin,
+        )
+        return
+      }
+
+      // 基础结构校验
       const data = event.data as IframeMessage | undefined
       if (!data || typeof data.type !== 'string') return
 
-      // 检查消息是否来自我们的 iframe
+      // 检查消息是否来自我们的 iframe（namespace 前缀）
       if (!data.type.startsWith('classroom:')) return
 
       switch (data.type) {
@@ -121,7 +206,12 @@ export function useClassroomBridge(
           break
 
         case 'classroom:quiz-answer':
-          callbacksRef.current.onQuizAnswer?.(data.payload as QuizAnswerPayload)
+          // 运行时校验 payload 结构
+          if (isQuizAnswerPayload(data.payload)) {
+            callbacksRef.current.onQuizAnswer?.(data.payload)
+          } else {
+            console.warn('[useClassroomBridge] quiz-answer payload 校验失败:', data.payload)
+          }
           break
 
         case 'classroom:complete':
@@ -129,11 +219,21 @@ export function useClassroomBridge(
           break
 
         case 'classroom:scene-change':
-          callbacksRef.current.onSceneChange?.(data.payload as SceneChangePayload)
+          // 运行时校验 payload 结构
+          if (isSceneChangePayload(data.payload)) {
+            callbacksRef.current.onSceneChange?.(data.payload)
+          } else {
+            console.warn('[useClassroomBridge] scene-change payload 校验失败:', data.payload)
+          }
           break
 
         case 'classroom:error':
-          callbacksRef.current.onError?.(data.payload as ErrorPayload)
+          // 运行时校验 payload 结构
+          if (isErrorPayload(data.payload)) {
+            callbacksRef.current.onError?.(data.payload)
+          } else {
+            console.warn('[useClassroomBridge] error payload 校验失败:', data.payload)
+          }
           break
       }
     }
@@ -144,18 +244,22 @@ export function useClassroomBridge(
       window.removeEventListener('message', handleMessage)
       setIsReady(false)
     }
-  }, [enabled])
+  }, [enabled, iframeRef])
 
   // 向 iframe 发送指令
   const sendCommand = useCallback(
     (type: HostCommandType, payload?: unknown) => {
       const iframe = iframeRef.current
-      if (!iframe?.contentWindow) return
+      if (!iframe?.contentWindow) {
+        console.warn('[useClassroomBridge] 无法发送指令：iframe 未就绪')
+        return
+      }
 
       // iframe 在开发环境指向 Nginx (localhost:8080)，生产环境同源
+      // 支持通过环境变量配置生产域名
       const targetOrigin = import.meta.env.DEV
         ? 'http://localhost:8080'
-        : window.location.origin
+        : (import.meta.env.VITE_OPENMAIC_ORIGIN || window.location.origin)
 
       iframe.contentWindow.postMessage(
         { type, payload },
