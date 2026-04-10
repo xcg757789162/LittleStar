@@ -79,7 +79,8 @@ export function LearningHistory() {
       const params: { childId: string; subject?: Subject; limit?: number } = { childId, limit: 100 }
       if (activeTab !== 'all') params.subject = activeTab
       const items = await service.getHistory(params)
-      setHistoryItems(items)
+      // 双重保险：前端过滤掉无实质答题的记录（防御历史脏数据）
+      setHistoryItems(items.filter(item => item.questionsCompleted > 0))
     } catch (err) {
       console.error('Failed to load history:', err)
       setHistoryItems([])
