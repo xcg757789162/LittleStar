@@ -31,10 +31,11 @@ describe('Pipeline Types', () => {
       expect(PIPELINE_STEP_NAMES).toContain('scene-actions')
       expect(PIPELINE_STEP_NAMES).toContain('tts')
       expect(PIPELINE_STEP_NAMES).toContain('assembly')
+      expect(PIPELINE_STEP_NAMES).toContain('agent-profiles')
     })
 
-    it('should have exactly 5 steps', () => {
-      expect(PIPELINE_STEP_NAMES).toHaveLength(5)
+    it('should have exactly 6 steps', () => {
+      expect(PIPELINE_STEP_NAMES).toHaveLength(6)
     })
   })
 

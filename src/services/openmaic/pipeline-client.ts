@@ -22,6 +22,7 @@ import type {
   PipelineCallbacks,
   PipelineProgress,
   PipelineStepName,
+  AgentInfo,
 } from './pipeline-types'
 import { isSceneOutline } from './pipeline-types'
 import type { Classroom, Scene, Slide } from './types'
@@ -188,6 +189,33 @@ export class OpenMAICPipelineClient {
     }
   }
 
+  /**
+   * 生成课堂角色（auto 模式）
+   *
+   * 调用 `/api/generate/agent-profiles`，让后端根据课程需求自动生成角色列表。
+   *
+   * @param requirements 用户需求
+   * @param headers HTTP Headers（含 x-model, x-api-key 等）
+   * @returns AgentInfo 数组（含 voiceId）
+   */
+  async generateAgentProfiles(
+    requirements: UserRequirements,
+    headers: Record<string, string>,
+  ): Promise<AgentInfo[]> {
+    const data = await this.fetchWithRetry<AgentInfo[]>(
+      `${this.baseUrl}/api/generate/agent-profiles`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+        body: JSON.stringify(requirements),
+      },
+    )
+    return data
+  }
+
   // ============================================================
   // 编排方法
   // ============================================================
@@ -203,6 +231,14 @@ export class OpenMAICPipelineClient {
    */
   async runFullPipeline(input: PipelineInput): Promise<Classroom> {
     const { requirements, headers, callbacks } = input
+
+    // Step 0: auto 模式下先获取 AI 生成的角色列表
+    if (headers['x-agent-mode'] === 'auto') {
+      this.reportProgress(callbacks, 'agent-profiles', 2, '正在生成课堂角色...')
+      const agentProfiles = await this.generateAgentProfiles(requirements, headers)
+      headers['x-agent-profiles'] = JSON.stringify(agentProfiles)
+      this.reportProgress(callbacks, 'agent-profiles', 5, `角色生成完成，共 ${agentProfiles.length} 个角色`)
+    }
 
     // Step 1: 生成大纲
     this.reportProgress(callbacks, 'outlines', 5, '正在生成场景大纲...')

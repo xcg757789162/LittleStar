@@ -15,9 +15,13 @@
  *   enableImageGen    → x-image-generation-enabled
  *   enableVideoGen    → x-video-generation-enabled
  *   classroomAgentMode → x-agent-mode
+ *   [preset 模式]     → x-agent-profiles   (JSON, 角色+音色)
+ *   teacherVoice      → x-teacher-voice
+ *   maxDiscussionRounds → x-max-discussion-rounds
  */
 
 import type { ChildSettings } from '@/types/models'
+import { PRESET_AGENTS } from '@/types/models'
 
 /**
  * 从 ChildSettings 构建 OpenMAIC 子 API 所需的 HTTP Headers
@@ -70,5 +74,61 @@ export function buildHeadersFromSettings(
   // Agent 模式
   headers['x-agent-mode'] = settings.classroomAgentMode
 
+  // === 角色配置 Headers（新增） ===
+
+  // x-agent-profiles：仅 preset 模式下发送
+  if (settings.classroomAgentMode === 'preset') {
+    headers['x-agent-profiles'] = buildAgentProfilesHeader(settings)
+  }
+
+  // x-teacher-voice：始终发送（fallback 到 teacher 默认音色）
+  const teacherAgent = PRESET_AGENTS.find(a => a.id === 'teacher')
+  headers['x-teacher-voice'] = settings.teacherVoice || teacherAgent?.defaultVoice || 'female-tianmei'
+
+  // x-max-discussion-rounds：始终发送
+  headers['x-max-discussion-rounds'] = String(settings.maxDiscussionRounds)
+
   return headers
+}
+
+/**
+ * 构建 x-agent-profiles Header 的 JSON 值
+ *
+ * preset 模式下，组装 teacher + selectedAgents 的角色列表，
+ * voiceId 优先取 agentVoiceMap，fallback 到角色的 defaultVoice。
+ */
+function buildAgentProfilesHeader(settings: ChildSettings): string {
+  const profiles: Array<{
+    id: string
+    name: string
+    emoji: string
+    description: string
+    voiceId: string
+  }> = []
+
+  // 1. 始终包含教师
+  const teacher = PRESET_AGENTS.find(a => a.id === 'teacher')!
+  profiles.push({
+    id: teacher.id,
+    name: teacher.name,
+    emoji: teacher.emoji,
+    description: teacher.description,
+    voiceId: settings.teacherVoice || teacher.defaultVoice,
+  })
+
+  // 2. 包含已勾选的学生角色
+  for (const agentId of settings.selectedAgents) {
+    const agent = PRESET_AGENTS.find(a => a.id === agentId)
+    if (agent) {
+      profiles.push({
+        id: agent.id,
+        name: agent.name,
+        emoji: agent.emoji,
+        description: agent.description,
+        voiceId: settings.agentVoiceMap[agentId] || agent.defaultVoice,
+      })
+    }
+  }
+
+  return JSON.stringify(profiles)
 }

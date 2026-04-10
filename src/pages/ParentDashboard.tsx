@@ -16,7 +16,7 @@ import { OpenMAICClient } from '@/services/openmaic/client'
 import { PinVerification } from '@/components/parent/PinVerification'
 
 import type { Subject, DailySession, KnowledgeNode, MasteryRecord, ClassroomAgentMode } from '@/types/models'
-import { DEFAULT_ADVANCED_SETTINGS } from '@/types/models'
+import { DEFAULT_ADVANCED_SETTINGS, PRESET_AGENTS, MINIMAX_VOICES } from '@/types/models'
 
 /* ═══════════════════════════════════════════
    设计 Token
@@ -182,6 +182,10 @@ export function ParentDashboard() {
       enableImageGeneration: childSettings.enableImageGeneration ?? DEFAULT_ADVANCED_SETTINGS.enableImageGeneration,
       enableVideoGeneration: childSettings.enableVideoGeneration ?? DEFAULT_ADVANCED_SETTINGS.enableVideoGeneration,
       classroomAgentMode: childSettings.classroomAgentMode ?? DEFAULT_ADVANCED_SETTINGS.classroomAgentMode,
+      selectedAgents: childSettings.selectedAgents ?? DEFAULT_ADVANCED_SETTINGS.selectedAgents,
+      agentVoiceMap: childSettings.agentVoiceMap ?? DEFAULT_ADVANCED_SETTINGS.agentVoiceMap,
+      teacherVoice: childSettings.teacherVoice ?? DEFAULT_ADVANCED_SETTINGS.teacherVoice,
+      maxDiscussionRounds: childSettings.maxDiscussionRounds ?? DEFAULT_ADVANCED_SETTINGS.maxDiscussionRounds,
       selfIntroduction: childSettings.selfIntroduction ?? DEFAULT_ADVANCED_SETTINGS.selfIntroduction,
       llmModel: childSettings.llmModel ?? DEFAULT_ADVANCED_SETTINGS.llmModel,
       llmApiKey: childSettings.llmApiKey ?? DEFAULT_ADVANCED_SETTINGS.llmApiKey,
@@ -1060,7 +1064,197 @@ export function ParentDashboard() {
                   </div>
                 </div>
 
-                {/* 学生自我介绍 */}
+                {/* 角色配置面板 — 根据 agentMode 显示不同内容 */}
+                {advancedSettings.classroomAgentMode === 'preset' ? (
+                  <div
+                    data-testid="agent-config-preset-panel"
+                    style={{
+                      padding: '16px', borderRadius: '16px',
+                      border: '1.5px solid #FFE0C2', backgroundColor: '#FFFCF8',
+                    }}
+                  >
+                    <p style={{ fontSize: '14px', fontWeight: 'bold', color: T.sunOrange, margin: '0 0 12px' }}>
+                      📋 角色配置
+                    </p>
+
+                    {/* 教师行 */}
+                    {(() => {
+                      const teacher = PRESET_AGENTS.find(a => a.id === 'teacher')!
+                      return (
+                        <div
+                          data-testid="agent-row-teacher"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '10px',
+                            padding: '10px 12px', borderRadius: '12px',
+                            backgroundColor: '#FFF3E7', marginBottom: '8px',
+                          }}
+                        >
+                          <span style={{ fontSize: '22px' }}>{teacher.emoji}</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '13px', fontWeight: 'bold', color: T.textDark }}>{teacher.name}</div>
+                            <div style={{ fontSize: '11px', color: T.textLight }}>{teacher.description}</div>
+                          </div>
+                          <span style={{
+                            fontSize: '11px', color: T.sunOrange, fontWeight: 'bold',
+                            padding: '2px 8px', borderRadius: '8px',
+                            backgroundColor: '#FFE8D6',
+                          }}>必选</span>
+                          <select
+                            data-testid="agent-voice-teacher"
+                            value={advancedSettings.teacherVoice || teacher.defaultVoice}
+                            onChange={(e) => updateAdvanced('teacherVoice', e.target.value)}
+                            style={{
+                              fontSize: '12px', padding: '4px 8px', borderRadius: '8px',
+                              border: '1px solid #FFE0C2', backgroundColor: '#FFFFFF',
+                              color: T.textDark, cursor: 'pointer', maxWidth: '120px',
+                            }}
+                          >
+                            {MINIMAX_VOICES.map(v => (
+                              <option key={v.id} value={v.id}>{v.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )
+                    })()}
+
+                    {/* 分隔线 */}
+                    <div style={{
+                      textAlign: 'center', fontSize: '12px', color: T.textLight,
+                      margin: '10px 0', borderTop: '1px dashed #FFE0C2',
+                      paddingTop: '10px',
+                    }}>
+                      ── 课堂同学 ──
+                    </div>
+
+                    {/* 学生角色列表 */}
+                    {PRESET_AGENTS.filter(a => !a.isTeacher).map(agent => {
+                      const isSelected = advancedSettings.selectedAgents.includes(agent.id)
+                      return (
+                        <div
+                          key={agent.id}
+                          data-testid={`agent-row-${agent.id}`}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '10px',
+                            padding: '10px 12px', borderRadius: '12px',
+                            backgroundColor: isSelected ? '#FFF8F0' : '#FAFAFA',
+                            marginBottom: '6px',
+                            border: `1px solid ${isSelected ? '#FFE0C2' : '#F0F0F0'}`,
+                            opacity: isSelected ? 1 : 0.7,
+                            transition: 'all 0.2s ease',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            data-testid={`agent-checkbox-${agent.id}`}
+                            checked={isSelected}
+                            onChange={(e) => {
+                              const newSelected = e.target.checked
+                                ? [...advancedSettings.selectedAgents, agent.id]
+                                : advancedSettings.selectedAgents.filter((id: string) => id !== agent.id)
+                              updateAdvanced('selectedAgents', newSelected)
+                            }}
+                            style={{ width: '18px', height: '18px', accentColor: T.sunOrange, cursor: 'pointer' }}
+                          />
+                          <span style={{ fontSize: '22px' }}>{agent.emoji}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '13px', fontWeight: 'bold', color: T.textDark }}>{agent.name}</div>
+                            <div style={{ fontSize: '11px', color: T.textLight, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{agent.description}</div>
+                          </div>
+                          {isSelected && (
+                            <select
+                              data-testid={`agent-voice-${agent.id}`}
+                              value={advancedSettings.agentVoiceMap[agent.id] || agent.defaultVoice}
+                              onChange={(e) => {
+                                updateAdvanced('agentVoiceMap', {
+                                  ...advancedSettings.agentVoiceMap,
+                                  [agent.id]: e.target.value,
+                                })
+                              }}
+                              style={{
+                                fontSize: '12px', padding: '4px 8px', borderRadius: '8px',
+                                border: '1px solid #FFE0C2', backgroundColor: '#FFFFFF',
+                                color: T.textDark, cursor: 'pointer', maxWidth: '120px',
+                              }}
+                            >
+                              {MINIMAX_VOICES.map(v => (
+                                <option key={v.id} value={v.id}>{v.label}</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      )
+                    })}
+
+                    {/* 讨论轮数 */}
+                    <div
+                      data-testid="discussion-rounds-row"
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px', borderRadius: '12px',
+                        backgroundColor: '#FFF8F0', marginTop: '10px',
+                        border: '1px solid #FFE0C2',
+                      }}
+                    >
+                      <span style={{ fontSize: '13px', fontWeight: 'bold', color: T.textDark }}>
+                        💬 讨论轮数
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <motion.button
+                          data-testid="discussion-rounds-minus"
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => {
+                            const val = Math.max(1, advancedSettings.maxDiscussionRounds - 1)
+                            updateAdvanced('maxDiscussionRounds', val)
+                          }}
+                          style={{
+                            width: '28px', height: '28px', borderRadius: '50%',
+                            border: '1.5px solid #FFE0C2', backgroundColor: '#FFFFFF',
+                            cursor: 'pointer', fontSize: '16px', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center', color: T.sunOrange,
+                          }}
+                        >
+                          −
+                        </motion.button>
+                        <span
+                          data-testid="discussion-rounds-value"
+                          style={{ fontSize: '16px', fontWeight: 'bold', color: T.sunOrange, minWidth: '24px', textAlign: 'center' }}
+                        >
+                          {advancedSettings.maxDiscussionRounds}
+                        </span>
+                        <motion.button
+                          data-testid="discussion-rounds-plus"
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => {
+                            const val = Math.min(10, advancedSettings.maxDiscussionRounds + 1)
+                            updateAdvanced('maxDiscussionRounds', val)
+                          }}
+                          style={{
+                            width: '28px', height: '28px', borderRadius: '50%',
+                            border: '1.5px solid #FFE0C2', backgroundColor: '#FFFFFF',
+                            cursor: 'pointer', fontSize: '16px', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center', color: T.sunOrange,
+                          }}
+                        >
+                          +
+                        </motion.button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    data-testid="agent-config-auto-panel"
+                    style={{
+                      padding: '16px', borderRadius: '16px',
+                      border: '1.5px solid #D4E8FF', backgroundColor: '#F8FBFF',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <span style={{ fontSize: '24px' }}>💡</span>
+                    <p style={{ fontSize: '13px', color: T.textMedium, margin: '8px 0 0' }}>
+                      自动模式下，AI 将根据课程内容自动创建最合适的课堂角色
+                    </p>
+                  </div>
+                )}
                 <div style={{
                   padding: '16px', borderRadius: '16px',
                   border: '1.5px solid #FFDEE9', backgroundColor: '#FFFBFC',
