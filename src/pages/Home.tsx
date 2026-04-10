@@ -370,6 +370,17 @@ export function Home() {
     return () => clearInterval(interval)
   }, [preGenStatus, refreshCache])
 
+  // 课堂完成事件：直接刷新缓存数量（补充 preGenStatus 变化的间接刷新）
+  useEffect(() => {
+    const handleClassroomCompleted = () => {
+      // 延迟 2 秒刷新，等待缓存删除操作完成
+      setTimeout(() => void refreshCache(), 2000)
+    }
+
+    window.addEventListener('classroom-completed', handleClassroomCompleted)
+    return () => window.removeEventListener('classroom-completed', handleClassroomCompleted)
+  }, [refreshCache])
+
   const greeting = getGreeting(currentChild?.name)
 
   // ═══════════════ 加载中 ═══════════════

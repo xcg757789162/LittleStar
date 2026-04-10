@@ -11,6 +11,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import type { Slide } from '@/services/openmaic/types'
 import { FeedbackAnimation, type FeedbackType } from '@/components/feedback/FeedbackAnimation'
+import { resolveMediaUrl } from '@/utils/media-url'
 
 /** 答题回调数据 */
 export interface QuizAnswerData {
@@ -43,8 +44,9 @@ export function QuizSlide({ slide, onAnswer, onAudioPlay }: QuizSlideProps) {
 
   // TTS 触发
   useEffect(() => {
-    if (slide.audioUrl && onAudioPlay) {
-      onAudioPlay(slide.audioUrl)
+    const audioSrc = resolveMediaUrl(slide.audioUrl)
+    if (audioSrc && onAudioPlay) {
+      onAudioPlay(audioSrc)
     }
   }, [slide.audioUrl, onAudioPlay])
 
@@ -135,7 +137,7 @@ export function QuizSlide({ slide, onAnswer, onAudioPlay }: QuizSlideProps) {
       {imageUrl && (
         <div style={{ borderRadius: '16px', overflow: 'hidden', maxWidth: '60%' }}>
           <img
-            src={imageUrl}
+            src={resolveMediaUrl(imageUrl)}
             alt={question}
             style={{ width: '100%', height: 'auto', display: 'block' }}
           />

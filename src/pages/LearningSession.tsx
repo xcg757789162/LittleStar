@@ -9,6 +9,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useLearningFlow } from '@/hooks/useLearningFlow'
 import { useSoundEffects } from '@/hooks/useSoundEffects'
+import { useAudioActivation } from '@/hooks/useAudioActivation'
 import { usePlacementTests } from '@/hooks/queries'
 import { useChildStore } from '@/stores/childStore'
 import { ClassroomIframe } from '@/components/classroom/ClassroomIframe'
@@ -16,6 +17,7 @@ import { SessionSummary } from '@/components/learning/SessionSummary'
 import { FeedbackAnimation } from '@/components/feedback/FeedbackAnimation'
 import { CelebrationAnimation } from '@/components/feedback/CelebrationAnimation'
 import { EncouragementOverlay } from '@/components/feedback/EncouragementOverlay'
+import { LessonCard } from '@/components/learning/LessonCard'
 import type { CelebrationLevel } from '@/components/feedback/CelebrationAnimation'
 import type { Subject } from '@/types/models'
 import type { ReLearnMode } from '@/services/review-learning'
@@ -111,11 +113,14 @@ export function LearningSession() {
     isActive, isLoading, showFeedback, feedbackType,
     isComplete, sessionSummary, encouragement,
     currentClassroom, classroomAnswerCount,
-    startFlow, stopFlow,
+    showLessonPicker, cachedLessons,
+    loadCachedLessons, startLesson,
+    startReview, stopFlow,
     handleClassroomAnswer, handleClassroomComplete, dismissFeedback,
   } = useLearningFlow()
 
   const { playLevelUp } = useSoundEffects()
+  const { activateAudio } = useAudioActivation()
 
   useEffect(() => {
     if (
@@ -123,16 +128,23 @@ export function LearningSession() {
       reviewState.subject && !reviewInitRef.current
     ) {
       reviewInitRef.current = true
-      void startFlow(reviewState.subject)
+      void startReview({
+        mode: reviewState.reviewMode,
+        subject: reviewState.subject,
+        historyId: reviewState.historyId,
+        knowledgeNodeId: reviewState.knowledgeNodeId,
+      })
     }
-  }, [reviewState, startFlow])
+  }, [reviewState, startReview])
 
   const handleStart = useCallback(async () => {
     if (selectedSubject) {
+      // 在用户点击的同步调用栈中预激活 AudioContext（design.md D2）
+      activateAudio()
       consecutiveCorrectRef.current = 0
-      await startFlow(selectedSubject)
+      await loadCachedLessons(selectedSubject)
     }
-  }, [selectedSubject, startFlow])
+  }, [selectedSubject, loadCachedLessons, activateAudio])
 
   const handleExit = useCallback(() => {
     if (isActive) stopFlow()
@@ -171,7 +183,9 @@ export function LearningSession() {
           fontFamily: T.fontDisplay, fontWeight: 600,
         }}>
           {isActive
-            ? `🌟 正在学习 ${SUBJECTS.find((s) => s.key === selectedSubject)?.label ?? ''}`
+            ? showLessonPicker
+              ? '📚 选择课程'
+              : `🌟 正在学习 ${SUBJECTS.find((s) => s.key === selectedSubject)?.label ?? ''}`
             : isComplete
               ? '🎉 学习完成！'
               : '🌈 选择要学习的科目'}
@@ -292,8 +306,125 @@ export function LearningSession() {
                 🌟
               </motion.span>
               <p style={{ fontSize: '18px', color: T.textMedium, fontFamily: T.fontDisplay }}>
-                正在准备题目...
+                正在准备课程...
               </p>
+            </div>
+          ) : showLessonPicker ? (
+            /* ═══ 课程选择器视图 ═══ */
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              padding: '24px 20px', gap: '24px',
+            }}>
+              {/* 标题区域 */}
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={{ textAlign: 'center' }}
+              >
+                <h2 style={{
+                  fontSize: '24px', fontWeight: 800, color: T.textDark,
+                  fontFamily: T.fontDisplay, margin: '0 0 6px 0',
+                }}>
+                  📚 今日课程
+                </h2>
+                <p style={{
+                  fontSize: '14px', color: T.textMedium,
+                  fontFamily: T.fontBody, margin: 0,
+                }}>
+                  按顺序完成课程，解锁下一课 ✨
+                </p>
+              </motion.div>
+
+              {/* 课程卡片网格 */}
+              {cachedLessons.length > 0 ? (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                  gap: '20px',
+                  width: '100%',
+                  maxWidth: '560px',
+                  justifyItems: 'center',
+                }}>
+                  {cachedLessons.map((lesson, idx) => (
+                    <LessonCard
+                      key={`${lesson.knowledgeNodeId}::${lesson.date}`}
+                      title={lesson.classroomTitle}
+                      thumbnailUrl={lesson.thumbnailUrl}
+                      subject={selectedSubject ?? 'english'}
+                      isLocked={idx > 0}
+                      index={idx}
+                      onTap={() => startLesson(lesson.knowledgeNodeId, lesson.date)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                /* 空缓存提示 */
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    gap: '16px', padding: '48px 32px',
+                    background: T.cardBg, borderRadius: T.cardRadius,
+                    boxShadow: T.cardShadow, maxWidth: '400px', width: '100%',
+                  }}
+                >
+                  <span style={{ fontSize: '56px' }}>🌱</span>
+                  <p style={{
+                    fontSize: '18px', fontWeight: 700, color: T.textDark,
+                    fontFamily: T.fontDisplay, textAlign: 'center', margin: 0,
+                  }}>
+                    课程准备中...
+                  </p>
+                  <p style={{
+                    fontSize: '14px', color: T.textLight,
+                    fontFamily: T.fontBody, textAlign: 'center', margin: 0,
+                  }}>
+                    AI 老师正在为你准备课程，请稍等片刻再试
+                  </p>
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => selectedSubject && loadCachedLessons(selectedSubject)}
+                      style={{
+                        padding: '12px 32px', borderRadius: T.btnRadius, border: 'none',
+                        background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,
+                        color: T.textWhite, fontSize: '16px', fontWeight: 'bold',
+                        fontFamily: T.fontDisplay, cursor: 'pointer',
+                        boxShadow: '0 6px 20px rgba(255, 140, 66, 0.3)',
+                      }}
+                    >
+                      🔄 重新加载
+                    </motion.button>
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleExit}
+                      style={{
+                        padding: '12px 32px', borderRadius: '18px',
+                        border: '2px solid #FFE8D6', backgroundColor: T.cardBg,
+                        fontSize: '16px', cursor: 'pointer', color: T.textMedium,
+                        fontFamily: T.fontBody,
+                      }}
+                    >
+                      返回首页
+                    </motion.button>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* 返回按钮 */}
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={handleExit}
+                style={{
+                  padding: '10px 28px', borderRadius: '16px',
+                  border: '2px solid #FFE8D6', backgroundColor: T.cardBg,
+                  fontSize: '14px', cursor: 'pointer', color: T.textMedium,
+                  fontFamily: T.fontBody, fontWeight: 600, marginTop: '8px',
+                }}
+              >
+                ← 返回首页
+              </motion.button>
             </div>
           ) : currentClassroom ? (
             <ClassroomIframe
@@ -364,7 +495,7 @@ export function LearningSession() {
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <motion.button
                       whileTap={{ scale: 0.95 }}
-                      onClick={() => selectedSubject && startFlow(selectedSubject)}
+                      onClick={() => selectedSubject && loadCachedLessons(selectedSubject)}
                       style={{
                         padding: '12px 32px', borderRadius: T.btnRadius, border: 'none',
                         background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,

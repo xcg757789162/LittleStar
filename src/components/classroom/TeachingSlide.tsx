@@ -9,6 +9,7 @@
 
 import { useEffect } from 'react'
 import type { Slide } from '@/services/openmaic/types'
+import { resolveMediaUrl } from '@/utils/media-url'
 
 export interface TeachingSlideProps {
   /** 幻灯片数据 */
@@ -20,8 +21,9 @@ export interface TeachingSlideProps {
 export function TeachingSlide({ slide, onAudioPlay }: TeachingSlideProps) {
   // 自动触发 TTS
   useEffect(() => {
-    if (slide.audioUrl && onAudioPlay) {
-      onAudioPlay(slide.audioUrl)
+    const audioSrc = resolveMediaUrl(slide.audioUrl)
+    if (audioSrc && onAudioPlay) {
+      onAudioPlay(audioSrc)
     }
   }, [slide.audioUrl, onAudioPlay])
 
@@ -63,7 +65,7 @@ export function TeachingSlide({ slide, onAudioPlay }: TeachingSlideProps) {
           }}
         >
           <img
-            src={slide.imageUrl}
+            src={resolveMediaUrl(slide.imageUrl)}
             alt={slide.title ?? '教学图片'}
             style={{
               width: '100%',

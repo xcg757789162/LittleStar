@@ -15,7 +15,7 @@ import { GradeUnlockEngine } from '@/engine/grade-unlock-engine'
 import { generateDailySnapshot } from '@/engine/mastery-snapshot'
 import { ReviewManager } from '@/engine/review-manager'
 import { RuleEngine } from '@/engine/rule-engine'
-import { ClassroomCache } from '@/services/openmaic/cache'
+import { ClassroomCache, type CacheListItem } from '@/services/openmaic/cache'
 import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
 import { DynamicAdjuster } from '@/services/lesson-planner'
 import { useLearningStore } from '@/stores/learningStore'
@@ -99,8 +99,23 @@ export interface LearningFlowState {
   isCacheEmpty: boolean
   /** 课堂答题计数 */
   classroomAnswerCount: number
+  /** 是否显示课程选择器 */
+  showLessonPicker: boolean
+  /** 缓存课程列表 */
+  cachedLessons: CacheListItem[]
   /** 启动学习流程 */
   startFlow: (subject: Subject) => Promise<void>
+  /** 加载缓存课程列表（展示课程选择器） */
+  loadCachedLessons: (subject: Subject) => Promise<void>
+  /** 从课程列表选择一节课进入课堂 */
+  startLesson: (knowledgeNodeId: string, date: string) => Promise<void>
+  /** 启动复习/重学流程 */
+  startReview: (params: {
+    mode: 'quick-review' | 'deep-relearn'
+    subject: Subject
+    historyId?: string
+    knowledgeNodeId?: string
+  }) => Promise<void>
   /** 停止学习流程 */
   stopFlow: () => void
   /** 处理答题（旧流程） */
@@ -130,6 +145,10 @@ export function useLearningFlow(): LearningFlowState {
   const [currentClassroom, setCurrentClassroom] = useState<Classroom | null>(null)
   const [isCacheEmpty, setIsCacheEmpty] = useState(false)
   const [classroomAnswerCount, setClassroomAnswerCount] = useState(0)
+
+  // 课程选择器状态
+  const [showLessonPicker, setShowLessonPicker] = useState(false)
+  const [cachedLessons, setCachedLessons] = useState<CacheListItem[]>([])
 
   // 引擎实例（useRef 避免重复创建）
   const reviewManagerRef = useRef(new ReviewManager())
@@ -230,6 +249,99 @@ export function useLearningFlow(): LearningFlowState {
       setIsLoading(false)
     }
   }, [startSession])
+
+  /**
+   * 加载缓存课程列表（展示课程选择器）
+   * 不直接进入课堂，而是展示可选课程列表
+   */
+  const loadCachedLessons = useCallback(async (subject: Subject) => {
+    setIsLoading(true)
+    setIsComplete(false)
+    setSessionSummary(null)
+    setCurrentInterstitial(null)
+    setCurrentClassroom(null)
+    setIsCacheEmpty(false)
+    setClassroomAnswerCount(0)
+    setShowLessonPicker(false)
+    setCachedLessons([])
+    subjectRef.current = subject
+
+    try {
+      const cachedList = await classroomCacheRef.current!.listCachedClassrooms()
+
+      if (cachedList.length > 0) {
+        // 有缓存课程 → 展示课程选择器
+        setCachedLessons(cachedList)
+        setShowLessonPicker(true)
+        setIsActive(true)
+      } else {
+        // 无缓存 → 展示课程选择器的空状态（而非走兜底路径）
+        setCachedLessons([])
+        setShowLessonPicker(true)
+        setIsCacheEmpty(true)
+        setIsActive(true)
+      }
+    } catch {
+      setCachedLessons([])
+      setShowLessonPicker(true)
+      setIsCacheEmpty(true)
+      setIsActive(true)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  // 防连击 guard — startLesson 进行中时拒绝重复调用
+  const startLessonLockRef = useRef(false)
+
+  /**
+   * 从课程列表中选择一节课进入课堂
+   * 由 LessonCard 点击触发（含快速连击防护）
+   */
+  const startLesson = useCallback(async (knowledgeNodeId: string, date: string) => {
+    if (startLessonLockRef.current) return // 防连击
+    startLessonLockRef.current = true
+
+    setIsLoading(true)
+    setShowLessonPicker(false)
+
+    try {
+      // 记录当前课堂的知识点和日期（完成后用于删除缓存）
+      currentKnowledgeNodeIdRef.current = knowledgeNodeId
+      currentCacheDateRef.current = date
+
+      // 从缓存加载指定课堂
+      const classroom = await classroomCacheRef.current!.getClassroom(knowledgeNodeId, date)
+      if (classroom) {
+        startSession(subjectRef.current)
+        setCurrentClassroom(classroom)
+        setIsCacheEmpty(false)
+      } else {
+        // 缓存已过期或被清除
+        setIsCacheEmpty(true)
+      }
+    } catch {
+      setIsCacheEmpty(true)
+    } finally {
+      setIsLoading(false)
+      startLessonLockRef.current = false
+    }
+  }, [startSession])
+
+  /**
+   * 启动复习/重学流程
+   * - quick-review: 从 classroom_snapshots 加载历史课堂，原样回放
+   * - deep-relearn: 基于知识点重新加载缓存课堂
+   */
+  const startReview = useCallback(async (_params: {
+    mode: 'quick-review' | 'deep-relearn'
+    subject: Subject
+    historyId?: string
+    knowledgeNodeId?: string
+  }) => {
+    // TODO: 实现复习流程
+    console.warn('[startReview] 复习流程尚未实现', _params)
+  }, [])
 
   /**
    * 会话结束后的 DB 写入和引擎检查（异步，不阻塞 UI）
@@ -410,10 +522,20 @@ export function useLearningFlow(): LearningFlowState {
   /**
    * 停止学习流程
    * 中途退出时也传递课堂数据给 onSessionEnd，确保学习历史被记录
+   * 如果当前处于课程选择器（尚未进入课堂），直接重置状态，跳过 endSession
    */
   const stopFlow = useCallback(() => {
-    const stats = useLearningStore.getState().sessionStats
     const subject = subjectRef.current
+
+    // 课程选择器阶段退出：尚未调用 startSession，无需 endSession / onSessionEnd
+    if (showLessonPicker) {
+      setShowLessonPicker(false)
+      setCachedLessons([])
+      setIsActive(false)
+      return
+    }
+
+    const stats = useLearningStore.getState().sessionStats
     const classroom = currentClassroom // 捕获当前课堂数据
 
     endSession()
@@ -435,7 +557,7 @@ export function useLearningFlow(): LearningFlowState {
       questionsCompleted: stats.questionsCompleted,
       correctCount: stats.correctCount,
     }, classroom, false)
-  }, [endSession, onSessionEnd, currentClassroom])
+  }, [endSession, onSessionEnd, currentClassroom, showLessonPicker])
 
   /**
    * 处理答题
@@ -697,7 +819,12 @@ export function useLearningFlow(): LearningFlowState {
     currentClassroom,
     isCacheEmpty,
     classroomAnswerCount,
+    showLessonPicker,
+    cachedLessons,
     startFlow,
+    loadCachedLessons,
+    startLesson,
+    startReview,
     stopFlow,
     handleAnswer,
     handleClassroomAnswer,

@@ -44,6 +44,9 @@ export interface PreGenerationState {
 
 const SUBJECTS: Subject[] = ['math', 'chinese', 'english']
 
+/** 最小缓存水位线：缓存低于此数量时自动触发预生成补充 */
+const MIN_CACHE_SIZE = 3
+
 export function usePreGeneration(
   childId: string | number | undefined,
   hasPlacementTest: boolean | null,
@@ -95,8 +98,8 @@ export function usePreGeneration(
       const cache = new ClassroomCache(new PostgresCacheStore(numChildId))
       const existingSize = await cache.getCacheSize()
 
-      // 如果已有缓存，不再生成
-      if (existingSize > 0) {
+      // 如果缓存已达到最小水位线，不再生成
+      if (existingSize >= MIN_CACHE_SIZE) {
         setStatus('completed')
         setCompletedCount(existingSize)
         isRunningRef.current = false
@@ -145,13 +148,13 @@ export function usePreGeneration(
 
           if (nodes.length === 0) continue
 
-          // 规划课程（只规划 1 天，每天最多 3 个知识点）
+          // 规划课程（规划 2 天，确保有足够储备）
           const plans = planner.planLessons({
             nodes,
             masteryMap,
             subject,
             reviewQueue: [],
-            days: 1,
+            days: 2,
           })
 
           // 为每个计划项生成 requirement 并提交
@@ -272,7 +275,7 @@ export function usePreGeneration(
     if (
       childId &&
       hasPlacementTest === true &&
-      cachedCount === 0 &&
+      cachedCount < MIN_CACHE_SIZE &&
       !hasTriggeredRef.current &&
       !isRunningRef.current
     ) {
@@ -290,8 +293,23 @@ export function usePreGeneration(
       // 重置触发标记，允许重新生成
       hasTriggeredRef.current = false
       // 延迟 2 秒再触发，等待 onSessionEnd 的 DB 写入完成（mastery_records 更新后再规划）
-      setTimeout(() => {
-        void runPreGeneration()
+      setTimeout(async () => {
+        // 先检查当前缓存水位
+        if (childId) {
+          try {
+            const cache = new ClassroomCache(new PostgresCacheStore(Number(childId)))
+            const currentSize = await cache.getCacheSize()
+            // 只有缓存低于水位线才触发补充
+            if (currentSize < MIN_CACHE_SIZE) {
+              void runPreGeneration()
+            }
+          } catch {
+            // 检查失败时仍然触发预生成（保守策略）
+            void runPreGeneration()
+          }
+        } else {
+          void runPreGeneration()
+        }
       }, 2000)
     }
 
@@ -299,7 +317,7 @@ export function usePreGeneration(
     return () => {
       window.removeEventListener('classroom-completed', handleClassroomCompleted)
     }
-  }, [runPreGeneration])
+  }, [runPreGeneration, childId])
 
   return {
     status,

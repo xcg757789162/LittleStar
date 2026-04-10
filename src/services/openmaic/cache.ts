@@ -30,6 +30,8 @@ export interface CacheListItem {
   classroomId: string
   classroomTitle: string
   cachedAt: number
+  /** 课堂缩略图 URL（从 scenes/slides 中提取的第一个非空 imageUrl） */
+  thumbnailUrl?: string
 }
 
 /**
@@ -150,14 +152,35 @@ export class ClassroomCache {
 
     for (const [, entry] of entries) {
       if (date && entry.date !== date) continue
+
+      // 从 scenes/slides 中提取第一个非空 imageUrl 作为缩略图
+      let thumbnailUrl: string | undefined
+      if (entry.classroom.scenes) {
+        for (const scene of entry.classroom.scenes) {
+          if (thumbnailUrl) break
+          if (scene.slides) {
+            for (const slide of scene.slides) {
+              if (slide.imageUrl) {
+                thumbnailUrl = slide.imageUrl
+                break
+              }
+            }
+          }
+        }
+      }
+
       items.push({
         knowledgeNodeId: entry.knowledgeNodeId,
         date: entry.date,
         classroomId: entry.classroom.id,
         classroomTitle: entry.classroom.title,
         cachedAt: entry.cachedAt,
+        thumbnailUrl,
       })
     }
+
+    // 按缓存时间升序排序，保证课程按预生成顺序展示
+    items.sort((a, b) => a.cachedAt - b.cachedAt)
 
     return items
   }

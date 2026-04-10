@@ -9,6 +9,7 @@
 
 import { useEffect } from 'react'
 import type { Slide } from '@/services/openmaic/types'
+import { resolveMediaUrl } from '@/utils/media-url'
 
 export interface TPRSlideProps {
   /** 幻灯片数据 */
@@ -20,8 +21,9 @@ export interface TPRSlideProps {
 export function TPRSlide({ slide, onAudioPlay }: TPRSlideProps) {
   // 自动触发 TTS
   useEffect(() => {
-    if (slide.audioUrl && onAudioPlay) {
-      onAudioPlay(slide.audioUrl)
+    const audioSrc = resolveMediaUrl(slide.audioUrl)
+    if (audioSrc && onAudioPlay) {
+      onAudioPlay(audioSrc)
     }
   }, [slide.audioUrl, onAudioPlay])
 
@@ -77,7 +79,7 @@ export function TPRSlide({ slide, onAudioPlay }: TPRSlideProps) {
         {slide.imageUrl && (
           <div style={{ borderRadius: '20px', overflow: 'hidden', maxWidth: '60%' }}>
             <img
-              src={slide.imageUrl}
+              src={resolveMediaUrl(slide.imageUrl)}
               alt={slide.title ?? 'TPR 活动'}
               style={{ width: '100%', height: 'auto', display: 'block' }}
             />

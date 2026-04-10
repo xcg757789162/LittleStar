@@ -9,6 +9,7 @@
 
 import { useEffect } from 'react'
 import type { Slide } from '@/services/openmaic/types'
+import { resolveMediaUrl } from '@/utils/media-url'
 
 export interface AudioSlideProps {
   /** 幻灯片数据 */
@@ -20,8 +21,9 @@ export interface AudioSlideProps {
 export function AudioSlide({ slide, onAudioPlay }: AudioSlideProps) {
   // 自动触发音频播放
   useEffect(() => {
-    if (slide.audioUrl && onAudioPlay) {
-      onAudioPlay(slide.audioUrl)
+    const audioSrc = resolveMediaUrl(slide.audioUrl)
+    if (audioSrc && onAudioPlay) {
+      onAudioPlay(audioSrc)
     }
   }, [slide.audioUrl, onAudioPlay])
 
@@ -76,7 +78,7 @@ export function AudioSlide({ slide, onAudioPlay }: AudioSlideProps) {
       {/* 音频播放按钮区域 */}
       <button
         data-testid="audio-play-button"
-        onClick={() => slide.audioUrl && onAudioPlay?.(slide.audioUrl)}
+        onClick={() => { const src = resolveMediaUrl(slide.audioUrl); if (src) onAudioPlay?.(src) }}
         style={{
           width: '80px',
           height: '80px',
