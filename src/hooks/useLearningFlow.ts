@@ -140,8 +140,9 @@ export function useLearningFlow(): LearningFlowState {
   const teacherRef = useRef(new AITeacher(providerRef.current))
   const subjectRef = useRef<Subject>('math')
 
-  // 追踪当前课堂对应的知识点 ID（从缓存列表获取）
+  // 追踪当前课堂对应的知识点 ID 和日期（从缓存列表获取，用于完成后删除缓存）
   const currentKnowledgeNodeIdRef = useRef<string>('')
+  const currentCacheDateRef = useRef<string>('')
 
   // 新流程：缓存和调整器实例
   // 使用 PostgresCacheStore 持久化到数据库（如果有 childId），否则 fallback 内存 Map
@@ -192,6 +193,7 @@ export function useLearningFlow(): LearningFlowState {
     answeredSinceInterstitialRef.current = 0
     reviewQuestionIdsRef.current = new Set()
     currentKnowledgeNodeIdRef.current = ''
+    currentCacheDateRef.current = ''
 
     // 1. 启动 learningStore 会话
     startSession(subject)
@@ -205,6 +207,7 @@ export function useLearningFlow(): LearningFlowState {
         // 有缓存 → 加载第一个课堂
         const firstItem = cachedList[0]
         currentKnowledgeNodeIdRef.current = firstItem.knowledgeNodeId
+        currentCacheDateRef.current = firstItem.date
         const classroom = await classroomCacheRef.current!.getClassroom(
           firstItem.knowledgeNodeId,
           firstItem.date,
@@ -643,10 +646,33 @@ export function useLearningFlow(): LearningFlowState {
     })
 
     // 异步写入 DB（传递课堂数据用于写入 classroom_history 和 mastery_records）
+    // 写入完成后删除已消费缓存 + 触发新一轮预生成
     onSessionEnd(subject, {
       questionsCompleted: stats.questionsCompleted,
       correctCount: stats.correctCount,
-    }, currentClassroom)
+    }, currentClassroom).then(() => {
+      // ① 删除已消费的缓存条目（避免下次 startFlow 加载同一堂课）
+      const nodeId = currentKnowledgeNodeIdRef.current
+      const cacheDate = currentCacheDateRef.current
+      if (nodeId && cacheDate && classroomCacheRef.current) {
+        classroomCacheRef.current.deleteClassroom(nodeId, cacheDate).catch((err) => {
+          console.warn('[handleClassroomComplete] 删除已消费缓存失败:', err)
+        })
+      }
+
+      // ② 触发新一轮后台预生成（基于最新 mastery_records 规划下一课）
+      // 通过自定义事件通知 Home 页面的 usePreGeneration 重新触发
+      window.dispatchEvent(new CustomEvent('classroom-completed', {
+        detail: { subject, knowledgeNodeId: nodeId },
+      }))
+    }).catch(() => {
+      // onSessionEnd 失败时仍尝试删除缓存（避免重复加载）
+      const nodeId = currentKnowledgeNodeIdRef.current
+      const cacheDate = currentCacheDateRef.current
+      if (nodeId && cacheDate && classroomCacheRef.current) {
+        classroomCacheRef.current.deleteClassroom(nodeId, cacheDate).catch(() => {})
+      }
+    })
   }, [currentClassroom, endSession, onSessionEnd])
 
   return {

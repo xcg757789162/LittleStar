@@ -259,6 +259,26 @@ export function usePreGeneration(
     }
   }, [childId, hasPlacementTest, cachedCount, runPreGeneration])
 
+  /**
+   * 监听课堂完成事件：课堂学完后自动触发新一轮预生成
+   * 由 useLearningFlow.handleClassroomComplete 通过 CustomEvent 触发
+   */
+  useEffect(() => {
+    const handleClassroomCompleted = () => {
+      // 重置触发标记，允许重新生成
+      hasTriggeredRef.current = false
+      // 延迟 2 秒再触发，等待 onSessionEnd 的 DB 写入完成（mastery_records 更新后再规划）
+      setTimeout(() => {
+        void runPreGeneration()
+      }, 2000)
+    }
+
+    window.addEventListener('classroom-completed', handleClassroomCompleted)
+    return () => {
+      window.removeEventListener('classroom-completed', handleClassroomCompleted)
+    }
+  }, [runPreGeneration])
+
   return {
     status,
     pendingCount,
