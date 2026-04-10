@@ -9,7 +9,7 @@
 
 import { useEffect } from 'react'
 import type { Slide } from '@/services/openmaic/types'
-import { resolveMediaUrl } from '@/utils/media-url'
+import { ImageWithFallback } from '@/components/common/ImageWithFallback'
 
 export interface ImageSlideProps {
   /** 幻灯片数据 */
@@ -21,9 +21,8 @@ export interface ImageSlideProps {
 export function ImageSlide({ slide, onAudioPlay }: ImageSlideProps) {
   // 自动触发 TTS
   useEffect(() => {
-    const audioSrc = resolveMediaUrl(slide.audioUrl)
-    if (audioSrc && onAudioPlay) {
-      onAudioPlay(audioSrc)
+    if (slide.audioUrl && onAudioPlay) {
+      onAudioPlay(slide.audioUrl)
     }
   }, [slide.audioUrl, onAudioPlay])
 
@@ -55,44 +54,22 @@ export function ImageSlide({ slide, onAudioPlay }: ImageSlideProps) {
         </h2>
       )}
 
-      {/* 主图片 */}
-      {slide.imageUrl ? (
-        <div
-          style={{
-            borderRadius: '20px',
-            overflow: 'hidden',
-            maxWidth: '90%',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          <img
-            src={resolveMediaUrl(slide.imageUrl)}
-            alt={slide.title ?? '图片'}
-            style={{
-              width: '100%',
-              height: 'auto',
-              display: 'block',
-            }}
-          />
-        </div>
-      ) : (
-        <div
-          data-testid="image-placeholder"
-          style={{
-            width: '200px',
-            height: '200px',
-            borderRadius: '20px',
-            backgroundColor: '#EDF2F7',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#A0AEC0',
-            fontSize: '48px',
-          }}
-        >
-          🖼️
-        </div>
-      )}
+      {/* 主图片 — ImageWithFallback 自动处理 gen_img_* 占位符与加载失败 */}
+      <div
+        style={{
+          borderRadius: '20px',
+          overflow: 'hidden',
+          maxWidth: '90%',
+          boxShadow: slide.imageUrl ? '0 8px 24px rgba(0, 0, 0, 0.1)' : 'none',
+        }}
+      >
+        <ImageWithFallback
+          src={slide.imageUrl}
+          alt={slide.title ?? '图片'}
+          width="100%"
+          height="auto"
+        />
+      </div>
 
       {/* 描述文本 */}
       {slide.content && (

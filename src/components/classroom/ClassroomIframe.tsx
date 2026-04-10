@@ -17,7 +17,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useClassroomBridge } from '@/hooks/useClassroomBridge'
-import type { QuizAnswerPayload } from '@/hooks/useClassroomBridge'
+import type { QuizAnswerPayload, SceneChangePayload, TTSRequestPayload } from '@/hooks/useClassroomBridge'
 import type { Classroom } from '@/services/openmaic/types'
 
 /** ClassroomIframe 的 Props */
@@ -30,6 +30,10 @@ export interface ClassroomIframeProps {
   onComplete: () => void
   /** 答题回调（从 iframe 接收答题数据） */
   onAnswer?: (data: { isCorrect: boolean; selectedAnswer: number; correctAnswer: number }) => void
+  /** 场景切换回调（用于旁白播放） */
+  onSceneChange?: (data: SceneChangePayload) => void
+  /** iframe TTS 委托请求回调 */
+  onTTSRequest?: (data: TTSRequestPayload) => void
   /** 课堂中已答题数量（用于判断是否可以完成课堂） */
   answerCount?: number
 }
@@ -90,6 +94,8 @@ export function ClassroomIframe({
   subject,
   onComplete,
   onAnswer,
+  onSceneChange,
+  onTTSRequest,
   answerCount = 0,
 }: ClassroomIframeProps) {
   const [loadState, setLoadState] = useState<LoadState>('loading')
@@ -120,11 +126,13 @@ export function ClassroomIframe({
   }, [])
 
   // postMessage 通信桥
-  useClassroomBridge(iframeRef, {
+  const { sendCommand } = useClassroomBridge(iframeRef, {
     onReady: () => {
       setLoadState('loaded')
       setShowSlowHint(false)
       clearAllTimers()
+      // iframe 就绪时，发送静默指令（避免宿主旁白与 iframe 内部 TTS 重叠）
+      sendCommand('host:mute-internal')
     },
     onQuizAnswer: (data: QuizAnswerPayload) => {
       onAnswer?.({
@@ -135,6 +143,12 @@ export function ClassroomIframe({
     },
     onComplete: () => {
       onComplete()
+    },
+    onSceneChange: (data: SceneChangePayload) => {
+      onSceneChange?.(data)
+    },
+    onTTSRequest: (data: TTSRequestPayload) => {
+      onTTSRequest?.(data)
     },
     onError: () => {
       setLoadState('error')

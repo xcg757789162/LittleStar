@@ -9,7 +9,7 @@
 
 import { useEffect } from 'react'
 import type { Slide } from '@/services/openmaic/types'
-import { resolveMediaUrl } from '@/utils/media-url'
+import { ImageWithFallback } from '@/components/common/ImageWithFallback'
 
 export interface TeachingSlideProps {
   /** 幻灯片数据 */
@@ -21,9 +21,8 @@ export interface TeachingSlideProps {
 export function TeachingSlide({ slide, onAudioPlay }: TeachingSlideProps) {
   // 自动触发 TTS
   useEffect(() => {
-    const audioSrc = resolveMediaUrl(slide.audioUrl)
-    if (audioSrc && onAudioPlay) {
-      onAudioPlay(audioSrc)
+    if (slide.audioUrl && onAudioPlay) {
+      onAudioPlay(slide.audioUrl)
     }
   }, [slide.audioUrl, onAudioPlay])
 
@@ -55,7 +54,7 @@ export function TeachingSlide({ slide, onAudioPlay }: TeachingSlideProps) {
         </h2>
       )}
 
-      {/* 教学图片 */}
+      {/* 教学图片 — ImageWithFallback 自动处理 gen_img_* 占位符与加载失败 */}
       {slide.imageUrl && (
         <div
           style={{
@@ -64,14 +63,11 @@ export function TeachingSlide({ slide, onAudioPlay }: TeachingSlideProps) {
             maxWidth: '80%',
           }}
         >
-          <img
-            src={resolveMediaUrl(slide.imageUrl)}
+          <ImageWithFallback
+            src={slide.imageUrl}
             alt={slide.title ?? '教学图片'}
-            style={{
-              width: '100%',
-              height: 'auto',
-              display: 'block',
-            }}
+            width="100%"
+            height="auto"
           />
         </div>
       )}

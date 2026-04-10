@@ -10,6 +10,8 @@ import { motion } from 'framer-motion'
 import { useLearningFlow } from '@/hooks/useLearningFlow'
 import { useSoundEffects } from '@/hooks/useSoundEffects'
 import { useAudioActivation } from '@/hooks/useAudioActivation'
+import { useClassroomNarration } from '@/hooks/useClassroomNarration'
+import { getClassroomAudioService, resetClassroomAudioService } from '@/services/audio/classroom-audio'
 import { usePlacementTests } from '@/hooks/queries'
 import { useChildStore } from '@/stores/childStore'
 import { ClassroomIframe } from '@/components/classroom/ClassroomIframe'
@@ -121,6 +123,23 @@ export function LearningSession() {
 
   const { playLevelUp } = useSoundEffects()
   const { activateAudio } = useAudioActivation()
+
+  // 课堂旁白自动播放（监听 scene-change 事件）
+  const { handleSceneChange } = useClassroomNarration({
+    classroom: currentClassroom,
+    enabled: isActive && !isLoading,
+  })
+
+  // TTS 委托回调：iframe 请求宿主代为播放
+  const handleTTSRequest = useCallback((data: { text: string; lang?: string }) => {
+    const audioService = getClassroomAudioService()
+    void audioService.speak(data.text, { lang: data.lang })
+  }, [])
+  useEffect(() => {
+    return () => {
+      resetClassroomAudioService()
+    }
+  }, [])
 
   useEffect(() => {
     if (
@@ -436,6 +455,8 @@ export function LearningSession() {
                 isCorrect: data.isCorrect,
                 responseTime: 0,
               })}
+              onSceneChange={handleSceneChange}
+              onTTSRequest={handleTTSRequest}
               answerCount={classroomAnswerCount}
             />
           ) : (

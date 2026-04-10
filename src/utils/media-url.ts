@@ -2,28 +2,48 @@
  * 媒体文件 URL 解析工具
  *
  * 对课堂中的 imageUrl/audioUrl 进行解析：
+ * - 如果是 OpenMAIC 的 gen_img_/gen_vid_ 占位符，返回 undefined（触发兜底）
  * - 如果已经是本地路径（/media/...），直接返回
- * - 如果是外部 URL，返回原始 URL（后续服务器端下载后会替换为本地路径）
- *
- * 降级策略：数据库放不了的大文件（图片/音频/视频），
- * 下载到服务器文件系统 /data/media/ 目录，通过 Nginx 静态服务。
+ * - 如果是外部 URL，返回原始 URL
  */
+
+/** 检测 OpenMAIC 媒体占位符 ID（gen_img_XXXX / gen_vid_XXXX） */
+const MEDIA_PLACEHOLDER_RE = /^gen_(img|vid)_[A-Za-z0-9_-]+$/
+
+/**
+ * 判断 URL 是否是 OpenMAIC 的媒体占位符
+ *
+ * OpenMAIC 后端生成课堂 JSON 时，给图片/视频元素分配 gen_img_XXXX / gen_vid_XXXX
+ * 占位符 ID。这些不是可访问的 URL，需要 OpenMAIC 前端在浏览器端异步调用 AI API
+ * 生成实际的媒体内容。
+ *
+ * @param url - 待检测的 URL 字符串
+ * @returns 是否是占位符 ID
+ */
+export function isMediaPlaceholder(url: string | undefined): boolean {
+  if (!url) return false
+  return MEDIA_PLACEHOLDER_RE.test(url)
+}
 
 /**
  * 解析媒体 URL
  *
- * @param url - 原始 URL（可能是外部 URL 或本地路径）
- * @returns 最终可用的 URL，undefined 时返回 undefined
+ * @param url - 原始 URL（可能是外部 URL、本地路径或 OpenMAIC 占位符）
+ * @returns 最终可用的 URL；占位符和空值返回 undefined
  *
  * @example
  * ```ts
- * resolveMediaUrl('/media/abc123.jpg')  // → '/media/abc123.jpg'
- * resolveMediaUrl('https://cdn.example.com/img.jpg')  // → 'https://cdn.example.com/img.jpg'
- * resolveMediaUrl(undefined)  // → undefined
+ * resolveMediaUrl('/media/abc123.jpg')          // → '/media/abc123.jpg'
+ * resolveMediaUrl('https://cdn.example.com/x')  // → 'https://cdn.example.com/x'
+ * resolveMediaUrl('gen_img_kNgXUREJ')           // → undefined（占位符）
+ * resolveMediaUrl(undefined)                     // → undefined
  * ```
  */
 export function resolveMediaUrl(url: string | undefined): string | undefined {
   if (!url) return undefined
+
+  // OpenMAIC 占位符 ID → 不是可访问的 URL
+  if (isMediaPlaceholder(url)) return undefined
 
   // 已是本地媒体路径
   if (url.startsWith('/media/')) return url
@@ -31,7 +51,7 @@ export function resolveMediaUrl(url: string | undefined): string | undefined {
   // 相对路径（可能是 OpenMAIC 生成的）
   if (url.startsWith('/openmaic/')) return url
 
-  // 外部 URL 直接返回（后续服务器端异步下载后数据库会更新为本地路径）
+  // 外部 URL 直接返回
   return url
 }
 

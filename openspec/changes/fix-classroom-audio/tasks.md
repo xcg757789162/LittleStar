@@ -11,17 +11,17 @@
 - [x] 2.3 将预激活的 AudioContext 实例传递给 `ClassroomAudioService`，确保整个课堂生命周期内复用同一个已激活的 AudioContext
 
 ## 3. 课堂旁白自动播放
-- [ ] 3.1 创建 `src/hooks/useClassroomNarration.ts` Hook：监听 `classroom:scene-change` 事件（通过 `useClassroomBridge`），当场景切换时从缓存的 `Classroom.scenes[].slides[]` 提取文本
-- [ ] 3.2 实现语音文本提取优先级逻辑：按 `slide.content` > `slide.title` > `slide.onomatopoeia` > `slide.quiz?.question` 顺序提取要朗读的文本
-- [ ] 3.3 与 `uiStore.voiceEnabled` 联动：voiceEnabled 为 false 时跳过所有旁白播放；从 false 切换为 true 时从当前 slide 恢复播放；从 true 切换为 false 时立即停止当前播放
+- [x] 3.1 创建 `src/hooks/useClassroomNarration.ts` Hook：监听 `classroom:scene-change` 事件（通过 `useClassroomBridge`），当场景切换时从缓存的 `Classroom.scenes[].slides[]` 提取文本
+- [x] 3.2 实现语音文本提取优先级逻辑：按 `slide.content` > `slide.title` > `slide.onomatopoeia` > `slide.quiz?.question` 顺序提取要朗读的文本
+- [x] 3.3 与 `uiStore.voiceEnabled` 联动：voiceEnabled 为 false 时跳过所有旁白播放；从 false 切换为 true 时从当前 slide 恢复播放；从 true 切换为 false 时立即停止当前播放
 
 ## 4. iframe TTS 委托协议
-- [ ] 4.1 扩展 `src/hooks/useClassroomBridge.ts`：新增 `classroom:tts-request` 消息监听，接收 `{ type: 'classroom:tts-request', payload: { text, lang } }` 并通过 `ClassroomAudioService.speak()` 播放
-- [ ] 4.2 播放完成后向 iframe 发送 `{ type: 'host:tts-done' }` 响应消息
-- [ ] 4.3 新增 `host:mute-internal` 指令：在宿主旁白播放器启动时向 iframe 发送静默请求，避免宿主旁白与 iframe 残留 TTS 声音重叠
+- [x] 4.1 扩展 `src/hooks/useClassroomBridge.ts`：新增 `classroom:tts-request` 消息监听，接收 `{ type: 'classroom:tts-request', payload: { text, lang } }` 并通过 `ClassroomAudioService.speak()` 播放
+- [x] 4.2 播放完成后向 iframe 发送 `{ type: 'host:tts-done' }` 响应消息
+- [x] 4.3 新增 `host:mute-internal` 指令：在宿主旁白播放器启动时向 iframe 发送静默请求，避免宿主旁白与 iframe 残留 TTS 声音重叠
 
 ## 5. 集成与连接
-- [ ] 5.1 在 `src/pages/LearningSession.tsx` 中集成 `useClassroomNarration` 和 `useAudioActivation`，将 `ClassroomAudioService` 实例注入到需要的 Hook 中
-- [ ] 5.2 在 `src/components/classroom/ClassroomIframe.tsx` 中集成 TTS 委托协议，确保 iframe 通信桥支持音频相关消息
-- [ ] 5.3 清理死代码：移除或标注 Slide 组件中未使用的 `onAudioPlay` 回调（保留接口定义以备自渲染模式使用，添加 TODO 注释）
-- [ ] 5.4 验证 `uiStore.voiceEnabled` 开关端到端联动：家长设置页面 → uiStore → ClassroomAudioService → 语音播放/静音
+- [x] 5.1 在 `src/pages/LearningSession.tsx` 中集成 `useClassroomNarration` 和 `useAudioActivation`，将 `ClassroomAudioService` 实例注入到需要的 Hook 中
+- [x] 5.2 在 `src/components/classroom/ClassroomIframe.tsx` 中集成 TTS 委托协议，确保 iframe 通信桥支持音频相关消息
+- [x] 5.3 清理死代码：移除或标注 Slide 组件中未使用的 `onAudioPlay` 回调（保留接口定义以备自渲染模式使用，添加 TODO 注释）
+- [x] 5.4 验证 `uiStore.voiceEnabled` 开关端到端联动：家长设置页面 → uiStore → ClassroomAudioService → 语音播放/静音

@@ -11,7 +11,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import type { Slide } from '@/services/openmaic/types'
 import { FeedbackAnimation, type FeedbackType } from '@/components/feedback/FeedbackAnimation'
-import { resolveMediaUrl } from '@/utils/media-url'
+import { ImageWithFallback } from '@/components/common/ImageWithFallback'
 
 /** 答题回调数据 */
 export interface QuizAnswerData {
@@ -44,9 +44,8 @@ export function QuizSlide({ slide, onAnswer, onAudioPlay }: QuizSlideProps) {
 
   // TTS 触发
   useEffect(() => {
-    const audioSrc = resolveMediaUrl(slide.audioUrl)
-    if (audioSrc && onAudioPlay) {
-      onAudioPlay(audioSrc)
+    if (slide.audioUrl && onAudioPlay) {
+      onAudioPlay(slide.audioUrl)
     }
   }, [slide.audioUrl, onAudioPlay])
 
@@ -133,13 +132,14 @@ export function QuizSlide({ slide, onAnswer, onAudioPlay }: QuizSlideProps) {
         minHeight: '100%',
       }}
     >
-      {/* 题目配图 */}
+      {/* 题目配图 — ImageWithFallback 自动处理 gen_img_* 占位符与加载失败 */}
       {imageUrl && (
         <div style={{ borderRadius: '16px', overflow: 'hidden', maxWidth: '60%' }}>
-          <img
-            src={resolveMediaUrl(imageUrl)}
+          <ImageWithFallback
+            src={imageUrl}
             alt={question}
-            style={{ width: '100%', height: 'auto', display: 'block' }}
+            width="100%"
+            height="auto"
           />
         </div>
       )}

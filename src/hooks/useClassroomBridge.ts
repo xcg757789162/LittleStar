@@ -24,12 +24,15 @@ export type IframeMessageType =
   | 'classroom:complete'     // 课堂全部完成
   | 'classroom:scene-change' // 场景切换
   | 'classroom:error'        // iframe 内部错误
+  | 'classroom:tts-request'  // iframe 请求宿主代为 TTS 播放
 
 /** 宿主 → iframe：指令类型 */
 export type HostCommandType =
   | 'host:navigate-scene'    // 跳转到指定场景
   | 'host:pause'             // 暂停播放
   | 'host:resume'            // 恢复播放
+  | 'host:tts-done'          // TTS 播放完成响应
+  | 'host:mute-internal'     // 请求 iframe 静默内部 TTS
 
 /** iframe 发来的消息基础结构 */
 export interface IframeMessage {
@@ -57,6 +60,14 @@ export interface SceneChangePayload {
 export interface ErrorPayload {
   message: string
   code?: string
+}
+
+/** TTS 委托请求 payload（iframe → 宿主） */
+export interface TTSRequestPayload {
+  /** 要朗读的文本 */
+  text: string
+  /** 语言代码（可选） */
+  lang?: string
 }
 
 // ============================================================
@@ -97,6 +108,16 @@ function isErrorPayload(value: unknown): value is ErrorPayload {
   )
 }
 
+/** 校验 TTSRequestPayload 结构 */
+function isTTSRequestPayload(value: unknown): value is TTSRequestPayload {
+  if (value === null || value === undefined || typeof value !== 'object') return false
+  const obj = value as Record<string, unknown>
+  return (
+    typeof obj.text === 'string' &&
+    (obj.lang === undefined || typeof obj.lang === 'string')
+  )
+}
+
 // ============================================================
 // 构建 origin 白名单
 // ============================================================
@@ -134,6 +155,8 @@ export interface ClassroomBridgeCallbacks {
   onSceneChange?: (data: SceneChangePayload) => void
   /** iframe 内部错误 */
   onError?: (data: ErrorPayload) => void
+  /** iframe 请求宿主代为 TTS 播放 */
+  onTTSRequest?: (data: TTSRequestPayload) => void
 }
 
 /** Hook 返回值 */
@@ -233,6 +256,15 @@ export function useClassroomBridge(
             callbacksRef.current.onError?.(data.payload)
           } else {
             console.warn('[useClassroomBridge] error payload 校验失败:', data.payload)
+          }
+          break
+
+        case 'classroom:tts-request':
+          // iframe 请求宿主代为播放 TTS（绕过 iframe AudioContext 限制）
+          if (isTTSRequestPayload(data.payload)) {
+            callbacksRef.current.onTTSRequest?.(data.payload)
+          } else {
+            console.warn('[useClassroomBridge] tts-request payload 校验失败:', data.payload)
           }
           break
       }

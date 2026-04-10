@@ -9,7 +9,7 @@
 
 import { useEffect } from 'react'
 import type { Slide } from '@/services/openmaic/types'
-import { resolveMediaUrl } from '@/utils/media-url'
+import { ImageWithFallback } from '@/components/common/ImageWithFallback'
 
 export interface TPRSlideProps {
   /** 幻灯片数据 */
@@ -21,9 +21,8 @@ export interface TPRSlideProps {
 export function TPRSlide({ slide, onAudioPlay }: TPRSlideProps) {
   // 自动触发 TTS
   useEffect(() => {
-    const audioSrc = resolveMediaUrl(slide.audioUrl)
-    if (audioSrc && onAudioPlay) {
-      onAudioPlay(audioSrc)
+    if (slide.audioUrl && onAudioPlay) {
+      onAudioPlay(slide.audioUrl)
     }
   }, [slide.audioUrl, onAudioPlay])
 
@@ -75,13 +74,14 @@ export function TPRSlide({ slide, onAudioPlay }: TPRSlideProps) {
           gap: '16px',
         }}
       >
-        {/* 引导图片 */}
+        {/* 引导图片 — ImageWithFallback 自动处理 gen_img_* 占位符与加载失败 */}
         {slide.imageUrl && (
           <div style={{ borderRadius: '20px', overflow: 'hidden', maxWidth: '60%' }}>
-            <img
-              src={resolveMediaUrl(slide.imageUrl)}
+            <ImageWithFallback
+              src={slide.imageUrl}
               alt={slide.title ?? 'TPR 活动'}
-              style={{ width: '100%', height: 'auto', display: 'block' }}
+              width="100%"
+              height="auto"
             />
           </div>
         )}
