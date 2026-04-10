@@ -1,6 +1,8 @@
 /**
  * 入学测评页面（增强版）
  * 引导动画 + CAT 自适应答题 + 星星进度 + 庆祝动画 + 图形化结果
+ *
+ * 🎨 Sunny Playground 风格 — 暖色渐变、圆润卡片、漂浮装饰
  */
 
 import { useState, useEffect, useCallback } from 'react'
@@ -12,6 +14,39 @@ import { EncouragementOverlay } from '@/components/feedback/EncouragementOverlay
 import { GRADE_LABELS } from '@/types/grades'
 import type { GradeLevel, Subject, PlacementResult } from '@/types/models'
 import type { CelebrationLevel } from '@/components/feedback/CelebrationAnimation'
+
+/* ====== 设计 Token ====== */
+const T = {
+  bg: 'linear-gradient(170deg, #FFF8E7 0%, #FFE8D6 30%, #FFDEE9 60%, #D4F1F9 100%)',
+  font: "'Baloo 2', 'Nunito', sans-serif",
+  fontBody: "'Nunito', sans-serif",
+  sunOrange: '#FF8C42',
+  candyPink: '#FF6B8A',
+  grassGreen: '#2EC4B6',
+  skyBlue: '#5BC0EB',
+  starGold: '#FFD166',
+  textDark: '#4A3728',
+  textMid: '#8B7355',
+  textLight: '#B8A088',
+  cardBg: 'rgba(255,255,255,0.85)',
+  radius: '20px',
+}
+
+/* ====== 装饰 ====== */
+function Cloud({ top, left, size = 60, delay = 0 }: { top: string; left: string; size?: number; delay?: number }) {
+  return (
+    <motion.svg
+      width={size} height={size * 0.6} viewBox="0 0 100 60" fill="none"
+      style={{ position: 'absolute', top, left, opacity: 0.2, zIndex: 0 }}
+      animate={{ x: [0, 12, 0] }}
+      transition={{ duration: 8, repeat: Infinity, delay, ease: 'easeInOut' }}
+    >
+      <ellipse cx="50" cy="38" rx="40" ry="20" fill="#FFD166" />
+      <ellipse cx="35" cy="28" rx="22" ry="18" fill="#FFD166" />
+      <ellipse cx="65" cy="26" rx="24" ry="20" fill="#FFD166" />
+    </motion.svg>
+  )
+}
 
 const SUBJECT_LABELS: Record<Subject, string> = {
   math: '数学',
@@ -35,11 +70,8 @@ function StarProgress({ progress, total }: { progress: number; total: number }) 
     <div
       data-testid="star-progress"
       style={{
-        display: 'flex',
-        gap: '4px',
-        justifyContent: 'center',
-        flexWrap: 'wrap',
-        padding: '8px 0',
+        display: 'flex', gap: '4px', justifyContent: 'center',
+        flexWrap: 'wrap', padding: '8px 0',
       }}
     >
       {Array.from({ length: Math.min(starCount, 15) }, (_, i) => (
@@ -72,14 +104,11 @@ function LevelDisplay({ level }: { level: number }) {
       animate={{ scale: 1 }}
       transition={{ delay: 0.5, type: 'spring', stiffness: 200 }}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: '12px',
-        padding: '20px',
-        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-        borderRadius: '20px',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        gap: '12px', padding: '24px',
+        backgroundColor: T.cardBg, borderRadius: T.radius,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+        border: `2px solid ${T.starGold}44`,
       }}
     >
       <div style={{ fontSize: '56px' }}>{emojis[level - 1] ?? '🌱'}</div>
@@ -99,13 +128,11 @@ function LevelDisplay({ level }: { level: number }) {
           </motion.span>
         ))}
       </div>
-      <span
-        style={{
-          fontSize: '18px',
-          fontWeight: 'bold',
-          color: '#7C4DFF',
-        }}
-      >
+      <span style={{
+        fontSize: '18px', fontWeight: 'bold', fontFamily: T.font,
+        background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,
+        WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+      }}>
         {labels[level - 1] ?? '初学者'}
       </span>
     </motion.div>
@@ -126,7 +153,6 @@ export function PlacementTestPage({
     lastFeedback,
     result,
     recommendedLevel,
-    // consecutiveCorrect 暂未使用，后续可用于UI展示连续答对数
     isLoading,
     errorMessage,
     startTest,
@@ -169,19 +195,24 @@ export function PlacementTestPage({
 
     if (lastFeedback.isCorrect) {
       playCorrect()
-      // 根据连续答对次数决定庆祝等级
-      if (lastFeedback.consecutiveCorrect >= 5) {
-        setCelebrationLevel('streak5')
-      } else if (lastFeedback.consecutiveCorrect >= 3) {
-        setCelebrationLevel('streak3')
-      } else {
-        setCelebrationLevel('normal')
-      }
-      setShowCelebration(true)
+      const timer = setTimeout(() => {
+        if (lastFeedback.consecutiveCorrect >= 5) {
+          setCelebrationLevel('streak5')
+        } else if (lastFeedback.consecutiveCorrect >= 3) {
+          setCelebrationLevel('streak3')
+        } else {
+          setCelebrationLevel('normal')
+        }
+        setShowCelebration(true)
+      }, 0)
       playStar()
+      return () => clearTimeout(timer)
     } else {
       playWrong()
-      setShowEncouragement(true)
+      const timer = setTimeout(() => {
+        setShowEncouragement(true)
+      }, 0)
+      return () => clearTimeout(timer)
     }
   }, [lastFeedback, playCorrect, playWrong, playStar])
 
@@ -202,44 +233,37 @@ export function PlacementTestPage({
     <div
       data-testid="placement-test-page"
       style={{
-        padding: '24px',
-        maxWidth: '500px',
-        margin: '0 auto',
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'linear-gradient(180deg, #E8EAF6 0%, #F3E5F5 100%)',
+        padding: '24px', maxWidth: '500px', margin: '0 auto',
+        minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        background: T.bg, fontFamily: T.font, position: 'relative', overflow: 'hidden',
       }}
     >
+      {/* 漂浮装饰 */}
+      <Cloud top="3%" left="2%" size={65} delay={0} />
+      <Cloud top="60%" left="80%" size={50} delay={3} />
+
       {/* 退出按钮 */}
-      <button
+      <motion.button
         data-testid="exit-test-btn"
+        whileTap={{ scale: 0.95 }}
         onClick={onExit}
         style={{
-          alignSelf: 'flex-end',
-          padding: '8px 16px',
-          fontSize: '14px',
-          color: '#999',
-          backgroundColor: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
+          alignSelf: 'flex-end', padding: '8px 16px', fontSize: '14px',
+          color: T.textMid, backgroundColor: T.cardBg, border: 'none',
+          cursor: 'pointer', borderRadius: '14px', fontFamily: T.fontBody,
+          position: 'relative', zIndex: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
         }}
       >
         ✕ 退出
-      </button>
+      </motion.button>
 
       {/* 引导动画阶段 */}
       {phase === 'intro' && (
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textAlign: 'center',
-          }}
-        >
+        <div style={{
+          flex: 1, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', textAlign: 'center',
+          position: 'relative', zIndex: 1,
+        }}>
           <AnimatePresence mode="wait">
             {introStep === 0 && (
               <motion.div
@@ -260,10 +284,8 @@ export function PlacementTestPage({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
                 style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '16px',
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', gap: '16px',
                 }}
               >
                 <motion.div
@@ -278,9 +300,9 @@ export function PlacementTestPage({
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.3 }}
                   style={{
-                    fontSize: '26px',
-                    color: '#7C4DFF',
-                    fontWeight: 'bold',
+                    fontSize: '26px', fontWeight: 'bold', fontFamily: T.font,
+                    background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,
+                    WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
                   }}
                 >
                   小星老师要了解一下你哦！
@@ -290,9 +312,8 @@ export function PlacementTestPage({
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.6 }}
                   style={{
-                    fontSize: '16px',
-                    color: '#888',
-                    marginBottom: '8px',
+                    fontSize: '16px', color: T.textMid, marginBottom: '8px',
+                    fontFamily: T.fontBody,
                   }}
                 >
                   {subjectName} · {gradeName}
@@ -307,14 +328,11 @@ export function PlacementTestPage({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
               style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '12px',
-                marginTop: '24px',
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', gap: '12px', marginTop: '24px',
               }}
             >
-              <p style={{ fontSize: '14px', color: '#999' }}>
+              <p style={{ fontSize: '14px', color: T.textMid, fontFamily: T.fontBody }}>
                 只需要几分钟，轻轻松松就好 ☺️
               </p>
               <motion.button
@@ -324,17 +342,12 @@ export function PlacementTestPage({
                 onClick={startTest}
                 disabled={isLoading}
                 style={{
-                  padding: '20px 56px',
-                  fontSize: '22px',
-                  fontWeight: 700,
+                  padding: '20px 56px', fontSize: '22px', fontWeight: 700,
                   color: '#fff',
-                  backgroundColor: '#7C4DFF',
-                  border: 'none',
-                  borderRadius: '24px',
-                  cursor: 'pointer',
-                  boxShadow: '0 6px 20px rgba(124, 77, 255, 0.4)',
-                  minWidth: '200px',
-                  minHeight: '64px',
+                  background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,
+                  border: 'none', borderRadius: '24px', cursor: 'pointer',
+                  boxShadow: `0 6px 24px ${T.sunOrange}55`,
+                  minWidth: '200px', minHeight: '64px', fontFamily: T.font,
                 }}
               >
                 {isLoading ? '准备中...' : '🚀 开始吧！'}
@@ -346,27 +359,21 @@ export function PlacementTestPage({
 
       {/* 答题界面 */}
       {phase === 'testing' && (
-        <div data-testid="test-question-area" style={{ flex: 1 }}>
+        <div data-testid="test-question-area" style={{ flex: 1, position: 'relative', zIndex: 1 }}>
           {/* 星星进度指示器 */}
           <div data-testid="test-progress" style={{ marginBottom: '24px' }}>
             <StarProgress progress={progress} total={totalQuestions} />
-            {/* 隐藏的进度条（辅助） */}
-            <div
-              style={{
-                height: '6px',
-                backgroundColor: 'rgba(124, 77, 255, 0.15)',
-                borderRadius: '3px',
-                overflow: 'hidden',
-                marginTop: '8px',
-              }}
-            >
+            {/* 进度条 */}
+            <div style={{
+              height: '8px', backgroundColor: `${T.sunOrange}15`,
+              borderRadius: '4px', overflow: 'hidden', marginTop: '8px',
+            }}>
               <motion.div
                 animate={{ width: `${progress * 100}%` }}
                 transition={{ duration: 0.5, ease: 'easeOut' }}
                 style={{
-                  height: '100%',
-                  backgroundColor: '#7C4DFF',
-                  borderRadius: '3px',
+                  height: '100%', borderRadius: '4px',
+                  background: `linear-gradient(90deg, ${T.sunOrange}, ${T.starGold})`,
                 }}
               />
             </div>
@@ -381,51 +388,36 @@ export function PlacementTestPage({
               transition={{ duration: 0.3 }}
               style={{ textAlign: 'center', padding: '32px 16px' }}
             >
-              <h2
-                style={{
-                  fontSize: '22px',
-                  color: '#333',
-                  marginBottom: '12px',
-                  fontWeight: 'bold',
-                }}
-              >
+              <h2 style={{
+                fontSize: '22px', color: T.textDark, marginBottom: '12px',
+                fontWeight: 'bold', fontFamily: T.font,
+              }}>
                 {currentQuestion.nodeName}
               </h2>
-              <p
-                style={{
-                  fontSize: '14px',
-                  color: '#999',
-                  marginBottom: '40px',
-                }}
-              >
+              <p style={{
+                fontSize: '14px', color: T.textMid, marginBottom: '40px',
+                fontFamily: T.fontBody,
+              }}>
                 请选择你的答案
               </p>
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '16px',
-                  maxWidth: '320px',
-                  margin: '0 auto',
-                }}
-              >
+              <div style={{
+                display: 'flex', flexDirection: 'column', gap: '16px',
+                maxWidth: '320px', margin: '0 auto',
+              }}>
                 <motion.button
                   data-testid="answer-correct"
                   whileTap={{ scale: 0.95 }}
+                  whileHover={{ scale: 1.02, y: -2 }}
                   onClick={() => submitAnswer(true)}
                   style={{
-                    padding: '20px 32px',
-                    fontSize: '20px',
-                    fontWeight: 600,
-                    backgroundColor: '#E8F5E9',
-                    border: '3px solid #4CAF50',
-                    borderRadius: '20px',
-                    cursor: 'pointer',
-                    minHeight: '88px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
+                    padding: '20px 32px', fontSize: '20px', fontWeight: 600,
+                    background: `linear-gradient(135deg, ${T.grassGreen}18, ${T.grassGreen}08)`,
+                    border: `3px solid ${T.grassGreen}`,
+                    borderRadius: T.radius, cursor: 'pointer',
+                    minHeight: '88px', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    fontFamily: T.font, color: T.textDark,
+                    boxShadow: `0 4px 16px ${T.grassGreen}22`,
                   }}
                 >
                   <span style={{ fontSize: '28px' }}>😊</span>
@@ -434,20 +426,17 @@ export function PlacementTestPage({
                 <motion.button
                   data-testid="answer-wrong"
                   whileTap={{ scale: 0.95 }}
+                  whileHover={{ scale: 1.02, y: -2 }}
                   onClick={() => submitAnswer(false)}
                   style={{
-                    padding: '20px 32px',
-                    fontSize: '20px',
-                    fontWeight: 600,
-                    backgroundColor: '#FFF3E0',
-                    border: '3px solid #FF9800',
-                    borderRadius: '20px',
-                    cursor: 'pointer',
-                    minHeight: '88px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
+                    padding: '20px 32px', fontSize: '20px', fontWeight: 600,
+                    background: `linear-gradient(135deg, ${T.sunOrange}18, ${T.sunOrange}08)`,
+                    border: `3px solid ${T.sunOrange}`,
+                    borderRadius: T.radius, cursor: 'pointer',
+                    minHeight: '88px', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    fontFamily: T.font, color: T.textDark,
+                    boxShadow: `0 4px 16px ${T.sunOrange}22`,
                   }}
                 >
                   <span style={{ fontSize: '28px' }}>🤔</span>
@@ -461,16 +450,11 @@ export function PlacementTestPage({
 
       {/* 计算中过渡 */}
       {phase === 'completing' && (
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '16px',
-          }}
-        >
+        <div style={{
+          flex: 1, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: '16px',
+          position: 'relative', zIndex: 1,
+        }}>
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
@@ -478,7 +462,11 @@ export function PlacementTestPage({
           >
             🌟
           </motion.div>
-          <p style={{ fontSize: '18px', color: '#7C4DFF', fontWeight: 'bold' }}>
+          <p style={{
+            fontSize: '18px', fontWeight: 'bold', fontFamily: T.font,
+            background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+          }}>
             小星老师正在分析你的表现...
           </p>
         </div>
@@ -486,62 +474,38 @@ export function PlacementTestPage({
 
       {/* 错误状态 */}
       {phase === 'error' && (
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '16px',
-            textAlign: 'center',
-            padding: '24px',
-          }}
-        >
+        <div style={{
+          flex: 1, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: '16px',
+          textAlign: 'center', padding: '24px', position: 'relative', zIndex: 1,
+        }}>
           <div style={{ fontSize: '64px' }}>😥</div>
-          <h2
-            style={{
-              fontSize: '22px',
-              color: '#D32F2F',
-              fontWeight: 'bold',
-            }}
-          >
+          <h2 style={{
+            fontSize: '22px', color: '#D32F2F', fontWeight: 'bold', fontFamily: T.font,
+          }}>
             哎呀，出了点问题
           </h2>
-          <p
-            style={{
-              fontSize: '14px',
-              color: '#888',
-              maxWidth: '320px',
-              lineHeight: 1.6,
-            }}
-          >
+          <p style={{
+            fontSize: '14px', color: T.textMid, maxWidth: '320px',
+            lineHeight: 1.6, fontFamily: T.fontBody,
+          }}>
             {errorMessage ?? '加载课程数据时遇到问题'}
           </p>
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-              width: '100%',
-              maxWidth: '280px',
-              marginTop: '12px',
-            }}
-          >
+          <div style={{
+            display: 'flex', flexDirection: 'column', gap: '12px',
+            width: '100%', maxWidth: '280px', marginTop: '12px',
+          }}>
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={startTest}
               disabled={isLoading}
               style={{
-                padding: '16px 32px',
-                fontSize: '18px',
-                fontWeight: 700,
+                padding: '16px 32px', fontSize: '18px', fontWeight: 700,
                 color: '#fff',
-                backgroundColor: '#7C4DFF',
-                border: 'none',
-                borderRadius: '20px',
-                cursor: 'pointer',
-                boxShadow: '0 4px 16px rgba(124, 77, 255, 0.3)',
+                background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,
+                border: 'none', borderRadius: T.radius, cursor: 'pointer',
+                boxShadow: `0 4px 16px ${T.sunOrange}44`,
+                fontFamily: T.font,
               }}
             >
               {isLoading ? '重试中...' : '🔄 重试'}
@@ -549,13 +513,9 @@ export function PlacementTestPage({
             <button
               onClick={onExit}
               style={{
-                padding: '12px 24px',
-                fontSize: '14px',
-                color: '#999',
-                backgroundColor: 'transparent',
-                border: '1px solid #E0E0E0',
-                borderRadius: '16px',
-                cursor: 'pointer',
+                padding: '12px 24px', fontSize: '14px', color: T.textMid,
+                backgroundColor: 'transparent', border: `2px solid ${T.sunOrange}33`,
+                borderRadius: '16px', cursor: 'pointer', fontFamily: T.fontBody,
               }}
             >
               返回选择科目
@@ -570,13 +530,9 @@ export function PlacementTestPage({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textAlign: 'center',
-            gap: '20px',
+            flex: 1, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            textAlign: 'center', gap: '20px', position: 'relative', zIndex: 1,
           }}
         >
           <motion.div
@@ -593,9 +549,9 @@ export function PlacementTestPage({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
             style={{
-              fontSize: '26px',
-              color: '#7C4DFF',
-              fontWeight: 'bold',
+              fontSize: '26px', fontWeight: 'bold', fontFamily: T.font,
+              background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             }}
           >
             太棒了！小星老师已经认识你了！
@@ -606,9 +562,8 @@ export function PlacementTestPage({
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4 }}
             style={{
-              fontSize: '16px',
-              color: '#4CAF50',
-              fontWeight: 600,
+              fontSize: '16px', color: T.grassGreen, fontWeight: 600,
+              fontFamily: T.fontBody,
             }}
           >
             你已经掌握了 {result.masteredNodes.length} 个知识点！
@@ -624,9 +579,8 @@ export function PlacementTestPage({
             animate={{ opacity: 1 }}
             transition={{ delay: 1 }}
             style={{
-              fontSize: '14px',
-              color: '#999',
-              marginTop: '16px',
+              fontSize: '14px', color: T.textMid, marginTop: '16px',
+              fontFamily: T.fontBody,
             }}
           >
             即将开始你的学习之旅...
@@ -639,16 +593,12 @@ export function PlacementTestPage({
             whileTap={{ scale: 0.95 }}
             onClick={finishAndNavigate}
             style={{
-              padding: '16px 48px',
-              fontSize: '20px',
-              fontWeight: 700,
+              padding: '16px 48px', fontSize: '20px', fontWeight: 700,
               color: '#fff',
-              backgroundColor: '#7C4DFF',
-              border: 'none',
-              borderRadius: '24px',
-              cursor: 'pointer',
-              boxShadow: '0 6px 20px rgba(124, 77, 255, 0.4)',
-              minHeight: '56px',
+              background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,
+              border: 'none', borderRadius: '24px', cursor: 'pointer',
+              boxShadow: `0 6px 24px ${T.sunOrange}55`,
+              minHeight: '56px', fontFamily: T.font,
             }}
           >
             开始学习 🚀

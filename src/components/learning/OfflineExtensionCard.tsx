@@ -79,7 +79,7 @@ export function OfflineExtensionCard({ activities }: OfflineExtensionCardProps) 
                 backgroundColor: 'white',
                 cursor: 'pointer',
                 border: isExpanded
-                  ? '2px solid #7C4DFF'
+                  ? '2px solid #FF8C42'
                   : '2px solid transparent',
               }}
               onClick={() =>
@@ -160,9 +160,9 @@ export function OfflineExtensionCard({ activities }: OfflineExtensionCardProps) 
                         style={{
                           padding: '10px 12px',
                           borderRadius: '10px',
-                          backgroundColor: '#F3E5F5',
+                          backgroundColor: '#FFF3E7',
                           fontSize: '13px',
-                          color: '#6A1B9A',
+                          color: '#E07030',
                           lineHeight: 1.5,
                         }}
                       >

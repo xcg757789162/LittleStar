@@ -137,7 +137,7 @@ export function SessionSummary({
         <p
           style={{
             fontSize: '16px',
-            color: '#7C4DFF',
+            color: '#FF8C42',
             fontWeight: '600',
             margin: '0 0 20px 0',
           }}
@@ -200,7 +200,7 @@ export function SessionSummary({
               style={{
                 fontSize: '32px',
                 fontWeight: 'bold',
-                color: '#7C4DFF',
+                color: '#FF8C42',
               }}
             >
               {summary.questionsCompleted}
@@ -288,9 +288,9 @@ export function SessionSummary({
         style={{
           padding: '16px 24px',
           borderRadius: '16px',
-          backgroundColor: '#E8EAF6',
+          backgroundColor: '#FFF3E7',
           fontSize: '15px',
-          color: '#3F51B5',
+          color: '#FF8C42',
           textAlign: 'center',
           width: '100%',
         }}
@@ -310,9 +310,9 @@ export function SessionSummary({
           style={{
             padding: '14px 40px',
             borderRadius: '24px',
-            border: '2px solid #7C4DFF',
+            border: '2px solid #FF8C42',
             backgroundColor: 'white',
-            color: '#7C4DFF',
+            color: '#FF8C42',
             fontSize: '16px',
             fontWeight: 'bold',
             cursor: 'pointer',
@@ -334,12 +334,12 @@ export function SessionSummary({
           padding: '16px 48px',
           borderRadius: '24px',
           border: 'none',
-          backgroundColor: '#7C4DFF',
+          backgroundColor: '#FF8C42',
           color: 'white',
           fontSize: '18px',
           fontWeight: 'bold',
           cursor: 'pointer',
-          boxShadow: '0 4px 16px rgba(124, 77, 255, 0.3)',
+          boxShadow: '0 4px 16px rgba(255, 140, 66, 0.3)',
         }}
       >
         回到首页

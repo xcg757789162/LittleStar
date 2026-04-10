@@ -52,7 +52,7 @@ function getLevelConfig(level: CelebrationLevel) {
         confettiCount: 50,
         message: '全部完成！你太棒了！🎉',
         emoji: '🎉',
-        bgColor: 'rgba(124, 77, 255, 0.25)',
+        bgColor: 'rgba(255, 140, 66, 0.25)',
       }
     default:
       return {
@@ -67,7 +67,7 @@ function getLevelConfig(level: CelebrationLevel) {
 
 /** 纸屑颜色 */
 const CONFETTI_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#FFE66D', '#A78BFA',
+  '#FF6B6B', '#4ECDC4', '#FFE66D', '#FFB074',
   '#F472B6', '#34D399', '#60A5FA', '#FBBF24',
 ]
 

@@ -1,9 +1,7 @@
 /**
- * 创建孩子信息引导页面
- * 登录后如果没有孩子，需要先创建一个孩子
+ * 创建孩子信息引导页面 — Sunny Playground 风格
  * 分步引导：名字 → 年龄 → 年级 → 头像 → 完成
- *
- * 适配新版 API：使用 apiClient 替代 Dexie.js
+ * 温暖阳光游乐场设计 · clay 质感 · 弹性动画
  */
 
 import { useState, useCallback } from 'react'
@@ -13,6 +11,31 @@ import { apiClient } from '@/services/api'
 import { useChildStore } from '@/stores/childStore'
 import { useAuthStore } from '@/stores/authStore'
 import type { Child, GradeLevel } from '@/types/models'
+
+/* ═══════════════════════════════════════════
+   设计 Token
+   ═══════════════════════════════════════════ */
+const T = {
+  fontDisplay: "'Baloo 2', 'Nunito', sans-serif",
+  fontBody: "'Nunito', 'PingFang SC', sans-serif",
+  bgGradient: 'linear-gradient(170deg, #FFF8E7 0%, #FFE8D6 30%, #FFDEE9 60%, #D4F1F9 100%)',
+  sunOrange: '#FF8C42',
+  sunYellow: '#FFD166',
+  skyBlue: '#5BC0EB',
+  grassGreen: '#2EC4B6',
+  candyPink: '#FF6B9D',
+  starGold: '#FFC845',
+  cardBg: '#FFFFFF',
+  cardRadius: '28px',
+  cardShadow: '0 12px 40px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04)',
+  btnRadius: '22px',
+  textDark: '#2D3142',
+  textMedium: '#5E6577',
+  textLight: '#9DA3B4',
+  textWhite: '#FFFFFF',
+  errorRed: '#FF6B6B',
+  errorBg: '#FFF0F0',
+}
 
 type Step = 'name' | 'age' | 'grade' | 'avatar' | 'done'
 
@@ -29,7 +52,6 @@ const GRADE_OPTIONS: { key: GradeLevel; label: string; ageHint: string }[] = [
   { key: 'grade-6', label: '六年级', ageHint: '11-12岁' },
 ]
 
-/** 根据年龄推荐年级 */
 function suggestGrade(age: number): GradeLevel {
   if (age <= 4) return 'middle-kindergarten'
   if (age <= 5) return 'senior-kindergarten'
@@ -40,6 +62,9 @@ function suggestGrade(age: number): GradeLevel {
   if (age <= 10) return 'grade-5'
   return 'grade-6'
 }
+
+/** 步骤图标 */
+const STEP_ICONS = ['✏️', '🎂', '📚', '🎭']
 
 export function CreateChildPage() {
   const navigate = useNavigate()
@@ -57,13 +82,8 @@ export function CreateChildPage() {
   const handleSave = useCallback(async () => {
     if (isSaving) return
     setIsSaving(true)
-
     try {
-      if (!user) {
-        setError('未登录，请重新登录')
-        return
-      }
-
+      if (!user) { setError('未登录，请重新登录'); return }
       const childData = {
         userId: user.id,
         name: name.trim(),
@@ -78,16 +98,9 @@ export function CreateChildPage() {
           soundEffectsEnabled: true,
         },
       }
-
-      // 通过 API 创建孩子（apiClient 会自动附加 JWT token 和 snake_case 转换）
       const created = await apiClient.post<Child>('/children', childData)
-
-      if (created) {
-        addChild(created)
-      }
-
+      if (created) addChild(created)
       setStep('done')
-      // 短暂展示后导航到首页
       setTimeout(() => navigate('/', { replace: true }), 2000)
     } catch {
       setError('保存失败，请重试')
@@ -100,14 +113,8 @@ export function CreateChildPage() {
     setError('')
     switch (step) {
       case 'name':
-        if (!name.trim()) {
-          setError('请输入孩子的名字')
-          return
-        }
-        if (name.trim().length > 10) {
-          setError('名字不超过 10 个字')
-          return
-        }
+        if (!name.trim()) { setError('请输入孩子的名字'); return }
+        if (name.trim().length > 10) { setError('名字不超过 10 个字'); return }
         setStep('age')
         break
       case 'age':
@@ -118,7 +125,6 @@ export function CreateChildPage() {
         setStep('avatar')
         break
       case 'avatar':
-        // 保存到数据库
         handleSave()
         break
     }
@@ -133,6 +139,8 @@ export function CreateChildPage() {
     }
   }, [step])
 
+  const currentStepIndex = ['name', 'age', 'grade', 'avatar'].indexOf(step)
+
   const renderStep = () => {
     switch (step) {
       case 'name':
@@ -144,8 +152,19 @@ export function CreateChildPage() {
             exit={{ opacity: 0, x: -50 }}
             style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}
           >
-            <span style={{ fontSize: '56px' }}>👶</span>
-            <h2 style={{ fontSize: '22px', color: '#333', margin: 0 }}>孩子叫什么名字？</h2>
+            <motion.span
+              style={{ fontSize: '64px' }}
+              animate={{ rotate: [0, -5, 5, 0] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              👶
+            </motion.span>
+            <h2 style={{
+              fontSize: '24px', color: T.textDark, margin: 0,
+              fontFamily: T.fontDisplay, fontWeight: 'bold',
+            }}>
+              孩子叫什么名字？
+            </h2>
             <input
               data-testid="child-name-input"
               type="text"
@@ -156,16 +175,26 @@ export function CreateChildPage() {
               style={{
                 width: '100%',
                 maxWidth: '280px',
-                padding: '14px 20px',
-                borderRadius: '16px',
-                border: '2px solid #E0E0E0',
+                padding: '16px 20px',
+                borderRadius: '18px',
+                border: `2.5px solid #FFE8D6`,
                 fontSize: '20px',
+                fontFamily: T.fontBody,
                 textAlign: 'center',
                 outline: 'none',
                 boxSizing: 'border-box',
+                backgroundColor: '#FFFCF8',
+                color: T.textDark,
+                transition: 'border-color 0.25s, box-shadow 0.25s',
               }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = '#7C4DFF' }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = '#E0E0E0' }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = T.sunOrange
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${T.sunOrange}22`
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = '#FFE8D6'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
               onKeyDown={(e) => { if (e.key === 'Enter') handleNext() }}
             />
           </motion.div>
@@ -180,42 +209,65 @@ export function CreateChildPage() {
             exit={{ opacity: 0, x: -50 }}
             style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}
           >
-            <span style={{ fontSize: '56px' }}>🎂</span>
-            <h2 style={{ fontSize: '22px', color: '#333', margin: 0 }}>{name} 几岁了？</h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-              <button
+            <motion.span
+              style={{ fontSize: '64px' }}
+              animate={{ scale: [1, 1.1, 1] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+            >
+              🎂
+            </motion.span>
+            <h2 style={{
+              fontSize: '24px', color: T.textDark, margin: 0,
+              fontFamily: T.fontDisplay, fontWeight: 'bold',
+            }}>
+              {name} 几岁了？
+            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
                 onClick={() => setAge(Math.max(3, age - 1))}
                 style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '50%',
-                  border: 'none',
-                  backgroundColor: '#E0E0E0',
-                  fontSize: '24px',
-                  cursor: 'pointer',
+                  width: '52px', height: '52px', borderRadius: '50%',
+                  border: 'none', backgroundColor: '#FFE8D6',
+                  fontSize: '26px', cursor: 'pointer', color: T.sunOrange,
+                  fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(255, 140, 66, 0.15)',
                 }}
               >
-                -
-              </button>
-              <span style={{ fontSize: '48px', fontWeight: 'bold', color: '#7C4DFF', minWidth: '60px', textAlign: 'center' }}>
+                −
+              </motion.button>
+              <motion.span
+                key={age}
+                initial={{ scale: 0.8 }}
+                animate={{ scale: 1 }}
+                style={{
+                  fontSize: '56px', fontWeight: 'bold',
+                  fontFamily: T.fontDisplay,
+                  background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  minWidth: '70px', textAlign: 'center',
+                }}
+              >
                 {age}
-              </span>
-              <button
+              </motion.span>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
                 onClick={() => setAge(Math.min(12, age + 1))}
                 style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '50%',
-                  border: 'none',
-                  backgroundColor: '#E0E0E0',
-                  fontSize: '24px',
-                  cursor: 'pointer',
+                  width: '52px', height: '52px', borderRadius: '50%',
+                  border: 'none', backgroundColor: '#FFE8D6',
+                  fontSize: '26px', cursor: 'pointer', color: T.sunOrange,
+                  fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(255, 140, 66, 0.15)',
                 }}
               >
                 +
-              </button>
+              </motion.button>
             </div>
-            <p style={{ fontSize: '14px', color: '#999' }}>年龄范围：3-12 岁</p>
+            <p style={{ fontSize: '13px', color: T.textLight, fontFamily: T.fontBody }}>
+              年龄范围：3-12 岁
+            </p>
           </motion.div>
         )
 
@@ -228,40 +280,57 @@ export function CreateChildPage() {
             exit={{ opacity: 0, x: -50 }}
             style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}
           >
-            <span style={{ fontSize: '56px' }}>📚</span>
-            <h2 style={{ fontSize: '22px', color: '#333', margin: 0 }}>选择年级</h2>
-            <p style={{ fontSize: '13px', color: '#999', margin: 0 }}>
+            <motion.span
+              style={{ fontSize: '64px' }}
+              animate={{ y: [0, -5, 0] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            >
+              📚
+            </motion.span>
+            <h2 style={{
+              fontSize: '24px', color: T.textDark, margin: 0,
+              fontFamily: T.fontDisplay, fontWeight: 'bold',
+            }}>
+              选择年级
+            </h2>
+            <p style={{
+              fontSize: '13px', color: T.textLight, margin: 0,
+              fontFamily: T.fontBody,
+            }}>
               根据年龄推荐，你也可以自由选择
             </p>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, 1fr)',
-                gap: '10px',
-                width: '100%',
-                maxWidth: '320px',
-              }}
-            >
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '10px', width: '100%', maxWidth: '320px',
+            }}>
               {GRADE_OPTIONS.map((opt) => (
-                <button
+                <motion.button
                   key={opt.key}
+                  whileTap={{ scale: 0.95 }}
                   onClick={() => setGradeLevel(opt.key)}
                   style={{
-                    padding: '12px 8px',
-                    borderRadius: '12px',
-                    border: gradeLevel === opt.key ? '2px solid #7C4DFF' : '2px solid #E0E0E0',
-                    backgroundColor: gradeLevel === opt.key ? '#EDE7F6' : 'white',
-                    color: gradeLevel === opt.key ? '#7C4DFF' : '#333',
+                    padding: '14px 8px',
+                    borderRadius: '16px',
+                    border: gradeLevel === opt.key
+                      ? `2.5px solid ${T.sunOrange}`
+                      : '2.5px solid #FFE8D6',
+                    backgroundColor: gradeLevel === opt.key ? '#FFF3E7' : T.cardBg,
+                    color: gradeLevel === opt.key ? T.sunOrange : T.textDark,
                     fontSize: '15px',
                     fontWeight: gradeLevel === opt.key ? 'bold' : 'normal',
+                    fontFamily: T.fontBody,
                     cursor: 'pointer',
                     textAlign: 'center',
+                    transition: 'all 0.2s ease',
+                    boxShadow: gradeLevel === opt.key
+                      ? '0 4px 12px rgba(255, 140, 66, 0.2)'
+                      : 'none',
                   }}
                 >
                   {opt.label}
                   <br />
-                  <span style={{ fontSize: '11px', color: '#999' }}>{opt.ageHint}</span>
-                </button>
+                  <span style={{ fontSize: '11px', color: T.textLight }}>{opt.ageHint}</span>
+                </motion.button>
               ))}
             </div>
           </motion.div>
@@ -278,41 +347,47 @@ export function CreateChildPage() {
           >
             <motion.span
               style={{ fontSize: '72px' }}
-              animate={{ scale: [1, 1.1, 1] }}
+              animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
               transition={{ repeat: Infinity, duration: 2 }}
             >
               {avatar}
             </motion.span>
-            <h2 style={{ fontSize: '22px', color: '#333', margin: 0 }}>选一个头像吧</h2>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: '12px',
-                width: '100%',
-                maxWidth: '280px',
-              }}
-            >
+            <h2 style={{
+              fontSize: '24px', color: T.textDark, margin: 0,
+              fontFamily: T.fontDisplay, fontWeight: 'bold',
+            }}>
+              选一个头像吧
+            </h2>
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: '12px', width: '100%', maxWidth: '280px',
+            }}>
               {AVATARS.map((a) => (
-                <button
+                <motion.button
                   key={a}
+                  whileTap={{ scale: 0.9 }}
+                  whileHover={{ scale: 1.1 }}
                   onClick={() => setAvatar(a)}
                   style={{
-                    width: '56px',
-                    height: '56px',
-                    borderRadius: '16px',
-                    border: avatar === a ? '3px solid #7C4DFF' : '2px solid #E0E0E0',
-                    backgroundColor: avatar === a ? '#EDE7F6' : 'white',
+                    width: '58px', height: '58px',
+                    borderRadius: '18px',
+                    border: avatar === a
+                      ? `3px solid ${T.sunOrange}`
+                      : '2.5px solid #FFE8D6',
+                    backgroundColor: avatar === a ? '#FFF3E7' : T.cardBg,
                     fontSize: '28px',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    boxShadow: avatar === a ? '0 2px 8px rgba(124, 77, 255, 0.3)' : 'none',
+                    boxShadow: avatar === a
+                      ? '0 4px 12px rgba(255, 140, 66, 0.25)'
+                      : 'none',
+                    transition: 'all 0.2s ease',
                   }}
                 >
                   {a}
-                </button>
+                </motion.button>
               ))}
             </div>
           </motion.div>
@@ -328,16 +403,22 @@ export function CreateChildPage() {
           >
             <motion.span
               style={{ fontSize: '80px' }}
-              animate={{ rotate: [0, 10, -10, 0] }}
+              animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}
               transition={{ repeat: Infinity, duration: 1.5 }}
             >
               🎉
             </motion.span>
-            <h2 style={{ fontSize: '24px', color: '#7C4DFF', margin: 0 }}>
+            <h2 style={{
+              fontSize: '26px', margin: 0,
+              fontFamily: T.fontDisplay,
+              background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}>
               欢迎 {name}！
             </h2>
-            <p style={{ fontSize: '16px', color: '#666' }}>
-              正在为你准备学习之旅...
+            <p style={{ fontSize: '16px', color: T.textMedium, fontFamily: T.fontBody }}>
+              ✨ 正在为你准备学习之旅...
             </p>
           </motion.div>
         )
@@ -353,45 +434,62 @@ export function CreateChildPage() {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(180deg, #E8EAF6 0%, #F3E5F5 100%)',
+        background: T.bgGradient,
         padding: '24px',
+        fontFamily: T.fontBody,
       }}
     >
-      {/* 进度指示器 */}
+      {/* 进度指示器 — 改为圆形步骤指示 */}
       {step !== 'done' && (
-        <div
-          style={{
-            display: 'flex',
-            gap: '8px',
-            marginBottom: '32px',
-          }}
-        >
-          {['name', 'age', 'grade', 'avatar'].map((s, i) => (
-            <div
-              key={s}
-              style={{
-                width: '40px',
-                height: '6px',
-                borderRadius: '3px',
-                backgroundColor: ['name', 'age', 'grade', 'avatar'].indexOf(step) >= i
-                  ? '#7C4DFF'
-                  : '#E0E0E0',
-                transition: 'background-color 0.3s',
-              }}
-            />
+        <div style={{
+          display: 'flex', gap: '16px', marginBottom: '28px',
+          alignItems: 'center',
+        }}>
+          {STEP_ICONS.map((icon, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <motion.div
+                animate={currentStepIndex === i ? { scale: [1, 1.15, 1] } : {}}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                style={{
+                  width: '40px', height: '40px',
+                  borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: currentStepIndex >= i ? '20px' : '16px',
+                  backgroundColor: currentStepIndex >= i ? '#FFF3E7' : '#F5F5F5',
+                  border: currentStepIndex === i
+                    ? `2.5px solid ${T.sunOrange}`
+                    : currentStepIndex > i
+                      ? `2.5px solid ${T.grassGreen}`
+                      : '2.5px solid #E0E0E0',
+                  transition: 'all 0.3s ease',
+                  filter: currentStepIndex >= i ? 'none' : 'grayscale(0.8)',
+                }}
+              >
+                {currentStepIndex > i ? '✅' : icon}
+              </motion.div>
+              {i < 3 && (
+                <div style={{
+                  width: '20px', height: '3px',
+                  borderRadius: '2px',
+                  backgroundColor: currentStepIndex > i ? T.grassGreen : '#E0E0E0',
+                  transition: 'background-color 0.3s ease',
+                }} />
+              )}
+            </div>
           ))}
         </div>
       )}
 
       {/* 卡片 */}
-      <div
+      <motion.div
+        layout
         style={{
           width: '100%',
           maxWidth: '420px',
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          borderRadius: '24px',
+          backgroundColor: T.cardBg,
+          borderRadius: T.cardRadius,
           padding: '36px 28px',
-          boxShadow: '0 12px 40px rgba(0, 0, 0, 0.08)',
+          boxShadow: T.cardShadow,
           minHeight: '300px',
           display: 'flex',
           flexDirection: 'column',
@@ -409,69 +507,63 @@ export function CreateChildPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             style={{
-              fontSize: '14px',
-              color: '#F44336',
-              marginTop: '12px',
-              padding: '8px 12px',
-              backgroundColor: '#FFEBEE',
-              borderRadius: '8px',
+              fontSize: '14px', color: T.errorRed,
+              marginTop: '12px', padding: '10px 14px',
+              backgroundColor: T.errorBg,
+              borderRadius: '12px', fontWeight: 600,
+              fontFamily: T.fontBody,
             }}
           >
             {error}
           </motion.p>
         )}
-      </div>
+      </motion.div>
 
       {/* 底部按钮 */}
       {step !== 'done' && (
-        <div
-          style={{
-            display: 'flex',
-            gap: '12px',
-            marginTop: '24px',
-            width: '100%',
-            maxWidth: '420px',
-          }}
-        >
+        <div style={{
+          display: 'flex', gap: '12px', marginTop: '24px',
+          width: '100%', maxWidth: '420px',
+        }}>
           {step !== 'name' && (
-            <button
+            <motion.button
+              whileTap={{ scale: 0.95 }}
               onClick={handleBack}
               style={{
-                flex: 1,
-                padding: '14px',
-                borderRadius: '16px',
-                border: '2px solid #BDBDBD',
-                backgroundColor: 'white',
-                color: '#666',
-                fontSize: '16px',
-                fontWeight: 'bold',
+                flex: 1, padding: '14px',
+                borderRadius: T.btnRadius,
+                border: '2.5px solid #FFE8D6',
+                backgroundColor: T.cardBg,
+                color: T.textMedium,
+                fontSize: '16px', fontWeight: 'bold',
+                fontFamily: T.fontDisplay,
                 cursor: 'pointer',
               }}
             >
-              上一步
-            </button>
+              ← 上一步
+            </motion.button>
           )}
           <motion.button
             whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02 }}
             onClick={handleNext}
             disabled={isSaving}
             style={{
-              flex: 1,
-              padding: '14px',
-              borderRadius: '16px',
+              flex: 1, padding: '14px',
+              borderRadius: T.btnRadius,
               border: 'none',
-              backgroundColor: isSaving ? '#B39DDB' : '#7C4DFF',
-              color: 'white',
-              fontSize: '16px',
-              fontWeight: 'bold',
+              background: isSaving
+                ? '#FFD1A9'
+                : `linear-gradient(135deg, ${T.sunOrange} 0%, ${T.candyPink} 100%)`,
+              color: T.textWhite,
+              fontSize: '16px', fontWeight: 'bold',
+              fontFamily: T.fontDisplay,
               cursor: isSaving ? 'default' : 'pointer',
-              boxShadow: '0 4px 16px rgba(124, 77, 255, 0.3)',
+              boxShadow: '0 6px 20px rgba(255, 140, 66, 0.3)',
             }}
           >
             {step === 'avatar'
-              ? isSaving
-                ? '保存中...'
-                : '🎉 完成'
+              ? isSaving ? '⏳ 保存中...' : '🎉 完成'
               : '下一步 →'}
           </motion.button>
         </div>

@@ -19,7 +19,7 @@ const TYPE_EMOJI: Record<string, string> = {
 const TYPE_BG_COLOR: Record<string, string> = {
   sing: '#FFF3E0',
   find: '#E3F2FD',
-  play: '#F3E5F5',
+  play: '#FFF3E7',
   draw: '#E8F5E9',
   talk: '#FCE4EC',
 }
@@ -28,7 +28,7 @@ const TYPE_BG_COLOR: Record<string, string> = {
 const TYPE_BORDER_COLOR: Record<string, string> = {
   sing: '#FFB74D',
   find: '#64B5F6',
-  play: '#BA68C8',
+  play: '#FFB074',
   draw: '#81C784',
   talk: '#F06292',
 }

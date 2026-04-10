@@ -223,7 +223,7 @@ export function PinVerification({
               height: '48px',
               borderRadius: '12px',
               border: '2px solid #BDBDBD',
-              backgroundColor: digits[i] ? '#7C4DFF' : '#F5F5F5',
+              backgroundColor: digits[i] ? '#FF8C42' : '#F5F5F5',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

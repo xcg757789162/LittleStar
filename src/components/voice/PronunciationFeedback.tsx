@@ -77,7 +77,7 @@ export function PronunciationFeedback({
         <div
           data-testid="feedback-bubble"
           style={{
-            backgroundColor: '#F3E5F5',
+            backgroundColor: '#FFF3E7',
             borderRadius: '16px',
             borderTopLeftRadius: '4px',
             padding: '12px 16px',

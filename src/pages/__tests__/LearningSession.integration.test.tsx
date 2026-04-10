@@ -1,7 +1,7 @@
 /**
  * LearningSession 集成测试
  *
- * 测试新流程：缓存加载课堂 → 渲染 ClassroomView，缓存为空 → 显示"课程准备中"
+ * 测试新流程：缓存加载课堂 → 渲染 ClassroomIframe，缓存为空 → 显示"暂无课堂数据"
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -51,12 +51,12 @@ vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
 }))
 
-// Mock ClassroomView
-vi.mock('@/components/classroom/ClassroomView', () => ({
-  ClassroomView: vi.fn(({ classroom, onComplete, onAnswer }: {
+// Mock ClassroomIframe
+vi.mock('@/components/classroom/ClassroomIframe', () => ({
+  ClassroomIframe: vi.fn(({ classroom, onComplete, onAnswer }: {
     classroom: { title: string }
     onComplete?: () => void
-    onAnswer?: (data: { selectedIndex: number; isCorrect: boolean; responseTime: number }) => void
+    onAnswer?: (data: { isCorrect: boolean; selectedAnswer: number; correctAnswer: number }) => void
   }) => (
     <div data-testid="classroom-view">
       <div data-testid="classroom-title">{classroom.title}</div>
@@ -68,7 +68,7 @@ vi.mock('@/components/classroom/ClassroomView', () => ({
       </button>
       <button
         data-testid="classroom-answer-btn"
-        onClick={() => onAnswer?.({ selectedIndex: 0, isCorrect: true, responseTime: 1000 })}
+        onClick={() => onAnswer?.({ isCorrect: true, selectedAnswer: 0, correctAnswer: 0 })}
       >
         答题
       </button>
@@ -140,7 +140,7 @@ describe('LearningSession 集成测试 - 新流程', () => {
     }
   })
 
-  it('缓存加载课堂后应渲染 ClassroomView', async () => {
+  it('缓存加载课堂后应渲染 ClassroomIframe', async () => {
     // 模拟：选择科目 → 启动 → 有缓存课堂
     mockFlowState = {
       ...mockFlowState,
@@ -151,7 +151,7 @@ describe('LearningSession 集成测试 - 新流程', () => {
 
     renderWithRouter()
 
-    // 应渲染 ClassroomView 而非旧的题目组件
+    // 应渲染 ClassroomIframe 而非旧的题目组件
     expect(screen.getByTestId('classroom-view')).toBeTruthy()
     expect(screen.getByTestId('classroom-title').textContent).toBe('认识数字 1-5')
   })
@@ -170,7 +170,7 @@ describe('LearningSession 集成测试 - 新流程', () => {
     expect(screen.getByText(/课程准备中/)).toBeTruthy()
   })
 
-  it('ClassroomView 答题时应调用 handleClassroomAnswer', async () => {
+  it('ClassroomIframe 答题时应调用 handleClassroomAnswer', async () => {
     mockFlowState = {
       ...mockFlowState,
       isActive: true,
@@ -187,11 +187,11 @@ describe('LearningSession 集成测试 - 新流程', () => {
     expect(mockHandleClassroomAnswer).toHaveBeenCalledWith({
       selectedIndex: 0,
       isCorrect: true,
-      responseTime: 1000,
+      responseTime: 0,
     })
   })
 
-  it('ClassroomView 完成时应调用 handleClassroomComplete', async () => {
+  it('ClassroomIframe 完成时应调用 handleClassroomComplete', async () => {
     mockFlowState = {
       ...mockFlowState,
       isActive: true,
@@ -233,7 +233,7 @@ describe('LearningSession 集成测试 - 新流程', () => {
 
     renderWithRouter()
 
-    // 不应渲染 ClassroomView
+    // 不应渲染 ClassroomIframe
     expect(screen.queryByTestId('classroom-view')).toBeNull()
   })
 

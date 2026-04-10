@@ -1,8 +1,8 @@
 /**
  * useLearningFlow Hook
  * 学习主循环核心编排：
- * - OpenMAIC 流程：教导处选课 → 缓存加载 → ClassroomView 渲染 → 答题回写 → 动态调整
- * - 降级路径：缓存为空时显示"课程准备中"提示
+ * - OpenMAIC 流程：教导处选课 → 缓存加载 → ClassroomIframe 渲染 → 答题回写 → 动态调整
+ * - 缓存为空时显示"课程准备中"提示
  * Phase 1: 集成亲子互动环节 + TPR 全身反应法 + 艾宾浩斯复习机制
  * Phase 3: 集成 OpenMAIC 课堂缓存流程
  */
@@ -217,7 +217,7 @@ export function useLearningFlow(): LearningFlowState {
           setCurrentClassroom(classroom)
           setIsCacheEmpty(false)
           setIsLoading(false)
-          return // 新流程：课堂已加载，由 ClassroomView 渲染
+          return // 新流程：课堂已加载，由 ClassroomIframe 渲染
         }
       }
 

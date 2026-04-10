@@ -106,7 +106,7 @@ describe('LearningSession', () => {
   })
 
   describe('学习中阶段 — 旧题型降级', () => {
-    it('multiple-choice 类型在新流程中不再渲染（已迁移到 ClassroomView）', () => {
+    it('multiple-choice 类型在新流程中不再渲染（已迁移到 ClassroomIframe）', () => {
       mockFlowState.isActive = true
       mockFlowState.currentQuestion = {
         id: 'q1',
@@ -126,11 +126,11 @@ describe('LearningSession', () => {
       }
 
       renderLearningSession()
-      // multiple-choice 已迁移到 ClassroomView，旧 renderQuestion 不处理此类型
+      // multiple-choice 已迁移到 ClassroomIframe，旧 renderQuestion 不处理此类型
       expect(screen.queryByText('1 + 1 = ?')).not.toBeInTheDocument()
     })
 
-    it('flashcard 类型在新流程中不再渲染（已迁移到 ClassroomView）', () => {
+    it('flashcard 类型在新流程中不再渲染（已迁移到 ClassroomIframe）', () => {
       mockFlowState.isActive = true
       mockFlowState.currentQuestion = {
         id: 'q2',
@@ -145,7 +145,7 @@ describe('LearningSession', () => {
       }
 
       renderLearningSession()
-      // flashcard 已迁移到 ClassroomView，旧 renderQuestion 不处理此类型
+      // flashcard 已迁移到 ClassroomIframe，旧 renderQuestion 不处理此类型
       expect(screen.queryByText('认识字：大')).not.toBeInTheDocument()
     })
   })

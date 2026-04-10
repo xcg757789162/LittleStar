@@ -2,24 +2,13 @@
  * 课堂渲染器模块
  *
  * 提供课堂 JSON 的 React 组件渲染能力。
- * ClassroomView 是主入口组件，内部使用工厂模式分发到各 Slide 组件。
- *
- * @example
- * ```tsx
- * import { ClassroomView } from '@/components/classroom'
- *
- * <ClassroomView
- *   classroom={classroomData}
- *   onComplete={() => console.log('课堂完成')}
- *   onAnswer={(data) => masteryTracker.record(data)}
- *   onAudioPlay={(url) => tts.play(url)}
- * />
- * ```
+ * ClassroomIframe 是主入口组件（通过 iframe 嵌入 OpenMAIC 原生前端）。
+ * Slide 组件保留作为备用渲染方案。
  */
 
-// 主容器
-export { ClassroomView } from './ClassroomView'
-export type { ClassroomViewProps, SubjectType } from './ClassroomView'
+// iframe 嵌入组件（主入口）
+export { ClassroomIframe } from './ClassroomIframe'
+export type { ClassroomIframeProps } from './ClassroomIframe'
 
 // 幻灯片组件
 export { TeachingSlide } from './TeachingSlide'

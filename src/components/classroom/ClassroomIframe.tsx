@@ -6,9 +6,12 @@
  *
  * 特性：
  * - 加载状态动画（骨架屏）
- * - 超时降级到 ClassroomView
+ * - 超时后提供重试选项
  * - 悬浮"完成课堂"按钮
  * - postMessage 通信桥监听答题和完成事件
+ *
+ * 架构：iframe 直接指向 Nginx 网关（开发环境 localhost:8080），
+ * 确保 OpenMAIC Next.js 前端内部的所有 API 请求能正确到达后端。
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -27,9 +30,7 @@ export interface ClassroomIframeProps {
   onComplete: () => void
   /** 答题回调（从 iframe 接收答题数据） */
   onAnswer?: (data: { isCorrect: boolean; selectedAnswer: number; correctAnswer: number }) => void
-  /** 降级到 ClassroomView 的回调（iframe 加载失败时） */
-  onFallback?: () => void
-  /** iframe 加载超时（毫秒），默认 15000 */
+  /** iframe 加载超时（毫秒），默认 30000 */
   loadTimeoutMs?: number
   /** 课堂中已答题数量（用于判断是否可以完成课堂） */
   answerCount?: number
@@ -38,32 +39,48 @@ export interface ClassroomIframeProps {
 /** iframe 加载状态 */
 type LoadState = 'loading' | 'loaded' | 'error' | 'timeout'
 
-/** 学科配色 */
+/** 学科配色 — Sunny Playground 风格 */
 const SUBJECT_COLORS: Record<string, { primary: string; bg: string }> = {
-  math: { primary: '#7C4DFF', bg: '#F3E5F5' },
-  chinese: { primary: '#FF6D00', bg: '#FFF3E0' },
-  english: { primary: '#00C853', bg: '#E8F5E9' },
+  math: { primary: '#FF8C42', bg: '#FFF3E7' },
+  chinese: { primary: '#2EC4B6', bg: '#E8FFF9' },
+  english: { primary: '#5BC0EB', bg: '#E8F6FF' },
 }
 
 /**
- * 将后端返回的 classroomUrl 转换为通过 Vite proxy 的嵌入 URL
- * 例如：/classroom/abc123 → /openmaic/classroom/abc123
+ * 将后端返回的 classroomUrl 转换为可嵌入 iframe 的完整 URL
+ *
+ * **关键设计**：iframe 必须直接指向 Nginx 网关（localhost:8080），而不是通过 Vite proxy。
+ * 原因：OpenMAIC 是 Next.js 应用，iframe 加载后其内部 JS 会发起 /api/... 等请求。
+ * 如果 iframe src 走 Vite proxy（localhost:5173），这些内部请求也会打到 Vite，
+ * 但 Vite 没有代理 OpenMAIC 的 /api/classroom 等路由 → 请求失败 → 页面卡在"加载中"。
+ * 直接指向 Nginx 可以保证 iframe 内所有请求都走 Nginx → OpenMAIC 服务。
  */
-function toProxyUrl(classroomUrl: string): string {
-  // 如果已经是 proxy 路径，直接返回
-  if (classroomUrl.startsWith('/openmaic')) return classroomUrl
-  // 如果是绝对 URL（http://...），提取路径部分
+function toEmbedUrl(classroomUrl: string): string {
+  // Nginx 网关地址（开发环境 8080，生产环境由 window.location 决定）
+  const nginxOrigin = import.meta.env.DEV
+    ? 'http://localhost:8080'
+    : window.location.origin
+
+  // 如果已经是完整 URL，提取路径部分
   if (classroomUrl.startsWith('http')) {
     try {
       const url = new URL(classroomUrl)
-      return `/openmaic${url.pathname}${url.search}`
+      return `${nginxOrigin}/openmaic${url.pathname}${url.search}`
     } catch {
-      return `/openmaic${classroomUrl}`
+      return `${nginxOrigin}/openmaic${classroomUrl}`
     }
   }
-  // 相对路径，加上 proxy 前缀
-  const path = classroomUrl.startsWith('/') ? classroomUrl : `/${classroomUrl}`
-  return `/openmaic${path}`
+
+  // 去掉已有的 /openmaic 前缀（避免双重拼接）
+  let path = classroomUrl
+  if (path.startsWith('/openmaic')) {
+    path = path.slice('/openmaic'.length)
+  }
+  if (!path.startsWith('/')) {
+    path = `/${path}`
+  }
+
+  return `${nginxOrigin}/openmaic${path}`
 }
 
 export function ClassroomIframe({
@@ -71,8 +88,7 @@ export function ClassroomIframe({
   subject,
   onComplete,
   onAnswer,
-  onFallback,
-  loadTimeoutMs = 15000,
+  loadTimeoutMs = 30000,
   answerCount = 0,
 }: ClassroomIframeProps) {
   const [loadState, setLoadState] = useState<LoadState>('loading')
@@ -83,9 +99,9 @@ export function ClassroomIframe({
   const iframeLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const colors = SUBJECT_COLORS[subject ?? ''] ?? SUBJECT_COLORS.math
 
-  // 构建 iframe src URL
+  // 构建 iframe src URL（直接指向 Nginx，不走 Vite proxy）
   const iframeSrc = classroom.classroomUrl
-    ? toProxyUrl(classroom.classroomUrl)
+    ? toEmbedUrl(classroom.classroomUrl)
     : null
 
   // postMessage 通信桥
@@ -165,13 +181,28 @@ export function ClassroomIframe({
     }
   }, [])
 
-  // 无 classroomUrl → 直接降级
+  // 无 classroomUrl → 显示错误提示
   if (!iframeSrc) {
-    onFallback?.()
-    return null
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '16px',
+          padding: '48px 32px',
+          textAlign: 'center',
+        }}
+      >
+        <span style={{ fontSize: '48px' }}>⚠️</span>
+        <p style={{ fontSize: '18px', color: '#666' }}>
+          课堂 URL 不可用，请重新生成课堂
+        </p>
+      </div>
+    )
   }
 
-  // 超时或错误 → 提供降级选项
+  // 超时或错误 → 提供重试选项
   if (loadState === 'timeout' || loadState === 'error') {
     return (
       <div
@@ -192,44 +223,27 @@ export function ClassroomIframe({
             ? '课堂加载超时，可能是网络较慢'
             : '课堂加载出错'}
         </p>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button
-            onClick={() => {
-              setLoadState('loading')
-              // 强制刷新 iframe
-              if (iframeRef.current) {
-                iframeRef.current.src = iframeSrc
-              }
-            }}
-            style={{
-              padding: '12px 24px',
-              borderRadius: '16px',
-              border: 'none',
-              backgroundColor: colors.primary,
-              color: 'white',
-              fontSize: '16px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-            }}
-          >
-            重试
-          </button>
-          <button
-            onClick={() => onFallback?.()}
-            style={{
-              padding: '12px 24px',
-              borderRadius: '16px',
-              border: `2px solid ${colors.primary}`,
-              backgroundColor: 'white',
-              color: colors.primary,
-              fontSize: '16px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-            }}
-          >
-            使用简化版
-          </button>
-        </div>
+        <button
+          onClick={() => {
+            setLoadState('loading')
+            // 强制刷新 iframe
+            if (iframeRef.current) {
+              iframeRef.current.src = iframeSrc
+            }
+          }}
+          style={{
+            padding: '12px 24px',
+            borderRadius: '16px',
+            border: 'none',
+            backgroundColor: colors.primary,
+            color: 'white',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+          }}
+        >
+          🔄 重试
+        </button>
       </div>
     )
   }

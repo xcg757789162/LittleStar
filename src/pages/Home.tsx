@@ -1,16 +1,18 @@
 /**
- * 首页
- * 根据评测完成状态分为两个区域：
- *   区域 1 - 评测入口：未完成评测的科目卡片（全新用户显示大按钮）
- *   区域 2 - 学习入口：备课进度 + 开始学习（至少 1 科评测完成时显示）
- * 两个区域可以同时存在（部分评测完成的过渡状态）
+ * 首页 — "星辰乐园"
+ * 
+ * 设计风格：Sunny Playground — 温暖阳光游乐场
+ * 圆润 clay 质感 + 大胆配色 + 浮动装饰 + 弹性动画
+ * 面向 2-8 岁幼儿，触控友好，视觉快乐
  *
- * 设计风格：Clay（圆润 3D、柔和阴影、适合儿童）
- * 配色：教育类（蓝 #2563EB 信任 / 绿 #059669 成长 / 橙 #F97316 CTA）
+ * 区域布局：
+ *   1. 顶部 — 欢迎横幅（mascot + 问候 + 浮动装饰）
+ *   2. 中部 — 科目星球入口（大圆形可点击区域）
+ *   3. 底部 — 学习状态 + 开始学习按钮
  */
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
 import { usePlacementTests } from '@/hooks/queries'
@@ -19,48 +21,156 @@ import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
 import { usePreGeneration } from '@/hooks/usePreGeneration'
 import type { Subject } from '@/types/models'
 
-/* ====== SVG 图标组件 ====== */
+/* ═══════════════════════════════════════════
+   设计 Token — Sunny Playground
+   ═══════════════════════════════════════════ */
 
-function StarIcon({ size = 40, color = '#F59E0B' }: { size?: number; color?: string }) {
+const T = {
+  // 字体
+  fontDisplay: "'Baloo 2', 'Nunito', sans-serif",
+  fontBody: "'Nunito', 'PingFang SC', sans-serif",
+
+  // 背景
+  bgGradient: 'linear-gradient(170deg, #FFF8E7 0%, #FFE8D6 30%, #FFDEE9 60%, #D4F1F9 100%)',
+  
+  // 主色系 — 温暖阳光
+  sunOrange: '#FF8C42',
+  sunYellow: '#FFD166',
+  skyBlue: '#5BC0EB',
+  grassGreen: '#2EC4B6',
+  candyPink: '#FF6B9D',
+  starGold: '#FFC845',
+  
+  // 科目色
+  mathColor: '#FF8C42',
+  mathBg: 'linear-gradient(135deg, #FFE0C2 0%, #FFECD2 100%)',
+  mathShadow: 'rgba(255, 140, 66, 0.3)',
+  
+  chineseColor: '#2EC4B6',
+  chineseBg: 'linear-gradient(135deg, #C8F7F1 0%, #DEFFF9 100%)',
+  chineseShadow: 'rgba(46, 196, 182, 0.3)',
+  
+  englishColor: '#5BC0EB',
+  englishBg: 'linear-gradient(135deg, #C8E9FA 0%, #E0F2FE 100%)',
+  englishShadow: 'rgba(91, 192, 235, 0.3)',
+  
+  // 卡片
+  cardBg: '#FFFFFF',
+  cardRadius: '28px',
+  cardShadow: '0 12px 40px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04)',
+  cardShadowHover: '0 16px 48px rgba(0,0,0,0.1), 0 6px 16px rgba(0,0,0,0.06)',
+  
+  // 按钮
+  btnRadius: '22px',
+  
+  // 文字
+  textDark: '#2D3142',
+  textMedium: '#5E6577',
+  textLight: '#9DA3B4',
+  textWhite: '#FFFFFF',
+  
+  // 状态
+  successGreen: '#2EC4B6',
+  successBg: '#E6FAF7',
+  warningAmber: '#FFB347',
+  warningBg: '#FFF8EB',
+  errorRed: '#FF6B6B',
+  errorBg: '#FFF0F0',
+}
+
+/* ═══════════════════════════════════════════
+   装饰性 SVG 组件
+   ═══════════════════════════════════════════ */
+
+/** 闪亮星星 — 用于装饰 */
+function Sparkle({ size = 24, color = T.starGold, style }: {
+  size?: number; color?: string; style?: React.CSSProperties
+}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">
-      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={style}>
+      <path d="M12 0L14.59 8.41L23 11L14.59 13.59L12 22L9.41 13.59L1 11L9.41 8.41L12 0Z" />
     </svg>
   )
 }
 
-function MathIcon({ size = 32 }: { size?: number }) {
+/** 小云朵 — 浮动装饰 */
+function Cloud({ size = 60, style }: { size?: number; style?: React.CSSProperties }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="4" />
-      <path d="M9 12h6M12 9v6" />
+    <svg width={size} height={size * 0.6} viewBox="0 0 100 60" fill="white" opacity="0.6" style={style}>
+      <ellipse cx="50" cy="40" rx="40" ry="18" />
+      <ellipse cx="30" cy="32" rx="22" ry="16" />
+      <ellipse cx="65" cy="30" rx="26" ry="18" />
+      <ellipse cx="48" cy="22" rx="20" ry="16" />
     </svg>
   )
 }
 
-function BookIcon({ size = 32 }: { size?: number }) {
+/** Mascot 星星角色 */
+function StarMascot({ size = 80 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-      <path d="M8 7h8M8 11h6" />
+    <svg width={size} height={size} viewBox="0 0 120 120" fill="none">
+      {/* 星星身体 */}
+      <path
+        d="M60 8L73.5 40.5L108 46L82.5 70.5L88.5 105L60 89.5L31.5 105L37.5 70.5L12 46L46.5 40.5L60 8Z"
+        fill={T.starGold}
+        stroke="#F5A623"
+        strokeWidth="2"
+      />
+      {/* 眼睛 */}
+      <ellipse cx="47" cy="55" rx="5" ry="6" fill="#2D3142" />
+      <ellipse cx="73" cy="55" rx="5" ry="6" fill="#2D3142" />
+      {/* 眼睛高光 */}
+      <ellipse cx="49" cy="53" rx="2" ry="2.5" fill="white" />
+      <ellipse cx="75" cy="53" rx="2" ry="2.5" fill="white" />
+      {/* 微笑 */}
+      <path d="M48 68C48 68 54 76 60 76C66 76 72 68 72 68" stroke="#2D3142" strokeWidth="3" strokeLinecap="round" />
+      {/* 腮红 */}
+      <ellipse cx="38" cy="65" rx="6" ry="4" fill="#FFB5B5" opacity="0.6" />
+      <ellipse cx="82" cy="65" rx="6" ry="4" fill="#FFB5B5" opacity="0.6" />
     </svg>
   )
 }
 
-function GlobeIcon({ size = 32 }: { size?: number }) {
+/* ═══════════════════════════════════════════
+   科目图标 — 更大更有表现力
+   ═══════════════════════════════════════════ */
+
+function MathPlanetIcon() {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="2" y1="12" x2="22" y2="12" />
-      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+      <rect x="6" y="6" width="36" height="36" rx="10" fill={T.sunOrange} opacity="0.15" />
+      <text x="24" y="32" textAnchor="middle" fontSize="28" fill={T.sunOrange} fontWeight="bold" fontFamily={T.fontDisplay}>
+        +
+      </text>
     </svg>
   )
 }
 
-function RocketIcon({ size = 36 }: { size?: number }) {
+function ChinesePlanetIcon() {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+      <rect x="6" y="6" width="36" height="36" rx="10" fill={T.grassGreen} opacity="0.15" />
+      <text x="24" y="33" textAnchor="middle" fontSize="22" fill={T.grassGreen} fontWeight="bold" fontFamily={T.fontDisplay}>
+        文
+      </text>
+    </svg>
+  )
+}
+
+function EnglishPlanetIcon() {
+  return (
+    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+      <rect x="6" y="6" width="36" height="36" rx="10" fill={T.skyBlue} opacity="0.15" />
+      <text x="24" y="33" textAnchor="middle" fontSize="24" fill={T.skyBlue} fontWeight="bold" fontFamily={T.fontDisplay}>
+        A
+      </text>
+    </svg>
+  )
+}
+
+function RocketIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
       <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
       <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
@@ -69,87 +179,26 @@ function RocketIcon({ size = 36 }: { size?: number }) {
   )
 }
 
-function SparklesIcon({ size = 20 }: { size?: number }) {
+function PlayIcon() {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
-      <path d="M5 3v4M19 17v4M3 5h4M17 19h4" />
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M8 5.14v14l11-7-11-7z" />
     </svg>
   )
 }
 
-function ChevronRightIcon({ size = 20, color = '#94a3b8' }: { size?: number; color?: string }) {
+function RefreshIcon() {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="9 18 15 12 9 6" />
-    </svg>
-  )
-}
-
-function BookOpenIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-    </svg>
-  )
-}
-
-function PaletteIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="13.5" cy="6.5" r="0.5" fill="currentColor" />
-      <circle cx="17.5" cy="10.5" r="0.5" fill="currentColor" />
-      <circle cx="8.5" cy="7.5" r="0.5" fill="currentColor" />
-      <circle cx="6.5" cy="12.5" r="0.5" fill="currentColor" />
-      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
-    </svg>
-  )
-}
-
-function SearchIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="11" r="8" />
-      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-    </svg>
-  )
-}
-
-function AlertTriangleIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-      <line x1="12" y1="9" x2="12" y2="13" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  )
-}
-
-function FileTextIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="16" y1="13" x2="8" y2="13" />
-      <line x1="16" y1="17" x2="8" y2="17" />
-      <polyline points="10 9 9 9 8 9" />
-    </svg>
-  )
-}
-
-function RefreshIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="23 4 23 10 17 10" />
       <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
     </svg>
   )
 }
 
-function WifiOffIcon({ size = 20 }: { size?: number }) {
+function WifiOffIcon() {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={T.errorRed} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <line x1="1" y1="1" x2="23" y2="23" />
       <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
       <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
@@ -161,52 +210,88 @@ function WifiOffIcon({ size = 20 }: { size?: number }) {
   )
 }
 
-/* ====== 科目图标映射 ====== */
-
-const SUBJECT_ICON_MAP: Record<Subject, (size: number) => JSX.Element> = {
-  math: (size) => <MathIcon size={size} />,
-  chinese: (size) => <BookIcon size={size} />,
-  english: (size) => <GlobeIcon size={size} />,
+function CheckCircleIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T.successGreen} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </svg>
+  )
 }
 
-/** 全部科目定义 */
-const ALL_SUBJECTS: {
+/* ═══════════════════════════════════════════
+   科目配置
+   ═══════════════════════════════════════════ */
+
+interface SubjectConfig {
   key: Subject
   label: string
+  emoji: string
   color: string
-  bgColor: string
-  shadowColor: string
-}[] = [
-  { key: 'math', label: '数学', color: '#F97316', bgColor: '#FFF7ED', shadowColor: 'rgba(249, 115, 22, 0.15)' },
-  { key: 'chinese', label: '语文', color: '#059669', bgColor: '#ECFDF5', shadowColor: 'rgba(5, 150, 105, 0.15)' },
-  { key: 'english', label: '英语', color: '#2563EB', bgColor: '#EFF6FF', shadowColor: 'rgba(37, 99, 235, 0.15)' },
+  bg: string
+  shadow: string
+  icon: () => JSX.Element
+}
+
+const ALL_SUBJECTS: SubjectConfig[] = [
+  { key: 'math', label: '数学', emoji: '🔢', color: T.mathColor, bg: T.mathBg, shadow: T.mathShadow, icon: MathPlanetIcon },
+  { key: 'chinese', label: '语文', emoji: '📖', color: T.chineseColor, bg: T.chineseBg, shadow: T.chineseShadow, icon: ChinesePlanetIcon },
+  { key: 'english', label: '英语', emoji: '🌍', color: T.englishColor, bg: T.englishBg, shadow: T.englishShadow, icon: EnglishPlanetIcon },
 ]
 
-/* ====== Clay 风格设计 Token ====== */
-const CLAY = {
-  bg: 'linear-gradient(160deg, #F0F4FF 0%, #FDF2F8 40%, #FFF7ED 100%)',
-  card: '#FFFFFF',
-  cardShadow: '0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)',
-  cardShadowHover: '0 12px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06)',
-  radius: '24px',
-  radiusSm: '16px',
-  radiusLg: '32px',
-  primary: '#6C5CE7',
-  primaryLight: '#A29BFE',
-  primaryBg: 'rgba(108, 92, 231, 0.08)',
-  accent: '#F97316',
-  accentBg: 'rgba(249, 115, 22, 0.08)',
-  success: '#059669',
-  successBg: '#ECFDF5',
-  warning: '#F59E0B',
-  warningBg: '#FFFBEB',
-  error: '#EF4444',
-  errorBg: '#FEF2F2',
-  text: '#1E293B',
-  textSecondary: '#64748B',
-  textMuted: '#94A3B8',
-  border: '#E2E8F0',
+/* ═══════════════════════════════════════════
+   动画变体
+   ═══════════════════════════════════════════ */
+
+const floatAnimation = {
+  y: [0, -8, 0],
+  transition: { duration: 3, repeat: Infinity, ease: 'easeInOut' as const },
 }
+
+const floatSlow = {
+  y: [0, -5, 0],
+  transition: { duration: 4.5, repeat: Infinity, ease: 'easeInOut' as const },
+}
+
+const wiggle = {
+  rotate: [-3, 3, -3],
+  transition: { duration: 2, repeat: Infinity, ease: 'easeInOut' as const },
+}
+
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.12, delayChildren: 0.2 },
+  },
+}
+
+const staggerItem = {
+  hidden: { opacity: 0, y: 30, scale: 0.9 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { type: 'spring', stiffness: 260, damping: 20 },
+  },
+}
+
+/* ═══════════════════════════════════════════
+   获取时段问候语
+   ═══════════════════════════════════════════ */
+
+function getGreeting(name?: string) {
+  const hour = new Date().getHours()
+  const displayName = name || '小朋友'
+  if (hour < 11) return { text: `早上好，${displayName}！`, emoji: '🌅', sub: '新的一天，一起学习吧' }
+  if (hour < 14) return { text: `中午好，${displayName}！`, emoji: '☀️', sub: '吃饱了来学一会儿' }
+  if (hour < 18) return { text: `下午好，${displayName}！`, emoji: '🌤️', sub: '休息好了吗？继续加油' }
+  return { text: `晚上好，${displayName}！`, emoji: '🌙', sub: '睡前学一点点' }
+}
+
+/* ═══════════════════════════════════════════
+   主组件
+   ═══════════════════════════════════════════ */
 
 export function Home() {
   const navigate = useNavigate()
@@ -215,25 +300,19 @@ export function Home() {
   const gradeLevel = currentChild?.gradeLevel ?? 'middle-kindergarten'
   const [cachedCount, setCachedCount] = useState<number>(0)
 
-  // 按 childId 初始化持久化缓存（登录后有值），否则用内存缓存兜底
-  const cacheRef = useRef<ClassroomCache | null>(null)
-
-  // 使用 useMemo 根据 childId 变化创建缓存实例（避免在 render 中直接写 ref）
+  // 缓存初始化
   const cacheInstance = useMemo(() => {
     return childId
       ? new ClassroomCache(new PostgresCacheStore(Number(childId)))
       : new ClassroomCache()
   }, [childId])
 
-  // 在 effect 中更新 ref
-  useEffect(() => {
-    cacheRef.current = cacheInstance
-  }, [cacheInstance])
+  const cacheRef = useRef<ClassroomCache | null>(null)
+  useEffect(() => { cacheRef.current = cacheInstance }, [cacheInstance])
 
-  // 通过 React Query 查询入学测评记录（仅在有 childId 时查询）
+  // 查询评测状态
   const { data: placementTests, isLoading: isLoadingTests, isError: isTestsError, refetch: refetchTests } = usePlacementTests(childId)
 
-  // 解析评测状态：已完成科目集合 + 未完成科目列表
   const completedSubjects = useMemo(() => {
     if (!placementTests) return new Set<Subject>()
     return new Set(placementTests.map((t) => t.subject as Subject))
@@ -243,12 +322,11 @@ export function Home() {
     return ALL_SUBJECTS.filter((s) => !completedSubjects.has(s.key))
   }, [completedSubjects])
 
-  // hasPlacementTest: 至少有 1 科完成评测 → true；全无 → false；加载中 → null
   const hasPlacementTest = childId
     ? (placementTests ? placementTests.length > 0 : null)
     : false
 
-  // 加载缓存课程数量（独立于测评状态，childId 变化时重新加载）
+  // 缓存课程数量
   useEffect(() => {
     const loadCacheStatus = async () => {
       try {
@@ -261,164 +339,168 @@ export function Home() {
     loadCacheStatus()
   }, [cacheInstance])
 
-  // 课堂预生成 Hook（评测完成 + 缓存为空时自动触发）
+  // 预生成
   const {
     status: preGenStatus,
     completedCount: preGenCompleted,
     totalCount: preGenTotal,
     stageText: preGenStageText,
     triggerGeneration,
-  } = usePreGeneration(
-    childId,
-    hasPlacementTest,
-    cachedCount,
-  )
+  } = usePreGeneration(childId, hasPlacementTest, cachedCount)
 
-  // 预生成完成后刷新缓存数量
+  // 预生成完成后刷新缓存
   const refreshCache = useCallback(async () => {
     try {
       const size = await cacheInstance.getCacheSize()
       setCachedCount(size)
-    } catch {
-      // 静默处理
-    }
+    } catch { /* silent */ }
   }, [cacheInstance])
 
   useEffect(() => {
     if (preGenStatus === 'completed' && preGenCompleted > 0) {
-      void refreshCache()
+      // 使用 setTimeout(0) 避免在 effect 中同步 setState（ESLint: react-hooks/set-state-in-effect）
+      const timer = setTimeout(() => void refreshCache(), 0)
+      return () => clearTimeout(timer)
     }
   }, [preGenStatus, preGenCompleted, refreshCache])
 
-  // 生成中时定时刷新缓存状态（每 10 秒检查一次）
   useEffect(() => {
     if (preGenStatus !== 'generating') return
-    const interval = setInterval(() => {
-      void refreshCache()
-    }, 10000)
+    const interval = setInterval(() => void refreshCache(), 10000)
     return () => clearInterval(interval)
   }, [preGenStatus, refreshCache])
 
-  const handlePlacementTest = () => {
-    navigate('/placement-test-select')
-  }
+  const greeting = getGreeting(currentChild?.name)
 
-  // ====== 加载中状态 ======
+  // ═══════════════ 加载中 ═══════════════
   if (childId && isLoadingTests && !isTestsError && hasPlacementTest === null) {
     return (
-      <div
-        data-testid="home-page"
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: CLAY.bg,
-        }}
-      >
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-        >
-          <StarIcon size={56} color="#F59E0B" />
+      <div data-testid="home-page" style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: T.bgGradient,
+        gap: '20px',
+      }}>
+        <motion.div animate={{ ...floatAnimation, rotate: [0, 10, -10, 0] }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}>
+          <StarMascot size={100} />
         </motion.div>
+        <motion.p
+          animate={{ opacity: [0.4, 1, 0.4] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+          style={{
+            fontFamily: T.fontDisplay,
+            fontSize: '18px',
+            color: T.textMedium,
+            fontWeight: 600,
+          }}
+        >
+          正在加载你的乐园...
+        </motion.p>
       </div>
     )
   }
 
-  // ====== 错误状态 ======
+  // ═══════════════ 错误状态 ═══════════════
   if (childId && isTestsError) {
     return (
-      <div
-        data-testid="home-page"
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: CLAY.bg,
-          padding: '24px',
-          gap: '24px',
-        }}
-      >
-        {/* Logo */}
+      <div data-testid="home-page" style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: T.bgGradient,
+        padding: '24px',
+        gap: '28px',
+      }}>
+        {/* Mascot 难过 */}
         <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
+          initial={{ scale: 0, rotate: -180 }}
+          animate={{ scale: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 200 }}
-          style={{ display: 'flex', alignItems: 'center', gap: '12px' }}
         >
-          <StarIcon size={48} />
-          <span style={{ fontSize: '36px', fontWeight: 800, color: CLAY.primary, letterSpacing: '-0.5px' }}>
-            小星辰
-          </span>
+          <StarMascot size={90} />
         </motion.div>
 
         {/* 错误卡片 */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
           style={{
-            padding: '28px 32px',
-            borderRadius: CLAY.radius,
-            backgroundColor: CLAY.card,
-            boxShadow: CLAY.cardShadow,
+            padding: '32px',
+            borderRadius: T.cardRadius,
+            backgroundColor: T.cardBg,
+            boxShadow: T.cardShadow,
             textAlign: 'center',
-            maxWidth: '380px',
+            maxWidth: '360px',
             width: '100%',
           }}
         >
           <div style={{
-            width: '56px',
-            height: '56px',
-            borderRadius: '50%',
-            backgroundColor: CLAY.errorBg,
+            width: '64px',
+            height: '64px',
+            borderRadius: '20px',
+            backgroundColor: T.errorBg,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            margin: '0 auto 16px',
-            color: CLAY.error,
+            margin: '0 auto 20px',
           }}>
-            <WifiOffIcon size={28} />
+            <WifiOffIcon />
           </div>
-          <p style={{ fontSize: '17px', color: CLAY.text, fontWeight: 700, marginBottom: '8px' }}>
-            后端服务连接失败
+          <p style={{
+            fontFamily: T.fontDisplay,
+            fontSize: '20px',
+            color: T.textDark,
+            fontWeight: 700,
+            marginBottom: '8px',
+          }}>
+            哎呀，连接不上
           </p>
-          <p style={{ fontSize: '14px', color: CLAY.textMuted, lineHeight: 1.6 }}>
-            请检查 Docker 后端服务是否正在运行
+          <p style={{
+            fontFamily: T.fontBody,
+            fontSize: '14px',
+            color: T.textLight,
+            lineHeight: 1.6,
+          }}>
+            请检查后端服务是否在运行
           </p>
         </motion.div>
 
-        {/* 重试按钮 */}
+        {/* 重试 */}
         <motion.button
-          whileTap={{ scale: 0.95 }}
-          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.92 }}
+          whileHover={{ scale: 1.04 }}
           onClick={() => refetchTests()}
           style={{
-            padding: '14px 40px',
-            borderRadius: '16px',
+            padding: '16px 44px',
+            borderRadius: T.btnRadius,
             border: 'none',
-            backgroundColor: CLAY.primary,
-            color: 'white',
-            fontSize: '16px',
+            background: `linear-gradient(135deg, ${T.skyBlue} 0%, #4DA8DA 100%)`,
+            color: T.textWhite,
+            fontFamily: T.fontDisplay,
+            fontSize: '17px',
             fontWeight: 700,
             cursor: 'pointer',
-            boxShadow: `0 4px 16px rgba(108, 92, 231, 0.35)`,
+            boxShadow: `0 8px 24px rgba(91, 192, 235, 0.35)`,
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            transition: 'box-shadow 0.2s ease',
+            gap: '10px',
           }}
         >
-          <RefreshIcon size={18} />
-          重试连接
+          <RefreshIcon />
+          再试一次
         </motion.button>
       </div>
     )
   }
 
-  // ====== 主页面 ======
+  // ═══════════════ 主页面 ═══════════════
   return (
     <div
       data-testid="home-page"
@@ -426,232 +508,377 @@ export function Home() {
         minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        background: CLAY.bg,
-        padding: '48px 20px 32px',
-        gap: '28px',
+        background: T.bgGradient,
+        padding: '0 0 100px',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      {/* ====== Hero 区域：Logo + 欢迎语 ====== */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: 'easeOut' }}
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '8px',
-        }}
-      >
-        <motion.div
-          initial={{ scale: 0, rotate: -180 }}
-          animate={{ scale: 1, rotate: 0 }}
-          transition={{ type: 'spring', stiffness: 200, delay: 0.1 }}
-        >
-          <StarIcon size={56} />
-        </motion.div>
-        <h1 style={{
-          fontSize: '32px',
-          fontWeight: 800,
-          color: CLAY.primary,
-          letterSpacing: '-0.5px',
-          margin: 0,
-        }}>
-          小星辰
-        </h1>
-        <p style={{
-          fontSize: '15px',
-          color: CLAY.textSecondary,
-          margin: 0,
-          fontWeight: 500,
-        }}>
-          和小星老师一起快乐学习！
-        </p>
+      {/* ────── 浮动装饰 ────── */}
+      <motion.div animate={floatSlow} style={{ position: 'absolute', top: '8%', left: '-20px', zIndex: 0 }}>
+        <Cloud size={80} />
+      </motion.div>
+      <motion.div animate={floatAnimation} style={{ position: 'absolute', top: '5%', right: '10px', zIndex: 0 }}>
+        <Cloud size={55} />
+      </motion.div>
+      <motion.div animate={floatSlow} style={{ position: 'absolute', top: '22%', right: '-10px', zIndex: 0 }}>
+        <Sparkle size={20} color="#FFD166" style={{ opacity: 0.5 }} />
+      </motion.div>
+      <motion.div animate={floatAnimation} style={{ position: 'absolute', top: '35%', left: '5%', zIndex: 0 }}>
+        <Sparkle size={14} color="#FF6B9D" style={{ opacity: 0.4 }} />
       </motion.div>
 
-      {/* ====== 区域 1：学习评测入口 ====== */}
-      {pendingSubjects.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.5 }}
-          style={{
-            width: '100%',
-            maxWidth: '420px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-          }}
-        >
-          {/* 评测区卡片容器 */}
-          <div style={{
-            backgroundColor: CLAY.card,
-            borderRadius: CLAY.radius,
-            boxShadow: CLAY.cardShadow,
-            padding: '24px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '20px',
+      {/* ═══════════════════════════════════
+         区域 1：欢迎横幅
+         ═══════════════════════════════════ */}
+      <motion.div
+        initial={{ opacity: 0, y: -30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, ease: [0.34, 1.56, 0.64, 1] }}
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          padding: '48px 24px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px',
+        }}
+      >
+        {/* Mascot */}
+        <motion.div animate={wiggle}>
+          <StarMascot size={72} />
+        </motion.div>
+
+        {/* 问候文字 */}
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+            <span style={{ fontSize: '22px' }}>{greeting.emoji}</span>
+            <h1 style={{
+              fontFamily: T.fontDisplay,
+              fontSize: '24px',
+              fontWeight: 800,
+              color: T.textDark,
+              margin: 0,
+              lineHeight: 1.3,
+            }}>
+              {greeting.text}
+            </h1>
+          </div>
+          <p style={{
+            fontFamily: T.fontBody,
+            fontSize: '14px',
+            color: T.textMedium,
+            margin: 0,
+            fontWeight: 500,
           }}>
-            {/* 评测区标题 + 进度 */}
+            {greeting.sub}
+          </p>
+        </div>
+      </motion.div>
+
+      {/* ═══════════════════════════════════
+         区域 2：科目星球
+         ═══════════════════════════════════ */}
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        animate="show"
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          padding: '8px 20px 0',
+        }}
+      >
+        {/* 未评测 — 入学测评入口 */}
+        {pendingSubjects.length === ALL_SUBJECTS.length && (
+          <motion.div
+            variants={staggerItem}
+            style={{
+              backgroundColor: T.cardBg,
+              borderRadius: T.cardRadius,
+              boxShadow: T.cardShadow,
+              padding: '28px 24px',
+              marginBottom: '16px',
+            }}
+          >
+            {/* 头部 */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              marginBottom: '20px',
+            }}>
+              <div style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '14px',
+                background: `linear-gradient(135deg, ${T.starGold} 0%, ${T.sunOrange} 100%)`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '22px',
+                boxShadow: `0 4px 12px ${T.mathShadow}`,
+              }}>
+                ✨
+              </div>
+              <div>
+                <p style={{
+                  fontFamily: T.fontDisplay,
+                  fontSize: '18px',
+                  fontWeight: 700,
+                  color: T.textDark,
+                  margin: 0,
+                }}>
+                  让小星老师认识你吧
+                </p>
+                <p style={{
+                  fontFamily: T.fontBody,
+                  fontSize: '13px',
+                  color: T.textLight,
+                  margin: 0,
+                }}>
+                  做个小测试，只需几分钟
+                </p>
+              </div>
+            </div>
+
+            {/* 大 CTA 按钮 */}
+            <motion.button
+              data-testid="placement-test-entry-btn"
+              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.02, boxShadow: `0 12px 32px rgba(255, 140, 66, 0.45)` }}
+              onClick={() => navigate('/placement-test-select')}
+              style={{
+                width: '100%',
+                padding: '20px',
+                borderRadius: T.btnRadius,
+                border: 'none',
+                background: `linear-gradient(135deg, ${T.sunOrange} 0%, #FFA361 50%, ${T.sunYellow} 100%)`,
+                color: T.textWhite,
+                fontFamily: T.fontDisplay,
+                fontSize: '20px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: `0 8px 28px rgba(255, 140, 66, 0.4)`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '12px',
+                letterSpacing: '0.5px',
+              }}
+            >
+              <RocketIcon />
+              入学测评
+            </motion.button>
+          </motion.div>
+        )}
+
+        {/* 部分评测完成 — 显示未完成科目 */}
+        {pendingSubjects.length > 0 && pendingSubjects.length < ALL_SUBJECTS.length && (
+          <motion.div
+            variants={staggerItem}
+            style={{
+              backgroundColor: T.cardBg,
+              borderRadius: T.cardRadius,
+              boxShadow: T.cardShadow,
+              padding: '24px',
+              marginBottom: '16px',
+            }}
+          >
+            {/* 标题行 */}
             <div style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              marginBottom: '16px',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '12px',
-                  backgroundColor: CLAY.primaryBg,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: CLAY.primary,
+                <span style={{ fontSize: '20px' }}>📝</span>
+                <span style={{
+                  fontFamily: T.fontDisplay,
+                  fontSize: '16px',
+                  fontWeight: 700,
+                  color: T.textDark,
                 }}>
-                  <SparklesIcon size={18} />
-                </div>
-                <div>
-                  <p style={{
-                    fontSize: '15px',
-                    fontWeight: 700,
-                    color: CLAY.text,
-                    margin: 0,
-                  }}>
-                    {completedSubjects.size === 0
-                      ? '让小星老师了解你吧'
-                      : `还有 ${pendingSubjects.length} 科评测未完成`}
-                  </p>
-                </div>
+                  还有 {pendingSubjects.length} 科没测评
+                </span>
               </div>
-              {/* 进度指示器 */}
+              {/* 进度点 */}
               <div style={{
                 display: 'flex',
+                gap: '6px',
                 alignItems: 'center',
-                gap: '5px',
-                padding: '4px 10px',
-                borderRadius: '12px',
-                backgroundColor: CLAY.primaryBg,
+                padding: '6px 12px',
+                borderRadius: '20px',
+                backgroundColor: 'rgba(255, 200, 69, 0.12)',
               }}>
                 {ALL_SUBJECTS.map((s) => (
-                  <div
-                    key={s.key}
-                    style={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      backgroundColor: completedSubjects.has(s.key) ? CLAY.success : CLAY.border,
-                      transition: 'background-color 0.3s ease',
-                    }}
-                  />
+                  <div key={s.key} style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    backgroundColor: completedSubjects.has(s.key) ? T.successGreen : '#E2E8F0',
+                    transition: 'all 0.3s ease',
+                    boxShadow: completedSubjects.has(s.key) ? `0 0 6px ${T.successGreen}40` : 'none',
+                  }} />
                 ))}
-                <span style={{ fontSize: '11px', color: CLAY.textMuted, marginLeft: '4px', fontWeight: 600 }}>
-                  {completedSubjects.size}/{ALL_SUBJECTS.length}
-                </span>
               </div>
             </div>
 
-            {/* 未完成科目卡片 */}
-            {completedSubjects.size === 0 ? (
-              /* 全新用户：大 CTA 按钮 */
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+            {/* 未完成科目列表 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {pendingSubjects.map((subject, index) => (
                 <motion.button
-                  data-testid="placement-test-entry-btn"
-                  whileTap={{ scale: 0.96 }}
+                  key={subject.key}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.3 + index * 0.1, type: 'spring', stiffness: 200 }}
+                  whileTap={{ scale: 0.97 }}
                   whileHover={{ scale: 1.02 }}
-                  onClick={handlePlacementTest}
+                  onClick={() => navigate(`/placement-test/${subject.key}/${gradeLevel}`)}
                   style={{
-                    width: '100%',
-                    padding: '20px 32px',
-                    borderRadius: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                    padding: '16px 18px',
+                    borderRadius: '18px',
                     border: 'none',
-                    background: `linear-gradient(135deg, ${CLAY.accent} 0%, #FB923C 100%)`,
-                    color: 'white',
-                    fontSize: '20px',
-                    fontWeight: 800,
+                    background: subject.bg,
                     cursor: 'pointer',
-                    boxShadow: `0 8px 24px rgba(249, 115, 22, 0.35)`,
+                    boxShadow: `0 4px 16px ${subject.shadow}`,
+                    textAlign: 'left',
+                  }}
+                >
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '16px',
+                    backgroundColor: T.cardBg,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '12px',
-                    transition: 'box-shadow 0.2s ease',
-                  }}
-                >
-                  <RocketIcon size={28} />
-                  入学测评
-                </motion.button>
-                <p style={{ fontSize: '13px', color: CLAY.textMuted, textAlign: 'center', margin: 0 }}>
-                  只需几分钟，轻轻松松
-                </p>
-              </div>
-            ) : (
-              /* 部分完成：显示未完成科目卡片列表 */
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {pendingSubjects.map((subject, index) => (
-                  <motion.button
-                    key={subject.key}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3 + index * 0.1 }}
-                    whileTap={{ scale: 0.97 }}
-                    whileHover={{ scale: 1.01 }}
-                    onClick={() => navigate(`/placement-test/${subject.key}/${gradeLevel}`)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '14px',
-                      padding: '14px 18px',
-                      borderRadius: CLAY.radiusSm,
-                      border: 'none',
-                      backgroundColor: subject.bgColor,
-                      cursor: 'pointer',
-                      boxShadow: `0 4px 16px ${subject.shadowColor}`,
-                      textAlign: 'left',
-                      transition: 'box-shadow 0.2s ease, transform 0.15s ease',
-                    }}
-                  >
+                    boxShadow: `0 2px 8px ${subject.shadow}`,
+                    flexShrink: 0,
+                  }}>
+                    <subject.icon />
+                  </div>
+                  <div style={{ flex: 1 }}>
                     <div style={{
-                      width: '44px',
-                      height: '44px',
-                      borderRadius: '14px',
-                      backgroundColor: CLAY.card,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: `0 2px 8px ${subject.shadowColor}`,
-                      flexShrink: 0,
+                      fontFamily: T.fontDisplay,
+                      fontSize: '16px',
+                      fontWeight: 700,
+                      color: subject.color,
                     }}>
-                      {SUBJECT_ICON_MAP[subject.key](28)}
+                      {subject.label}评测
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '15px', fontWeight: 700, color: subject.color }}>
-                        {subject.label}评测
-                      </div>
-                      <div style={{ fontSize: '12px', color: CLAY.textMuted, marginTop: '2px' }}>
-                        点击开始评测
-                      </div>
+                    <div style={{
+                      fontFamily: T.fontBody,
+                      fontSize: '12px',
+                      color: T.textLight,
+                      marginTop: '2px',
+                    }}>
+                      点一下就开始啦 {subject.emoji}
                     </div>
-                    <ChevronRightIcon size={20} color={subject.color} />
-                  </motion.button>
-                ))}
-              </div>
-            )}
-          </div>
-        </motion.div>
-      )}
+                  </div>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={subject.color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </motion.button>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
-      {/* ====== 区域 2：学习入口 ====== */}
+        {/* ═══════════════════════════════════
+           科目星球 — 大圆形卡片（已评测的科目）
+           ═══════════════════════════════════ */}
+        {completedSubjects.size > 0 && (
+          <motion.div
+            variants={staggerItem}
+            style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'center',
+              padding: '4px 0 16px',
+              flexWrap: 'wrap',
+            }}
+          >
+            {ALL_SUBJECTS.filter((s) => completedSubjects.has(s.key)).map((subject, index) => (
+              <motion.div
+                key={subject.key}
+                initial={{ scale: 0, rotate: -20 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ delay: 0.4 + index * 0.15, type: 'spring', stiffness: 200, damping: 15 }}
+                whileHover={{ scale: 1.08, y: -4 }}
+                whileTap={{ scale: 0.95 }}
+                style={{
+                  width: '100px',
+                  height: '120px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: 'default',
+                }}
+              >
+                {/* 圆形图标 */}
+                <div style={{
+                  width: '72px',
+                  height: '72px',
+                  borderRadius: '24px',
+                  background: subject.bg,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: `0 8px 24px ${subject.shadow}`,
+                  position: 'relative',
+                }}>
+                  <subject.icon />
+                  {/* 完成勾 */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '-4px',
+                    right: '-4px',
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    backgroundColor: T.cardBg,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  }}>
+                    <CheckCircleIcon />
+                  </div>
+                </div>
+                {/* 标签 */}
+                <span style={{
+                  fontFamily: T.fontDisplay,
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  color: subject.color,
+                }}>
+                  {subject.label}
+                </span>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </motion.div>
+
+      {/* ═══════════════════════════════════
+         区域 3：学习状态 + 开始学习
+         ═══════════════════════════════════ */}
       {hasPlacementTest && (
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.5 }}
+          transition={{ delay: 0.5, type: 'spring', stiffness: 180 }}
           style={{
-            width: '100%',
-            maxWidth: '420px',
+            position: 'relative',
+            zIndex: 1,
+            padding: '0 20px',
             display: 'flex',
             flexDirection: 'column',
             gap: '16px',
@@ -659,189 +886,278 @@ export function Home() {
         >
           {/* 课程状态卡片 */}
           <div style={{
-            backgroundColor: CLAY.card,
-            borderRadius: CLAY.radius,
-            boxShadow: CLAY.cardShadow,
+            backgroundColor: T.cardBg,
+            borderRadius: T.cardRadius,
+            boxShadow: T.cardShadow,
             padding: '20px 24px',
             display: 'flex',
             flexDirection: 'column',
             gap: '12px',
           }}>
-            {/* 已就绪状态 */}
-            {cachedCount > 0 && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px 16px',
-                borderRadius: CLAY.radiusSm,
-                backgroundColor: CLAY.successBg,
-              }}>
-                <div style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '12px',
-                  backgroundColor: CLAY.card,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: CLAY.success,
-                  boxShadow: '0 2px 8px rgba(5, 150, 105, 0.15)',
-                }}>
-                  <BookOpenIcon size={18} />
-                </div>
-                <span style={{ fontSize: '15px', color: CLAY.success, fontWeight: 700 }}>
-                  {cachedCount} 节课已就绪
-                </span>
-              </div>
-            )}
-
-            {/* 生成中状态 */}
-            {cachedCount === 0 && preGenStatus === 'generating' && (
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px',
-                padding: '12px 16px',
-                borderRadius: CLAY.radiusSm,
-                backgroundColor: CLAY.warningBg,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-                    style={{ color: CLAY.warning, display: 'flex' }}
-                  >
-                    <PaletteIcon size={20} />
-                  </motion.div>
-                  <span style={{ fontSize: '14px', color: '#92400E', fontWeight: 600 }}>
-                    {preGenStageText || 'AI 老师正在创作课堂内容…'}
-                  </span>
-                </div>
-                {preGenTotal > 0 && (
-                  <>
-                    <div style={{
-                      width: '100%',
-                      height: '6px',
-                      borderRadius: '3px',
-                      backgroundColor: 'rgba(245, 158, 11, 0.15)',
-                      overflow: 'hidden',
-                    }}>
-                      <motion.div
-                        initial={{ width: '5%' }}
-                        animate={{ width: `${Math.max(5, (preGenCompleted / preGenTotal) * 100)}%` }}
-                        transition={{ duration: 0.5, ease: 'easeOut' }}
-                        style={{
-                          height: '100%',
-                          borderRadius: '3px',
-                          background: 'linear-gradient(90deg, #F59E0B 0%, #F97316 100%)',
-                        }}
-                      />
-                    </div>
-                    <div style={{ fontSize: '12px', color: CLAY.textMuted, textAlign: 'center' }}>
-                      {preGenCompleted}/{preGenTotal} 节课堂
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* 检查中状态 */}
-            {cachedCount === 0 && preGenStatus === 'checking' && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '12px 16px',
-                borderRadius: CLAY.radiusSm,
-                backgroundColor: CLAY.warningBg,
-              }}>
+            {/* 已就绪 */}
+            <AnimatePresence mode="wait">
+              {cachedCount > 0 && (
                 <motion.div
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                  style={{ color: CLAY.warning, display: 'flex' }}
+                  key="ready"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                    padding: '14px 18px',
+                    borderRadius: '18px',
+                    backgroundColor: T.successBg,
+                  }}
                 >
-                  <SearchIcon size={20} />
+                  <motion.div
+                    animate={{ rotate: [0, 10, -10, 0] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    style={{ fontSize: '28px', lineHeight: 1 }}
+                  >
+                    📚
+                  </motion.div>
+                  <div>
+                    <span style={{
+                      fontFamily: T.fontDisplay,
+                      fontSize: '16px',
+                      color: T.successGreen,
+                      fontWeight: 700,
+                    }}>
+                      {cachedCount} 节课已准备好啦！
+                    </span>
+                    <p style={{
+                      fontFamily: T.fontBody,
+                      fontSize: '12px',
+                      color: T.textLight,
+                      margin: '2px 0 0',
+                    }}>
+                      快来开始今天的学习吧
+                    </p>
+                  </div>
                 </motion.div>
-                <span style={{ fontSize: '14px', color: '#92400E', fontWeight: 500 }}>
-                  {preGenStageText || '正在分析学习情况…'}
-                </span>
-              </div>
-            )}
+              )}
 
-            {/* 失败状态 */}
-            {cachedCount === 0 && preGenStatus === 'failed' && (
-              <motion.div
-                whileTap={{ scale: 0.97 }}
-                onClick={triggerGeneration}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '12px 16px',
-                  borderRadius: CLAY.radiusSm,
-                  backgroundColor: CLAY.errorBg,
-                  cursor: 'pointer',
-                  transition: 'background-color 0.2s ease',
-                }}
-              >
-                <div style={{ color: CLAY.error, display: 'flex' }}>
-                  <AlertTriangleIcon size={20} />
-                </div>
-                <span style={{ fontSize: '14px', color: CLAY.error, fontWeight: 600 }}>
-                  课程生成失败，点击重试
-                </span>
-              </motion.div>
-            )}
+              {/* 生成中 */}
+              {cachedCount === 0 && preGenStatus === 'generating' && (
+                <motion.div
+                  key="generating"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  style={{
+                    padding: '16px 18px',
+                    borderRadius: '18px',
+                    backgroundColor: T.warningBg,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+                      style={{ fontSize: '24px', lineHeight: 1 }}
+                    >
+                      🎨
+                    </motion.div>
+                    <span style={{
+                      fontFamily: T.fontDisplay,
+                      fontSize: '15px',
+                      color: '#92400E',
+                      fontWeight: 600,
+                    }}>
+                      {preGenStageText || '小星老师正在备课...'}
+                    </span>
+                  </div>
+                  {preGenTotal > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {/* 进度条 */}
+                      <div style={{
+                        width: '100%',
+                        height: '8px',
+                        borderRadius: '4px',
+                        backgroundColor: 'rgba(255, 179, 71, 0.2)',
+                        overflow: 'hidden',
+                      }}>
+                        <motion.div
+                          initial={{ width: '3%' }}
+                          animate={{ width: `${Math.max(3, (preGenCompleted / preGenTotal) * 100)}%` }}
+                          transition={{ duration: 0.6, ease: 'easeOut' }}
+                          style={{
+                            height: '100%',
+                            borderRadius: '4px',
+                            background: `linear-gradient(90deg, ${T.warningAmber} 0%, ${T.sunOrange} 100%)`,
+                          }}
+                        />
+                      </div>
+                      <span style={{
+                        fontFamily: T.fontBody,
+                        fontSize: '12px',
+                        color: T.textLight,
+                        textAlign: 'center',
+                      }}>
+                        {preGenCompleted} / {preGenTotal} 节课堂
+                      </span>
+                    </div>
+                  )}
+                </motion.div>
+              )}
 
-            {/* 空闲 / 准备中 */}
-            {cachedCount === 0 && preGenStatus === 'idle' && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '12px 16px',
-                borderRadius: CLAY.radiusSm,
-                backgroundColor: CLAY.warningBg,
-              }}>
-                <div style={{ color: CLAY.warning, display: 'flex' }}>
-                  <FileTextIcon size={20} />
-                </div>
-                <span style={{ fontSize: '14px', color: '#92400E', fontWeight: 500 }}>
-                  课程准备中…
-                </span>
-              </div>
-            )}
+              {/* 检查中 */}
+              {cachedCount === 0 && preGenStatus === 'checking' && (
+                <motion.div
+                  key="checking"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '14px 18px',
+                    borderRadius: '18px',
+                    backgroundColor: T.warningBg,
+                  }}
+                >
+                  <motion.div
+                    animate={{ scale: [1, 1.3, 1] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                    style={{ fontSize: '24px', lineHeight: 1 }}
+                  >
+                    🔍
+                  </motion.div>
+                  <span style={{
+                    fontFamily: T.fontDisplay,
+                    fontSize: '15px',
+                    color: '#92400E',
+                    fontWeight: 600,
+                  }}>
+                    {preGenStageText || '正在看看你学到哪了...'}
+                  </span>
+                </motion.div>
+              )}
+
+              {/* 失败 */}
+              {cachedCount === 0 && preGenStatus === 'failed' && (
+                <motion.button
+                  key="failed"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={triggerGeneration}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '14px 18px',
+                    borderRadius: '18px',
+                    backgroundColor: T.errorBg,
+                    border: 'none',
+                    cursor: 'pointer',
+                    width: '100%',
+                    textAlign: 'left',
+                  }}
+                >
+                  <span style={{ fontSize: '24px', lineHeight: 1 }}>😢</span>
+                  <span style={{
+                    fontFamily: T.fontDisplay,
+                    fontSize: '15px',
+                    color: T.errorRed,
+                    fontWeight: 600,
+                  }}>
+                    备课失败了，点这里再试试
+                  </span>
+                </motion.button>
+              )}
+
+              {/* 空闲 */}
+              {cachedCount === 0 && preGenStatus === 'idle' && (
+                <motion.div
+                  key="idle"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '14px 18px',
+                    borderRadius: '18px',
+                    backgroundColor: T.warningBg,
+                  }}
+                >
+                  <motion.div
+                    animate={floatAnimation}
+                    style={{ fontSize: '24px', lineHeight: 1 }}
+                  >
+                    ✏️
+                  </motion.div>
+                  <span style={{
+                    fontFamily: T.fontDisplay,
+                    fontSize: '15px',
+                    color: '#92400E',
+                    fontWeight: 600,
+                  }}>
+                    小星老师准备中...
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          {/* 开始学习按钮 */}
+          {/* ════ 开始学习大按钮 ════ */}
           <motion.button
-            whileTap={{ scale: 0.96 }}
-            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.94 }}
+            whileHover={{
+              scale: 1.03,
+              boxShadow: `0 14px 40px rgba(91, 192, 235, 0.45)`,
+            }}
             onClick={() => navigate('/learn')}
             style={{
               width: '100%',
-              padding: '18px 32px',
-              borderRadius: '20px',
+              padding: '22px 32px',
+              borderRadius: T.btnRadius,
               border: 'none',
-              background: `linear-gradient(135deg, ${CLAY.primary} 0%, ${CLAY.primaryLight} 100%)`,
-              color: 'white',
-              fontSize: '20px',
+              background: `linear-gradient(135deg, #5BC0EB 0%, #4DA8DA 40%, #3D95C7 100%)`,
+              color: T.textWhite,
+              fontFamily: T.fontDisplay,
+              fontSize: '22px',
               fontWeight: 800,
               cursor: 'pointer',
-              boxShadow: `0 8px 24px rgba(108, 92, 231, 0.35)`,
+              boxShadow: `0 10px 32px rgba(91, 192, 235, 0.4)`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '10px',
-              transition: 'box-shadow 0.2s ease',
-              letterSpacing: '0.5px',
+              gap: '12px',
+              letterSpacing: '1px',
+              position: 'relative',
+              overflow: 'hidden',
             }}
           >
+            {/* 按钮内闪光效果 */}
+            <motion.div
+              animate={{ x: ['-200%', '200%'] }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', repeatDelay: 2 }}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '60%',
+                height: '100%',
+                background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
+                pointerEvents: 'none',
+              }}
+            />
+            <PlayIcon />
             开始学习
           </motion.button>
         </motion.div>
       )}
+
+      {/* ═══════════════════════════════════
+         底部间距（给 BottomNav 留空间）
+         ═══════════════════════════════════ */}
+      <div style={{ height: '24px' }} />
     </div>
   )
 }

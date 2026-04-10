@@ -25,38 +25,18 @@ export default defineConfig({
       },
 
       // === OpenMAIC AI 课堂代理 ===
-      // 所有 OpenMAIC 请求统一通过 Nginx 网关（8080）转发
+      // LittleStar 自身的 API 调用（非 iframe）通过 Vite proxy 转发到 Nginx
       // Nginx 会将 /openmaic/* 路由到容器内部的 openmaic:3002
-      //
-      // API 代理：LittleStar → Nginx → OpenMAIC API
       '/openmaic-proxy': {
         target: 'http://localhost:8080',
         changeOrigin: true,
         // /openmaic-proxy/api/xxx → /openmaic/api/xxx（Nginx 再转发到 openmaic:3002）
         rewrite: (path) => path.replace(/^\/openmaic-proxy/, '/openmaic'),
       },
-      // iframe 代理：嵌入 OpenMAIC 原生前端（通过 Nginx，自动剥离 X-Frame-Options 头）
-      '/openmaic': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-      },
-      // OpenMAIC 前端静态资源代理（iframe 内页面引用的 CSS/JS/字体/图片）
-      // 这些资源以绝对路径引用（/_next/...、/avatars/...），需要通过 Nginx 转发到 OpenMAIC 服务
-      '/_next': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-        rewrite: (path: string) => `/openmaic${path}`,
-      },
-      '/avatars': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-        rewrite: (path: string) => `/openmaic${path}`,
-      },
-      '/logo': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-        rewrite: (path: string) => `/openmaic${path}`,
-      },
+      // 注：iframe 嵌入 OpenMAIC 原生前端时不走 Vite proxy，
+      // 而是直接指向 Nginx 网关（localhost:8080），
+      // 确保 OpenMAIC Next.js 前端内部的 API 请求能正确路由到后端。
+      // 详见 ClassroomIframe.tsx 中的 toEmbedUrl() 函数。
     },
   },
 })

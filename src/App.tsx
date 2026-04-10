@@ -32,7 +32,7 @@ export function App() {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'linear-gradient(180deg, #E8EAF6 0%, #F3E5F5 100%)',
+          background: 'linear-gradient(170deg, #FFF8E7 0%, #FFE8D6 30%, #FFDEE9 60%, #D4F1F9 100%)',
           gap: '16px',
         }}
       >

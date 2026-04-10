@@ -201,7 +201,7 @@ export function PronunciationDrill({
             gap: '16px',
           }}
         >
-          <p style={{ fontSize: '18px', color: '#7B1FA2' }}>
+          <p style={{ fontSize: '18px', color: '#FF8C42' }}>
             我们来拆开练习每个音节吧！
           </p>
           <SyllableHighlight
@@ -217,7 +217,7 @@ export function PronunciationDrill({
               padding: '12px 32px',
               borderRadius: '24px',
               border: 'none',
-              backgroundColor: '#7B1FA2',
+              backgroundColor: '#FF8C42',
               color: 'white',
               fontSize: '18px',
               fontWeight: 'bold',

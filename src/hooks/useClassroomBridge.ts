@@ -100,8 +100,13 @@ export function useClassroomBridge(
     if (!enabled) return
 
     const handleMessage = (event: MessageEvent) => {
-      // 安全检查：只接受同源消息（Vite proxy 保证同源）
-      if (event.origin !== window.location.origin) return
+      // 安全检查：只接受来自 Nginx 网关或同源的消息
+      // iframe 直接指向 Nginx (localhost:8080)，宿主在 Vite (localhost:5173)
+      const allowedOrigins = [
+        window.location.origin,                 // 同源（生产环境）
+        'http://localhost:8080',                // Nginx 网关（开发环境）
+      ]
+      if (!allowedOrigins.includes(event.origin)) return
 
       const data = event.data as IframeMessage | undefined
       if (!data || typeof data.type !== 'string') return
@@ -147,9 +152,14 @@ export function useClassroomBridge(
       const iframe = iframeRef.current
       if (!iframe?.contentWindow) return
 
+      // iframe 在开发环境指向 Nginx (localhost:8080)，生产环境同源
+      const targetOrigin = import.meta.env.DEV
+        ? 'http://localhost:8080'
+        : window.location.origin
+
       iframe.contentWindow.postMessage(
         { type, payload },
-        window.location.origin,
+        targetOrigin,
       )
     },
     [iframeRef],

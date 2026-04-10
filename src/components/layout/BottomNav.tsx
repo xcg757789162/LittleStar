@@ -3,7 +3,7 @@
  * 四个导航项：首页、复习、星空、家长
  * 高亮当前路由，固定在底部
  *
- * 设计：Clay 风格 — 毛玻璃背景、SVG 图标、圆润高亮指示器
+ * 🎨 Sunny Playground 风格 — 暖色调毛玻璃、圆润高亮指示器
  */
 
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -63,13 +63,13 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'parent', label: '家长', icon: (s, c) => <UsersIcon size={s} color={c} />, path: '/parent' },
 ]
 
-/* ====== 设计 Token ====== */
+/* ====== 设计 Token — Sunny Playground 风格 ====== */
 const COLORS = {
-  active: '#6C5CE7',
-  activeBg: 'rgba(108, 92, 231, 0.1)',
-  inactive: '#94A3B8',
-  bg: 'rgba(255, 255, 255, 0.85)',
-  border: 'rgba(226, 232, 240, 0.6)',
+  active: '#FF8C42',
+  activeBg: 'rgba(255, 140, 66, 0.12)',
+  inactive: '#B8A088',
+  bg: 'rgba(255, 252, 245, 0.88)',
+  border: 'rgba(255, 200, 150, 0.3)',
 }
 
 export function BottomNav() {
@@ -126,6 +126,7 @@ export function BottomNav() {
               minHeight: '48px',
               /* 最小触摸目标 44px */
               minWidth: '48px',
+              fontFamily: "'Nunito', sans-serif",
             }}
           >
             {/* 活跃状态背景指示器 */}

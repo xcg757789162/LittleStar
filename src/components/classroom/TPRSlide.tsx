@@ -87,10 +87,10 @@ export function TPRSlide({ slide, onAudioPlay }: TPRSlideProps) {
         {/* TPR 指令卡片 */}
         <div
           style={{
-            backgroundColor: '#FFF5F7',
+            backgroundColor: '#FFF3E7',
             borderRadius: '16px',
             padding: '24px 32px',
-            border: '2px solid #FED7E2',
+            border: '2px solid #FFD4B0',
             maxWidth: '500px',
           }}
         >
@@ -99,7 +99,7 @@ export function TPRSlide({ slide, onAudioPlay }: TPRSlideProps) {
               fontSize: '22px',
               fontWeight: 600,
               textAlign: 'center',
-              color: '#702459',
+              color: '#E07030',
               lineHeight: 1.6,
               margin: 0,
             }}

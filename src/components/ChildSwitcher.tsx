@@ -101,8 +101,8 @@ export function ChildSwitcher({ visible, onClose }: ChildSwitcherProps) {
                   gap: '14px',
                   padding: '14px 16px',
                   borderRadius: '16px',
-                  border: isActive ? '2px solid #7C4DFF' : '2px solid #F0F0F0',
-                  backgroundColor: isActive ? '#EDE7F6' : 'white',
+                  border: isActive ? '2px solid #FF8C42' : '2px solid #F0F0F0',
+                  backgroundColor: isActive ? '#FFF3E7' : 'white',
                   cursor: 'pointer',
                   width: '100%',
                   textAlign: 'left',
@@ -118,7 +118,7 @@ export function ChildSwitcher({ visible, onClose }: ChildSwitcherProps) {
                   </p>
                 </div>
                 {isActive && (
-                  <span style={{ fontSize: '14px', color: '#7C4DFF', fontWeight: 'bold' }}>
+                  <span style={{ fontSize: '14px', color: '#FF8C42', fontWeight: 'bold' }}>
                     当前 ✓
                   </span>
                 )}
