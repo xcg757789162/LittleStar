@@ -11,6 +11,7 @@ import {
   type RequirementInput,
   type RequirementMode,
 } from '../requirement-generator'
+import type { UserRequirements } from '@/services/openmaic/pipeline-types'
 
 // 辅助工厂
 function makeInput(overrides: Partial<RequirementInput> = {}): RequirementInput {
@@ -196,6 +197,87 @@ describe('RequirementGenerator', () => {
       const reinforcement = generator.generate(makeInput({ mode: 'reinforcement', masteryLevel: 30 }))
 
       expect(newTeaching).not.toBe(reinforcement)
+    })
+  })
+
+  describe('generateUserRequirements', () => {
+    it('should return an object conforming to UserRequirements interface', () => {
+      const input = makeInput()
+      const result = generator.generateUserRequirements(input, '小明')
+
+      // 验证返回的对象结构
+      expect(result).toBeDefined()
+      expect(typeof result.requirement).toBe('string')
+      expect(typeof result.language).toBe('string')
+    })
+
+    it('should include requirement text with teaching objective', () => {
+      const input = makeInput()
+      const result = generator.generateUserRequirements(input, '小明')
+
+      expect(result.requirement).toContain('认识数字 1-5')
+      expect(result.requirement.length).toBeGreaterThan(50)
+    })
+
+    it('should set language from input', () => {
+      const input = makeInput({ language: 'en' })
+      const result = generator.generateUserRequirements(input)
+
+      expect(result.language).toBe('en')
+    })
+
+    it('should default language to zh-CN', () => {
+      const input = makeInput({ language: undefined })
+      const result = generator.generateUserRequirements(input)
+
+      expect(result.language).toBe('zh-CN')
+    })
+
+    it('should include userNickname when provided', () => {
+      const input = makeInput()
+      const result = generator.generateUserRequirements(input, '小星星')
+
+      expect(result.userNickname).toBe('小星星')
+    })
+
+    it('should omit userNickname when not provided', () => {
+      const input = makeInput()
+      const result = generator.generateUserRequirements(input)
+
+      expect(result.userNickname).toBeUndefined()
+    })
+
+    it('should include userBio when provided', () => {
+      const input = makeInput()
+      const result = generator.generateUserRequirements(input, '小明', '我喜欢画画和小动物')
+
+      expect(result.userBio).toBe('我喜欢画画和小动物')
+    })
+
+    it('should omit userBio when not provided', () => {
+      const input = makeInput()
+      const result = generator.generateUserRequirements(input)
+
+      expect(result.userBio).toBeUndefined()
+    })
+
+    it('should use the same requirement text as generate()', () => {
+      const input = makeInput()
+      const text = generator.generate(input)
+      const userReq = generator.generateUserRequirements(input)
+
+      expect(userReq.requirement).toBe(text)
+    })
+
+    it('should satisfy UserRequirements type structure', () => {
+      const input = makeInput()
+      const result: UserRequirements = generator.generateUserRequirements(input, '小明', '我5岁了')
+
+      // 类型检查 — 这里主要确保编译通过
+      expect(result.requirement).toBeDefined()
+      expect(result.language).toBeDefined()
+      expect(result.userNickname).toBe('小明')
+      expect(result.userBio).toBe('我5岁了')
     })
   })
 })

@@ -39,6 +39,9 @@ export interface User {
   lastLoginAt?: Date
 }
 
+/** Agent 模式 */
+export type ClassroomAgentMode = 'preset' | 'auto'
+
 /** 孩子设置 */
 export interface ChildSettings {
   dailyLearningMinutes: number
@@ -46,6 +49,51 @@ export interface ChildSettings {
   difficultyAdjustment: number // -2 到 +2
   voiceEnabled: boolean
   soundEffectsEnabled: boolean
+
+  // === 高级课堂设置（Pipeline Client 使用） ===
+
+  /** TTS 语音合成开关 */
+  enableTTS: boolean
+  /** TTS 服务提供商 ID（如 'volcengine', 'azure', 'openai'） */
+  ttsProviderId: string
+  /** TTS 语音 ID */
+  ttsVoice: string
+  /** TTS 语速（0.5-2.0） */
+  ttsSpeed: number
+  /** 图片生成开关 */
+  enableImageGeneration: boolean
+  /** 视频生成开关 */
+  enableVideoGeneration: boolean
+  /** 课堂 Agent 模式：preset(预设角色) | auto(自动生成) */
+  classroomAgentMode: ClassroomAgentMode
+  /** 学生自我介绍（传给 OpenMAIC 的 userBio） */
+  selfIntroduction: string
+  /** LLM 模型标识（如 'openai:gpt-4o'） */
+  llmModel: string
+  /** LLM API Key */
+  llmApiKey: string
+  /** LLM Base URL */
+  llmBaseUrl: string
+}
+
+/** 高级课堂设置默认值 */
+export const DEFAULT_ADVANCED_SETTINGS: Pick<ChildSettings,
+  | 'enableTTS' | 'ttsProviderId' | 'ttsVoice' | 'ttsSpeed'
+  | 'enableImageGeneration' | 'enableVideoGeneration'
+  | 'classroomAgentMode' | 'selfIntroduction'
+  | 'llmModel' | 'llmApiKey' | 'llmBaseUrl'
+> = {
+  enableTTS: true,
+  ttsProviderId: '',
+  ttsVoice: '',
+  ttsSpeed: 1.0,
+  enableImageGeneration: false,
+  enableVideoGeneration: false,
+  classroomAgentMode: 'preset',
+  selfIntroduction: '',
+  llmModel: '',
+  llmApiKey: '',
+  llmBaseUrl: '',
 }
 
 /** 用户（孩子） */
