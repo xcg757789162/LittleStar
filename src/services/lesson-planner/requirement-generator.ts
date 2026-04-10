@@ -10,6 +10,7 @@
  */
 
 import type { GradeLevel } from '@/types/models'
+import type { UserRequirements } from '@/services/openmaic/pipeline-types'
 
 // ============================================================
 // 类型定义
@@ -110,6 +111,41 @@ export class RequirementGenerator {
     sections.push(this.buildLanguageRequirement(language))
 
     return sections.join('\n\n')
+  }
+
+  /**
+   * 生成 OpenMAIC UserRequirements 格式的需求对象
+   *
+   * 将 generate() 输出的文本包装为 Pipeline Client 所需的 UserRequirements 结构，
+   * 包含 requirement、language、可选的 userNickname 和 userBio。
+   *
+   * @param input 生成输入
+   * @param userNickname 孩子昵称（可选，来自 child profile）
+   * @param userBio 学生自我介绍（可选，来自家长设置的 selfIntroduction）
+   * @returns UserRequirements 对象
+   */
+  generateUserRequirements(
+    input: RequirementInput,
+    userNickname?: string,
+    userBio?: string,
+  ): UserRequirements {
+    const requirement = this.generate(input)
+    const language = input.language || 'zh-CN'
+
+    const result: UserRequirements = {
+      requirement,
+      language,
+    }
+
+    if (userNickname) {
+      result.userNickname = userNickname
+    }
+
+    if (userBio) {
+      result.userBio = userBio
+    }
+
+    return result
   }
 
   // ---- 私有构建方法 ----

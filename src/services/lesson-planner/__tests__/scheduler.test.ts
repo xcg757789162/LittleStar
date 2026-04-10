@@ -223,4 +223,177 @@ describe('GenerationScheduler', () => {
       expect(scheduler.getPendingCount()).toBe(0)
     })
   })
+
+  describe('Pipeline Client integration', () => {
+    const mockPipelineClient = {
+      runFullPipeline: vi.fn(),
+      generateOutlines: vi.fn(),
+      generateSceneContent: vi.fn(),
+      generateSceneActions: vi.fn(),
+      generateTTS: vi.fn(),
+    }
+
+    const pipelineClassroom: Classroom = {
+      id: 'pipeline-1234',
+      title: 'Pipeline Classroom',
+      status: 'completed',
+      scenes: [
+        {
+          id: 'scene-1',
+          title: 'Pipeline Scene',
+          type: 'teaching',
+          slides: [{ type: 'content', title: 'Hello', content: 'Pipeline generated' }],
+        },
+      ],
+    }
+
+    it('should use Pipeline Client when provided', async () => {
+      mockPipelineClient.runFullPipeline.mockResolvedValue(pipelineClassroom)
+      mockCache.saveClassroom.mockResolvedValue(undefined)
+
+      const pipelineScheduler = new GenerationScheduler(
+        mockClient as any,
+        mockCache as any,
+        {
+          retryIntervals: [1, 1, 1],
+          maxRetries: 3,
+          pipelineClient: mockPipelineClient as any,
+          pipelineHeaders: { 'x-model': 'gpt-4o', 'x-api-key': 'test' },
+        },
+      )
+
+      pipelineScheduler.submitTask({
+        knowledgeNodeId: 'kn-1',
+        date: '2026-04-08',
+        requirement: 'Pipeline test',
+      })
+      const results = await pipelineScheduler.executeTasks()
+
+      expect(results[0].status).toBe('completed')
+      expect(mockPipelineClient.runFullPipeline).toHaveBeenCalled()
+      // Should NOT use old API when pipeline succeeds
+      expect(mockClient.generateClassroom).not.toHaveBeenCalled()
+    })
+
+    it('should pass correct requirements and headers to Pipeline Client', async () => {
+      mockPipelineClient.runFullPipeline.mockResolvedValue(pipelineClassroom)
+      mockCache.saveClassroom.mockResolvedValue(undefined)
+
+      const headers = { 'x-model': 'openai:gpt-4o', 'x-api-key': 'sk-test' }
+
+      const pipelineScheduler = new GenerationScheduler(
+        mockClient as any,
+        mockCache as any,
+        {
+          retryIntervals: [1],
+          maxRetries: 1,
+          pipelineClient: mockPipelineClient as any,
+          pipelineHeaders: headers,
+        },
+      )
+
+      pipelineScheduler.submitTask({
+        knowledgeNodeId: 'kn-1',
+        date: '2026-04-08',
+        requirement: 'Teach counting',
+        language: 'en',
+      })
+      await pipelineScheduler.executeTasks()
+
+      expect(mockPipelineClient.runFullPipeline).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requirements: expect.objectContaining({
+            requirement: 'Teach counting',
+            language: 'en',
+          }),
+          headers,
+        }),
+      )
+    })
+
+    it('should fallback to old API when Pipeline Client fails on outlines step', async () => {
+      mockPipelineClient.runFullPipeline.mockRejectedValue(new Error('Pipeline outlines failed'))
+      mockClient.generateClassroom.mockResolvedValue({ classroomId: 'cr-fallback', status: 'pending' })
+      mockClient.pollUntilComplete.mockResolvedValue(mockClassroom)
+      mockCache.saveClassroom.mockResolvedValue(undefined)
+
+      const pipelineScheduler = new GenerationScheduler(
+        mockClient as any,
+        mockCache as any,
+        {
+          retryIntervals: [1],
+          maxRetries: 1,
+          pipelineClient: mockPipelineClient as any,
+          pipelineHeaders: { 'x-model': 'gpt-4o', 'x-api-key': 'test' },
+        },
+      )
+
+      pipelineScheduler.submitTask({
+        knowledgeNodeId: 'kn-1',
+        date: '2026-04-08',
+        requirement: 'Fallback test',
+      })
+      const results = await pipelineScheduler.executeTasks()
+
+      // Pipeline failed → should fallback to old API
+      expect(results[0].status).toBe('completed')
+      expect(mockPipelineClient.runFullPipeline).toHaveBeenCalled()
+      expect(mockClient.generateClassroom).toHaveBeenCalled()
+    })
+
+    it('should not use Pipeline Client when not provided', async () => {
+      mockClient.generateClassroom.mockResolvedValue({ classroomId: 'cr-1', status: 'pending' })
+      mockClient.pollUntilComplete.mockResolvedValue(mockClassroom)
+      mockCache.saveClassroom.mockResolvedValue(undefined)
+
+      const plainScheduler = new GenerationScheduler(
+        mockClient as any,
+        mockCache as any,
+        { retryIntervals: [1], maxRetries: 1 },
+      )
+
+      plainScheduler.submitTask({
+        knowledgeNodeId: 'kn-1',
+        date: '2026-04-08',
+        requirement: 'Old API only',
+      })
+      const results = await plainScheduler.executeTasks()
+
+      expect(results[0].status).toBe('completed')
+      expect(mockClient.generateClassroom).toHaveBeenCalled()
+    })
+
+    it('should invoke onPipelineProgress callback during pipeline execution', async () => {
+      const onProgress = vi.fn()
+      mockPipelineClient.runFullPipeline.mockImplementation(async (input: any) => {
+        // Simulate pipeline calling back with progress
+        input.callbacks?.onProgress?.({ step: 'outlines', percent: 20, message: 'generating...' })
+        return pipelineClassroom
+      })
+      mockCache.saveClassroom.mockResolvedValue(undefined)
+
+      const pipelineScheduler = new GenerationScheduler(
+        mockClient as any,
+        mockCache as any,
+        {
+          retryIntervals: [1],
+          maxRetries: 1,
+          pipelineClient: mockPipelineClient as any,
+          pipelineHeaders: { 'x-model': 'gpt-4o', 'x-api-key': 'test' },
+          onPipelineProgress: onProgress,
+        },
+      )
+
+      pipelineScheduler.submitTask({
+        knowledgeNodeId: 'kn-1',
+        date: '2026-04-08',
+        requirement: 'Progress test',
+      })
+      await pipelineScheduler.executeTasks()
+
+      expect(onProgress).toHaveBeenCalledWith(
+        expect.objectContaining({ step: 'outlines', percent: 20 }),
+      )
+    })
+  })
 })

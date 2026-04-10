@@ -1,0 +1,258 @@
+/**
+ * Pipeline 类型定义
+ *
+ * 定义 LittleStar Pipeline Client 调用 OpenMAIC 子 API 所需的所有类型。
+ * 这些类型与 OpenMAIC 原生前端（generation-preview）的子 API 参数对齐。
+ *
+ * Pipeline 调用流程：
+ *   scene-outlines-stream (SSE) → scene-content → scene-actions → tts
+ */
+
+// ============================================================
+// 常量
+// ============================================================
+
+/** Pipeline 步骤名称枚举值 */
+export const PIPELINE_STEP_NAMES = [
+  'outlines',
+  'scene-content',
+  'scene-actions',
+  'tts',
+  'assembly',
+] as const
+
+// ============================================================
+// 基础类型
+// ============================================================
+
+/** Pipeline 步骤名称 */
+export type PipelineStepName = (typeof PIPELINE_STEP_NAMES)[number]
+
+/**
+ * 用户需求 — 传入 Pipeline 的课程需求
+ *
+ * 对应 OpenMAIC `/api/generate/scene-outlines-stream` 的请求参数
+ */
+export interface UserRequirements {
+  /** 课程需求文本（由 requirement-generator 生成） */
+  requirement: string
+  /** 目标语言代码（如 'en', 'zh-CN'） */
+  language: string
+  /** 学生昵称（可选） */
+  userNickname?: string
+  /** 学生自我介绍（可选，来自家长设置） */
+  userBio?: string
+}
+
+/**
+ * 场景大纲 — SSE 流式返回的单个大纲
+ *
+ * 对应 OpenMAIC `/api/generate/scene-outlines-stream` SSE 事件中
+ * `{ type: 'outline', data: SceneOutline, index: number }` 的 data
+ */
+export interface SceneOutline {
+  /** 场景索引（从 0 开始） */
+  index: number
+  /** 场景标题 */
+  title: string
+  /** 场景描述 */
+  description: string
+  /** 场景类型（可选） */
+  type?: string
+}
+
+/**
+ * Canvas 元素 — 教学页中的 PPT 式元素
+ */
+export interface CanvasElement {
+  /** 元素类型：text | image | shape 等 */
+  type: string
+  /** 文本内容（HTML 格式，text 类型时有值） */
+  content?: string
+  /** 图片 URL（image 类型时有值） */
+  src?: string
+  /** 其余属性 */
+  [key: string]: unknown
+}
+
+/**
+ * 测验选项
+ */
+export interface QuizOption {
+  /** 选项值标识（如 'A', 'B', 'C'） */
+  value: string
+  /** 选项文本 */
+  label: string
+}
+
+/**
+ * 测验题目（后端格式）
+ */
+export interface QuizQuestion {
+  /** 题目文本 */
+  question: string
+  /** 选项列表 */
+  options: QuizOption[]
+  /** 正确答案值列表（如 ['A']） */
+  answer: string[]
+  /** 题目解析（可选） */
+  analysis?: string
+}
+
+/**
+ * 生成的内容 — scene-content API 返回的内容
+ *
+ * 对应 OpenMAIC `/api/generate/scene-content` 的响应
+ * 可以是教学页（slide + canvas）或测验页（quiz + questions）
+ */
+export interface GeneratedContent {
+  /** 内容类型：'slide' (教学) | 'quiz' (测验) */
+  type: 'slide' | 'quiz'
+  /** Canvas 数据（教学页时有值） */
+  canvas?: {
+    elements: CanvasElement[]
+  }
+  /** 测验题目（测验页时有值） */
+  questions?: QuizQuestion[]
+}
+
+/**
+ * 场景动作 — scene-actions API 返回的单个动作
+ *
+ * 对应 OpenMAIC `/api/generate/scene-actions` 响应中的 actions[]
+ * speech 动作附加 TTS 生成的音频数据
+ */
+export interface SceneAction {
+  /** 动作类型：speech | spotlight | animation 等 */
+  type: string
+  /** 语音文本（speech 类型时有值） */
+  text?: string
+  /** TTS 生成的 base64 音频数据（speech 类型，TTS 生成后附加） */
+  audioBase64?: string
+  /** 音频时长（毫秒） */
+  audioDurationMs?: number
+  /** 目标元素 ID（spotlight 类型时有值） */
+  targetElementId?: string
+  /** 其余属性 */
+  [key: string]: unknown
+}
+
+/**
+ * Agent 信息
+ *
+ * 对应 OpenMAIC agent-profiles 子 API 返回的教师角色信息
+ * （本次 MVP 不实现，预留类型）
+ */
+export interface AgentInfo {
+  /** 教师名称 */
+  name: string
+  /** 教师性格描述（可选） */
+  personality?: string
+  /** 教师头像 URL（可选） */
+  avatar?: string
+}
+
+/**
+ * TTS 配置
+ *
+ * 用于 `/api/generate/tts` 请求的配置参数
+ */
+export interface TTSConfig {
+  /** TTS 服务提供商 ID（如 'volcengine', 'azure', 'openai'） */
+  providerId: string
+  /** 语音 ID（如 'zh_female_01'） */
+  voiceId: string
+  /** 语速（可选，0.5-2.0，默认 1.0） */
+  speed?: number
+  /** 音调（可选，0.5-2.0，默认 1.0） */
+  pitch?: number
+}
+
+// ============================================================
+// Pipeline 输入/输出/回调类型
+// ============================================================
+
+/**
+ * Pipeline 进度信息
+ *
+ * 通过 PipelineCallbacks.onProgress 回调给上层
+ */
+export interface PipelineProgress {
+  /** 当前执行步骤 */
+  step: PipelineStepName
+  /** 总体完成百分比 0-100 */
+  percent: number
+  /** 当前步骤描述消息 */
+  message: string
+  /** 当前场景索引（scene-content/scene-actions/tts 步骤时有值） */
+  sceneIndex?: number
+  /** 总场景数（scene-content/scene-actions/tts 步骤时有值） */
+  totalScenes?: number
+}
+
+/**
+ * Pipeline 回调接口
+ *
+ * 所有回调均为可选，调用方按需注册
+ */
+export interface PipelineCallbacks {
+  /** 进度更新回调 */
+  onProgress?: (progress: PipelineProgress) => void
+  /** 大纲生成完成回调 */
+  onOutlinesReady?: (outlines: SceneOutline[]) => void
+  /** 单个场景内容生成完成回调 */
+  onSceneContentReady?: (sceneIndex: number, content: GeneratedContent) => void
+  /** 单个场景动作生成完成回调 */
+  onSceneActionsReady?: (sceneIndex: number, actions: SceneAction[]) => void
+  /** 单个 TTS 音频生成完成回调 */
+  onTTSReady?: (sceneIndex: number, actionIndex: number, audioBase64: string) => void
+  /** 步骤级错误回调（不中止整个 Pipeline） */
+  onError?: (step: PipelineStepName, error: Error) => void
+}
+
+/**
+ * Pipeline 输入 — runFullPipeline 的完整输入
+ */
+export interface PipelineInput {
+  /** 课程需求 */
+  requirements: UserRequirements
+  /** HTTP Headers（从 settingsStore 构建，包含 x-model, x-api-key 等） */
+  headers: Record<string, string>
+  /** 回调（可选） */
+  callbacks?: PipelineCallbacks
+}
+
+// ============================================================
+// 类型守卫函数
+// ============================================================
+
+/**
+ * 检查值是否为有效的 SceneOutline
+ */
+export function isSceneOutline(value: unknown): value is SceneOutline {
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return false
+  }
+  const obj = value as Record<string, unknown>
+  return (
+    typeof obj.index === 'number' &&
+    typeof obj.title === 'string' &&
+    typeof obj.description === 'string'
+  )
+}
+
+/**
+ * 检查值是否为有效的 PipelineProgress
+ */
+export function isPipelineProgress(value: unknown): value is PipelineProgress {
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return false
+  }
+  const obj = value as Record<string, unknown>
+  return (
+    typeof obj.step === 'string' &&
+    (PIPELINE_STEP_NAMES as readonly string[]).includes(obj.step) &&
+    typeof obj.percent === 'number' &&
+    typeof obj.message === 'string'
+  )
+}

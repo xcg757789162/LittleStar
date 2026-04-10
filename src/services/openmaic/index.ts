@@ -50,6 +50,36 @@ export {
 export { OpenMAICClient, OpenMAICApiError } from './client'
 export type { OpenMAICClientConfig, PollOptions } from './client'
 
+// Pipeline Client
+export { OpenMAICPipelineClient } from './pipeline-client'
+export type { PipelineClientConfig, TTSResult } from './pipeline-client'
+
+// Pipeline Types
+export type {
+  UserRequirements,
+  SceneOutline,
+  GeneratedContent,
+  CanvasElement,
+  QuizOption,
+  QuizQuestion,
+  SceneAction,
+  AgentInfo,
+  TTSConfig,
+  PipelineInput,
+  PipelineCallbacks,
+  PipelineProgress,
+  PipelineStepName,
+} from './pipeline-types'
+
+export {
+  PIPELINE_STEP_NAMES,
+  isSceneOutline,
+  isPipelineProgress,
+} from './pipeline-types'
+
+// Headers Builder
+export { buildHeadersFromSettings } from './headers-builder'
+
 // Cache
 export { ClassroomCache } from './cache'
 export type { CacheEntry, CacheListItem, CacheStore } from './cache'

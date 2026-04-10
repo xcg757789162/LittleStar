@@ -15,7 +15,8 @@ import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
 import { OpenMAICClient } from '@/services/openmaic/client'
 import { PinVerification } from '@/components/parent/PinVerification'
 
-import type { Subject, DailySession, KnowledgeNode, MasteryRecord } from '@/types/models'
+import type { Subject, DailySession, KnowledgeNode, MasteryRecord, ClassroomAgentMode } from '@/types/models'
+import { DEFAULT_ADVANCED_SETTINGS } from '@/types/models'
 
 /* ═══════════════════════════════════════════
    设计 Token
@@ -81,6 +82,29 @@ export function ParentDashboard() {
     try { return localStorage.getItem(OPENMAIC_API_KEY_KEY) ?? '' } catch { return '' }
   })
   const [configSaved, setConfigSaved] = useState(false)
+  const [classroomSettingsOpen, setClassroomSettingsOpen] = useState(false)
+  const [classroomConfigSaved, setClassroomConfigSaved] = useState(false)
+
+  // 从当前孩子 settings 初始化高级课堂设置
+  const currentChild = useChildStore((s) => s.currentChild)
+  const updateChildSettings = useChildStore((s) => s.updateChildSettings)
+  const childSettings = currentChild?.settings
+  const [advancedSettings, setAdvancedSettings] = useState(() => {
+    if (!childSettings) return { ...DEFAULT_ADVANCED_SETTINGS }
+    return {
+      enableTTS: childSettings.enableTTS ?? DEFAULT_ADVANCED_SETTINGS.enableTTS,
+      ttsProviderId: childSettings.ttsProviderId ?? DEFAULT_ADVANCED_SETTINGS.ttsProviderId,
+      ttsVoice: childSettings.ttsVoice ?? DEFAULT_ADVANCED_SETTINGS.ttsVoice,
+      ttsSpeed: childSettings.ttsSpeed ?? DEFAULT_ADVANCED_SETTINGS.ttsSpeed,
+      enableImageGeneration: childSettings.enableImageGeneration ?? DEFAULT_ADVANCED_SETTINGS.enableImageGeneration,
+      enableVideoGeneration: childSettings.enableVideoGeneration ?? DEFAULT_ADVANCED_SETTINGS.enableVideoGeneration,
+      classroomAgentMode: childSettings.classroomAgentMode ?? DEFAULT_ADVANCED_SETTINGS.classroomAgentMode,
+      selfIntroduction: childSettings.selfIntroduction ?? DEFAULT_ADVANCED_SETTINGS.selfIntroduction,
+      llmModel: childSettings.llmModel ?? DEFAULT_ADVANCED_SETTINGS.llmModel,
+      llmApiKey: childSettings.llmApiKey ?? DEFAULT_ADVANCED_SETTINGS.llmApiKey,
+      llmBaseUrl: childSettings.llmBaseUrl ?? DEFAULT_ADVANCED_SETTINGS.llmBaseUrl,
+    }
+  })
 
   const cacheRef = useRef<ClassroomCache | null>(null)
   if (cacheRef.current == null) {
@@ -192,6 +216,19 @@ export function ParentDashboard() {
       setTimeout(() => setConfigSaved(false), 2000)
     } catch { /* ignore */ }
   }, [openmaicUrl, apiKey])
+
+  const handleSaveClassroomSettings = useCallback(() => {
+    if (!currentChild?.id) return
+    updateChildSettings(currentChild.id, advancedSettings)
+    setClassroomConfigSaved(true)
+    setTimeout(() => setClassroomConfigSaved(false), 2000)
+  }, [currentChild?.id, updateChildSettings, advancedSettings])
+
+  const updateAdvanced = useCallback(<K extends keyof typeof advancedSettings>(
+    key: K, value: (typeof advancedSettings)[K],
+  ) => {
+    setAdvancedSettings((prev) => ({ ...prev, [key]: value }))
+  }, [])
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '12px 14px', borderRadius: '14px',
@@ -459,6 +496,318 @@ export function ParentDashboard() {
           >
             {configSaved ? '✓ 已保存' : '💾 保存配置'}
           </motion.button>
+
+          {/* ═══ 高级课堂设置（折叠面板） ═══ */}
+          <div style={{ marginTop: '24px', borderTop: '2px dashed #FFE8D6', paddingTop: '20px' }}>
+            <motion.button
+              data-testid="classroom-settings-toggle"
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setClassroomSettingsOpen(!classroomSettingsOpen)}
+              style={{
+                width: '100%', padding: '14px 16px', borderRadius: '16px',
+                border: '2px solid #E8D6FF', backgroundColor: '#FAF5FF',
+                cursor: 'pointer', display: 'flex', alignItems: 'center',
+                justifyContent: 'space-between', fontSize: '15px', color: '#6B3FA0',
+                fontFamily: T.fontDisplay, fontWeight: 'bold',
+              }}
+            >
+              <span>🎓 高级课堂设置</span>
+              <span style={{
+                transform: classroomSettingsOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.3s',
+                fontSize: '12px',
+              }}>
+                ▼
+              </span>
+            </motion.button>
+
+            {classroomSettingsOpen && (
+              <motion.div
+                data-testid="classroom-settings-panel"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}
+              >
+                {/* LLM 模型配置 */}
+                <div style={{
+                  padding: '16px', borderRadius: '16px',
+                  border: '1.5px solid #E8D6FF', backgroundColor: '#FDFBFF',
+                }}>
+                  <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#6B3FA0', margin: '0 0 12px' }}>
+                    🤖 LLM 模型配置
+                  </p>
+
+                  <label htmlFor="llm-model" style={{
+                    fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600,
+                  }}>
+                    模型标识
+                  </label>
+                  <input
+                    id="llm-model" data-testid="config-llm-model"
+                    type="text" value={advancedSettings.llmModel}
+                    onChange={(e) => updateAdvanced('llmModel', e.target.value)}
+                    placeholder="如 openai:gpt-4o 或 doubao:doubao-pro-32k"
+                    style={{ ...inputStyle, marginBottom: '12px' }}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = '#9B7FD0' }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
+                  />
+
+                  <label htmlFor="llm-api-key" style={{
+                    fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600,
+                  }}>
+                    API Key
+                  </label>
+                  <input
+                    id="llm-api-key" data-testid="config-llm-api-key"
+                    type="password" value={advancedSettings.llmApiKey}
+                    onChange={(e) => updateAdvanced('llmApiKey', e.target.value)}
+                    placeholder="输入模型的 API Key"
+                    style={{ ...inputStyle, marginBottom: '12px' }}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = '#9B7FD0' }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
+                  />
+
+                  <label htmlFor="llm-base-url" style={{
+                    fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600,
+                  }}>
+                    Base URL（可选）
+                  </label>
+                  <input
+                    id="llm-base-url" data-testid="config-llm-base-url"
+                    type="text" value={advancedSettings.llmBaseUrl}
+                    onChange={(e) => updateAdvanced('llmBaseUrl', e.target.value)}
+                    placeholder="自定义 API 地址（留空使用默认）"
+                    style={inputStyle}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = '#9B7FD0' }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
+                  />
+                </div>
+
+                {/* TTS 语音设置 */}
+                <div style={{
+                  padding: '16px', borderRadius: '16px',
+                  border: '1.5px solid #C8E9FA', backgroundColor: '#FBFEFF',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <p style={{ fontSize: '14px', fontWeight: 'bold', color: T.skyBlue, margin: 0 }}>
+                      🔊 TTS 语音合成
+                    </p>
+                    <label
+                      data-testid="config-tts-toggle"
+                      style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '6px' }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={advancedSettings.enableTTS}
+                        onChange={(e) => updateAdvanced('enableTTS', e.target.checked)}
+                        style={{ width: '18px', height: '18px', accentColor: T.skyBlue }}
+                      />
+                      <span style={{ fontSize: '13px', color: T.textMedium }}>
+                        {advancedSettings.enableTTS ? '已开启' : '已关闭'}
+                      </span>
+                    </label>
+                  </div>
+
+                  {advancedSettings.enableTTS && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div>
+                        <label htmlFor="tts-provider" style={{
+                          fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600,
+                        }}>
+                          TTS 服务商
+                        </label>
+                        <select
+                          id="tts-provider" data-testid="config-tts-provider"
+                          value={advancedSettings.ttsProviderId}
+                          onChange={(e) => updateAdvanced('ttsProviderId', e.target.value)}
+                          style={{ ...inputStyle, appearance: 'auto' }}
+                        >
+                          <option value="">默认</option>
+                          <option value="volcengine">火山引擎</option>
+                          <option value="azure">Azure TTS</option>
+                          <option value="openai">OpenAI TTS</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label htmlFor="tts-voice" style={{
+                          fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600,
+                        }}>
+                          语音角色
+                        </label>
+                        <input
+                          id="tts-voice" data-testid="config-tts-voice"
+                          type="text" value={advancedSettings.ttsVoice}
+                          onChange={(e) => updateAdvanced('ttsVoice', e.target.value)}
+                          placeholder="语音 ID（如 zh_female_01）"
+                          style={inputStyle}
+                          onFocus={(e) => { e.currentTarget.style.borderColor = T.skyBlue }}
+                          onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="tts-speed" style={{
+                          fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600,
+                        }}>
+                          语速：{advancedSettings.ttsSpeed.toFixed(1)}x
+                        </label>
+                        <input
+                          id="tts-speed" data-testid="config-tts-speed"
+                          type="range" min="0.5" max="2.0" step="0.1"
+                          value={advancedSettings.ttsSpeed}
+                          onChange={(e) => updateAdvanced('ttsSpeed', parseFloat(e.target.value))}
+                          style={{ width: '100%', accentColor: T.skyBlue }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 生成功能开关 */}
+                <div style={{
+                  padding: '16px', borderRadius: '16px',
+                  border: '1.5px solid #C8F7F1', backgroundColor: '#FBFFFD',
+                }}>
+                  <p style={{ fontSize: '14px', fontWeight: 'bold', color: T.grassGreen, margin: '0 0 12px' }}>
+                    ✨ 内容生成选项
+                  </p>
+
+                  <label
+                    data-testid="config-image-gen-toggle"
+                    style={{
+                      display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px',
+                      marginBottom: '10px',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={advancedSettings.enableImageGeneration}
+                      onChange={(e) => updateAdvanced('enableImageGeneration', e.target.checked)}
+                      style={{ width: '18px', height: '18px', accentColor: T.grassGreen }}
+                    />
+                    <span style={{ fontSize: '14px', color: T.textDark }}>
+                      🖼️ 启用图片生成
+                    </span>
+                  </label>
+
+                  <label
+                    data-testid="config-video-gen-toggle"
+                    style={{
+                      display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={advancedSettings.enableVideoGeneration}
+                      onChange={(e) => updateAdvanced('enableVideoGeneration', e.target.checked)}
+                      style={{ width: '18px', height: '18px', accentColor: T.grassGreen }}
+                    />
+                    <span style={{ fontSize: '14px', color: T.textDark }}>
+                      🎬 启用视频生成
+                    </span>
+                  </label>
+                </div>
+
+                {/* Agent 模式 */}
+                <div style={{
+                  padding: '16px', borderRadius: '16px',
+                  border: '1.5px solid #FFE0C2', backgroundColor: '#FFFCF8',
+                }}>
+                  <p style={{ fontSize: '14px', fontWeight: 'bold', color: T.sunOrange, margin: '0 0 12px' }}>
+                    🎭 课堂角色模式
+                  </p>
+
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    {([
+                      { value: 'preset' as ClassroomAgentMode, label: '预设角色', emoji: '📋', desc: '使用预设的老师角色' },
+                      { value: 'auto' as ClassroomAgentMode, label: '自动生成', emoji: '🎲', desc: '根据课程自动创建角色' },
+                    ] as const).map((mode) => (
+                      <motion.button
+                        key={mode.value}
+                        data-testid={`config-agent-mode-${mode.value}`}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => updateAdvanced('classroomAgentMode', mode.value)}
+                        style={{
+                          flex: 1, padding: '14px', borderRadius: '14px',
+                          border: `2px solid ${advancedSettings.classroomAgentMode === mode.value ? T.sunOrange : '#FFE8D6'}`,
+                          backgroundColor: advancedSettings.classroomAgentMode === mode.value ? '#FFF3E7' : '#FFFFFF',
+                          cursor: 'pointer', textAlign: 'center',
+                        }}
+                      >
+                        <div style={{ fontSize: '20px', marginBottom: '4px' }}>{mode.emoji}</div>
+                        <div style={{
+                          fontSize: '13px', fontWeight: 'bold',
+                          color: advancedSettings.classroomAgentMode === mode.value ? T.sunOrange : T.textMedium,
+                        }}>
+                          {mode.label}
+                        </div>
+                        <div style={{ fontSize: '11px', color: T.textLight, marginTop: '2px' }}>
+                          {mode.desc}
+                        </div>
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 学生自我介绍 */}
+                <div style={{
+                  padding: '16px', borderRadius: '16px',
+                  border: '1.5px solid #FFDEE9', backgroundColor: '#FFFBFC',
+                }}>
+                  <p style={{ fontSize: '14px', fontWeight: 'bold', color: T.candyPink, margin: '0 0 8px' }}>
+                    👋 学生自我介绍
+                  </p>
+                  <p style={{ fontSize: '12px', color: T.textLight, margin: '0 0 10px' }}>
+                    告诉 AI 老师关于孩子的情况，课堂内容会更贴合
+                  </p>
+                  <textarea
+                    data-testid="config-self-introduction"
+                    value={advancedSettings.selfIntroduction}
+                    onChange={(e) => updateAdvanced('selfIntroduction', e.target.value)}
+                    placeholder="如：我叫小明，今年5岁，最喜欢小动物和画画..."
+                    rows={3}
+                    style={{
+                      ...inputStyle,
+                      resize: 'vertical',
+                      minHeight: '80px',
+                    }}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = T.candyPink }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
+                  />
+                </div>
+
+                {/* 保存课堂设置按钮 */}
+                <motion.button
+                  data-testid="classroom-settings-save-btn"
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleSaveClassroomSettings}
+                  disabled={!currentChild?.id}
+                  style={{
+                    width: '100%', padding: '14px', borderRadius: '16px', border: 'none',
+                    background: classroomConfigSaved
+                      ? `linear-gradient(135deg, ${T.grassGreen}, #4DD8C9)`
+                      : !currentChild?.id
+                        ? '#E0E0E0'
+                        : 'linear-gradient(135deg, #9B7FD0, #6B3FA0)',
+                    color: T.textWhite, fontSize: '15px', fontWeight: 'bold',
+                    fontFamily: T.fontDisplay, cursor: currentChild?.id ? 'pointer' : 'not-allowed',
+                    boxShadow: currentChild?.id ? '0 4px 16px rgba(107, 63, 160, 0.25)' : 'none',
+                    opacity: currentChild?.id ? 1 : 0.6,
+                  }}
+                >
+                  {classroomConfigSaved ? '✓ 课堂设置已保存' : '💾 保存课堂设置'}
+                </motion.button>
+
+                {!currentChild?.id && (
+                  <p style={{ fontSize: '12px', color: T.warningAmber, textAlign: 'center', margin: '4px 0 0' }}>
+                    ⚠️ 请先选择一个孩子才能保存课堂设置
+                  </p>
+                )}
+              </motion.div>
+            )}
+          </div>
         </motion.div>
       )}
 

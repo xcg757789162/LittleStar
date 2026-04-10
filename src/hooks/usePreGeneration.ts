@@ -10,8 +10,10 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { OpenMAICClient } from '@/services/openmaic/client'
+import { OpenMAICPipelineClient } from '@/services/openmaic/pipeline-client'
 import { ClassroomCache } from '@/services/openmaic/cache'
 import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
+import { buildHeadersFromSettings } from '@/services/openmaic/headers-builder'
 import {
   LessonPlanner,
   RequirementGenerator,
@@ -20,6 +22,7 @@ import {
 import { apiClient } from '@/services/api'
 import { useChildStore } from '@/stores/childStore'
 import type { Subject, KnowledgeNode, MasteryRecord, PlacementTest } from '@/types/models'
+import type { PipelineStepName } from '@/services/openmaic/pipeline-types'
 
 /** 预生成状态 */
 export type PreGenerationStatus = 'idle' | 'checking' | 'generating' | 'completed' | 'failed'
@@ -40,6 +43,14 @@ export interface PreGenerationState {
   error: string | null
   /** 手动触发预生成 */
   triggerGeneration: () => void
+
+  // === Pipeline 进度状态 ===
+  /** 当前 Pipeline 步骤名称（outlines/scene-content/scene-actions/tts/assembly） */
+  generationStep: PipelineStepName | null
+  /** Pipeline 生成进度百分比 0-100 */
+  generationProgress: number
+  /** 当前处理的场景索引 */
+  currentSceneIndex: number
 }
 
 const SUBJECTS: Subject[] = ['math', 'chinese', 'english']
@@ -55,6 +66,11 @@ export function usePreGeneration(
   const [totalCount, setTotalCount] = useState(0)
   const [stageText, setStageText] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  // Pipeline 进度状态
+  const [generationStep, setGenerationStep] = useState<PipelineStepName | null>(null)
+  const [generationProgress, setGenerationProgress] = useState(0)
+  const [currentSceneIndex, setCurrentSceneIndex] = useState(0)
 
   // 防止重复触发
   const isRunningRef = useRef(false)
@@ -109,6 +125,19 @@ export function usePreGeneration(
       const client = new OpenMAICClient()
       const planner = new LessonPlanner()
       const reqGenerator = new RequirementGenerator()
+
+      // 尝试构建 Pipeline Client（如果孩子设置中配置了 LLM 信息）
+      let pipelineClient: OpenMAICPipelineClient | undefined
+      let pipelineHeaders: Record<string, string> | undefined
+      try {
+        if (child.settings.llmModel && child.settings.llmApiKey) {
+          pipelineClient = new OpenMAICPipelineClient()
+          pipelineHeaders = buildHeadersFromSettings(child.settings)
+        }
+      } catch {
+        // 构建 headers 失败（如缺少必要配置），不使用 Pipeline
+      }
+
       const scheduler = new GenerationScheduler(client, cache, {
         maxRetries: 2,
         retryIntervals: [3000, 10000],
@@ -119,6 +148,18 @@ export function usePreGeneration(
           setPendingCount(info.totalCount - info.completedCount - info.failedCount)
           setTotalCount(info.totalCount)
           setStageText(info.stageText)
+        },
+        pipelineClient,
+        pipelineHeaders,
+        onPipelineProgress: (progress) => {
+          setGenerationStep(progress.step)
+          setGenerationProgress(progress.percent)
+          if (progress.sceneIndex !== undefined) {
+            setCurrentSceneIndex(progress.sceneIndex)
+          }
+          if (progress.message) {
+            setStageText(progress.message)
+          }
         },
       })
 
@@ -309,5 +350,8 @@ export function usePreGeneration(
     stageText,
     error,
     triggerGeneration,
+    generationStep,
+    generationProgress,
+    currentSceneIndex,
   }
 }

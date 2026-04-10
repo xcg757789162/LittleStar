@@ -7,6 +7,8 @@
 
 import type { OpenMAICClient } from '@/services/openmaic/client'
 import type { ClassroomCache } from '@/services/openmaic/cache'
+import type { OpenMAICPipelineClient } from '@/services/openmaic/pipeline-client'
+import type { PipelineProgress } from '@/services/openmaic/pipeline-types'
 
 // ============================================================
 // 类型定义
@@ -38,6 +40,14 @@ export interface SchedulerConfig {
   maxPollAttempts?: number
   /** 任务进度回调 */
   onTaskProgress?: (info: TaskProgressInfo) => void
+
+  // === Pipeline Client 配置 ===
+  /** Pipeline Client 实例（提供时优先使用 Pipeline，失败降级到旧 API） */
+  pipelineClient?: OpenMAICPipelineClient
+  /** Pipeline API 请求 Headers（通过 buildHeadersFromSettings 构建） */
+  pipelineHeaders?: Record<string, string>
+  /** Pipeline 步骤级进度回调 */
+  onPipelineProgress?: (progress: PipelineProgress) => void
 }
 
 /** 生成任务输入 */
@@ -76,6 +86,9 @@ export class GenerationScheduler {
   private readonly pollIntervalMs: number
   private readonly maxPollAttempts: number
   private readonly onTaskProgress?: (info: TaskProgressInfo) => void
+  private readonly pipelineClient?: OpenMAICPipelineClient
+  private readonly pipelineHeaders?: Record<string, string>
+  private readonly onPipelineProgress?: (progress: PipelineProgress) => void
   private tasks: GenerationTask[] = []
   private taskIdCounter = 0
 
@@ -91,6 +104,9 @@ export class GenerationScheduler {
     this.pollIntervalMs = config?.pollIntervalMs ?? 5000
     this.maxPollAttempts = config?.maxPollAttempts ?? 120
     this.onTaskProgress = config?.onTaskProgress
+    this.pipelineClient = config?.pipelineClient
+    this.pipelineHeaders = config?.pipelineHeaders
+    this.onPipelineProgress = config?.onPipelineProgress
   }
 
   /**
@@ -198,9 +214,52 @@ export class GenerationScheduler {
 
   /**
    * 执行单个任务（含重试逻辑）
+   *
+   * 若 pipelineClient 已配置，优先使用 Pipeline Client 生成；
+   * Pipeline 失败时降级到旧的 generateClassroom + pollUntilComplete 流程。
    */
   private async executeTask(task: GenerationTask): Promise<GenerationTask> {
     const totalCount = this.tasks.length
+
+    // === 优先尝试 Pipeline Client ===
+    if (this.pipelineClient && this.pipelineHeaders) {
+      try {
+        task.status = 'generating'
+        this.onTaskProgress?.({
+          completedCount: this.tasks.filter((t) => t.status === 'completed').length,
+          failedCount: this.tasks.filter((t) => t.status === 'failed').length,
+          totalCount,
+          latestTask: { ...task },
+          stageText: '正在通过 Pipeline 生成课堂...',
+        })
+
+        const classroom = await this.pipelineClient.runFullPipeline({
+          requirements: {
+            requirement: task.requirement,
+            language: task.language || 'zh-CN',
+          },
+          headers: this.pipelineHeaders,
+          callbacks: {
+            onProgress: this.onPipelineProgress,
+          },
+        })
+
+        // Pipeline 成功 → 写入缓存
+        await this.cache.saveClassroom(
+          task.knowledgeNodeId,
+          task.date,
+          classroom,
+        )
+
+        task.status = 'completed'
+        task.retryCount = 0
+        return { ...task }
+      } catch {
+        // Pipeline 失败 → 降级到旧 API（不计入重试次数）
+      }
+    }
+
+    // === 旧 API 流程（含重试） ===
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
         // 1. 提交生成请求
