@@ -42,9 +42,6 @@ const T = {
   warningAmber: '#FFB347',
 }
 
-const OPENMAIC_URL_KEY = 'littlestar_openmaic_url'
-const OPENMAIC_API_KEY_KEY = 'littlestar_openmaic_api_key'
-
 // ===== 多提供商配置体系（从 config.ts 统一导入） =====
 import {
   SERVICE_TYPES,
@@ -89,12 +86,6 @@ export function ParentDashboard() {
   const [serviceOnline, setServiceOnline] = useState<boolean | null>(null)
   const [subjectMasteries, setSubjectMasteries] = useState<SubjectMastery[]>([])
   const [apiError, setApiError] = useState(false)
-  const [openmaicUrl, setOpenmaicUrl] = useState(() => {
-    try { return localStorage.getItem(OPENMAIC_URL_KEY) ?? 'http://localhost:3000' } catch { return 'http://localhost:3000' }
-  })
-  const [apiKey, setApiKey] = useState(() => {
-    try { return localStorage.getItem(OPENMAIC_API_KEY_KEY) ?? '' } catch { return '' }
-  })
   const [configSaved, setConfigSaved] = useState(false)
   // 多提供商配置：每个功能类型选中的 provider + provider 字段值
   const [selectedProviders, setSelectedProviders] = useState<Record<ServiceType, string>>(() => ({
@@ -327,8 +318,6 @@ export function ParentDashboard() {
 
   const handleSaveConfig = useCallback(() => {
     try {
-      localStorage.setItem(OPENMAIC_URL_KEY, openmaicUrl)
-      localStorage.setItem(OPENMAIC_API_KEY_KEY, apiKey)
       // 保存每个功能类型选中的 provider
       for (const [serviceType, providerId] of Object.entries(selectedProviders)) {
         setSelectedProviderId(serviceType as ServiceType, providerId)
@@ -340,7 +329,7 @@ export function ParentDashboard() {
       setConfigSaved(true)
       setTimeout(() => setConfigSaved(false), 2000)
     } catch { /* ignore */ }
-  }, [openmaicUrl, apiKey, selectedProviders, providerConfigs])
+  }, [selectedProviders, providerConfigs])
 
   const toggleGroup = useCallback((group: string) => {
     setExpandedGroups((prev) => {
@@ -578,46 +567,6 @@ export function ParentDashboard() {
           }}>
             ⚙️ 高级配置
           </h2>
-
-          {/* OpenMAIC 服务地址 */}
-          <div style={{ marginBottom: '16px' }}>
-            <label htmlFor="openmaic-url" style={{
-              fontSize: '14px', color: T.textMedium, display: 'block', marginBottom: '6px', fontWeight: 600,
-            }}>
-              OpenMAIC 服务地址
-            </label>
-            <input
-              id="openmaic-url" data-testid="config-openmaic-url"
-              type="text" value={openmaicUrl}
-              onChange={(e) => setOpenmaicUrl(e.target.value)}
-              placeholder="http://localhost:3000" style={inputStyle}
-              onFocus={(e) => { e.currentTarget.style.borderColor = T.sunOrange }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
-            />
-          </div>
-
-          {/* OpenMAIC API Key */}
-          <div style={{ marginBottom: '20px' }}>
-            <label htmlFor="api-key" style={{
-              fontSize: '14px', color: T.textMedium, display: 'block', marginBottom: '6px', fontWeight: 600,
-            }}>
-              OpenMAIC API Key
-            </label>
-            <input
-              id="api-key" data-testid="config-api-key"
-              type="password" value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="输入 OpenMAIC API Key" style={inputStyle}
-              onFocus={(e) => { e.currentTarget.style.borderColor = T.sunOrange }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
-            />
-          </div>
-
-          {/* 分割线 */}
-          <div style={{
-            height: '1px', background: 'linear-gradient(90deg, transparent, #FFE8D6, transparent)',
-            margin: '20px 0',
-          }} />
 
           <h3 style={{
             fontSize: '15px', color: T.textDark, marginBottom: '16px',
