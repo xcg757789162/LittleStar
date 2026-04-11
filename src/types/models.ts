@@ -317,6 +317,9 @@ export interface GradeUnlock {
   placementTestId?: string
 }
 
+/** 评测阶段 */
+export type PlacementPhase = 'single' | 'phase1' | 'phase2'
+
 /** 入学测评记录 */
 export interface PlacementTest {
   id?: string
@@ -327,15 +330,71 @@ export interface PlacementTest {
   startedAt: Date
   completedAt?: Date
   result?: PlacementResult
+  /** 评测阶段：single(旧版单阶段) | phase1(摸底) | phase2(验证) */
+  phase: PlacementPhase
+  /** 阶段一分析结果（仅 phase2 记录使用） */
+  phase1Result?: Phase1Analysis
+  /** 关联的阶段一记录 ID（仅 phase2 记录使用） */
+  parentTestId?: string
 }
 
-/** 测评题目 */
+/** 测评题目（扩展支持选择题） */
 export interface PlacementQuestion {
   knowledgeNodeId: string
   questionId: string
   answer: unknown
   isCorrect: boolean
   timeSpent: number // 毫秒
+  /** 题干文本 */
+  stem?: string
+  /** 4 个选项 */
+  options?: PlacementQuestionOption[]
+  /** 正确选项索引 0-3 */
+  correctIndex?: number
+  /** 用户选择的索引 */
+  selectedIndex?: number
+  /** 是否超时未答 */
+  timedOut?: boolean
+  /** 题目来源 */
+  source?: 'preset' | 'ai'
+  /** 难度 1-5 */
+  difficulty?: number
+}
+
+/** 评测选择题选项 */
+export interface PlacementQuestionOption {
+  /** 选项文字 */
+  text: string
+  /** 选项 emoji（可选） */
+  emoji?: string
+}
+
+/** 预设题库中的题目格式 */
+export interface QuestionBankItem {
+  /** 关联知识点 ID */
+  knowledgeNodeId: string
+  /** 题干 */
+  stem: string
+  /** 4 个选项 */
+  options: PlacementQuestionOption[]
+  /** 正确选项索引 0-3 */
+  correctIndex: number
+  /** 难度 1-5 */
+  difficulty: number
+}
+
+/** 阶段一分析结果 */
+export interface Phase1Analysis {
+  /** 薄弱模块 ID 列表 */
+  weakModules: string[]
+  /** 不确定的知识点（答对但耗时长，或相邻知识点结果矛盾） */
+  uncertainNodes: string[]
+  /** 阶段一总得分 0-100 */
+  overallPhase1Score: number
+  /** 各模块得分 */
+  moduleScores: Record<string, number>
+  /** 是否需要阶段二验证 */
+  needsPhase2: boolean
 }
 
 /** 测评结果 */

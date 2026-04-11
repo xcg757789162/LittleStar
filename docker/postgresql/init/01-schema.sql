@@ -203,12 +203,17 @@ CREATE TABLE api.placement_tests (
   questions JSONB NOT NULL DEFAULT '[]',
   started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   completed_at TIMESTAMPTZ,
-  result JSONB
+  result JSONB,
+  phase VARCHAR(10) NOT NULL DEFAULT 'single',  -- 'single' | 'phase1' | 'phase2'
+  phase1_result JSONB,                           -- 阶段一分析结果（仅 phase2 使用）
+  parent_test_id INTEGER REFERENCES api.placement_tests(id)  -- phase2 关联 phase1 的 id
 );
 
 CREATE INDEX idx_placement_tests_child ON api.placement_tests(child_id);
 CREATE INDEX idx_placement_tests_child_subject_grade ON api.placement_tests(child_id, subject, grade_level);
 CREATE INDEX idx_placement_tests_started ON api.placement_tests(started_at);
+CREATE INDEX idx_placement_tests_phase ON api.placement_tests(phase);
+CREATE INDEX idx_placement_tests_parent ON api.placement_tests(parent_test_id);
 
 -- ============================================================
 -- 12. report_data — 学习报告数据表
@@ -401,6 +406,26 @@ CREATE TABLE api.media_files (
 
 CREATE INDEX idx_media_files_status ON api.media_files(status);
 CREATE INDEX idx_media_files_source ON api.media_files(source);
+
+-- ============================================================
+-- 23. placement_questions — 评测题目表（预设+AI生成）
+-- ============================================================
+CREATE TABLE api.placement_questions (
+  id SERIAL PRIMARY KEY,
+  subject VARCHAR(20) NOT NULL,
+  grade_level VARCHAR(30) NOT NULL,
+  knowledge_node_id VARCHAR(100) NOT NULL,
+  source VARCHAR(10) NOT NULL DEFAULT 'preset',  -- 'preset' | 'ai'
+  stem TEXT NOT NULL,                              -- 题干
+  options JSONB NOT NULL DEFAULT '[]',             -- [{text, emoji?}]
+  correct_index INTEGER NOT NULL,                  -- 正确选项索引 0-3
+  difficulty INTEGER NOT NULL DEFAULT 1,           -- 难度 1-5
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT placement_questions_correct_range CHECK (correct_index >= 0 AND correct_index <= 3)
+);
+
+CREATE INDEX idx_placement_questions_node ON api.placement_questions(subject, grade_level, knowledge_node_id);
+CREATE INDEX idx_placement_questions_source ON api.placement_questions(source);
 
 -- ============================================================
 -- 视图：classroom_history_list（列表查询，不含 classroomData）
