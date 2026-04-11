@@ -5,7 +5,7 @@
  */
 
 import { useMemo } from 'react'
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 import { useChildStore } from '@/stores/childStore'
 import { useMasteryRecords } from '@/hooks/queries'
 import type { Subject } from '@/types/models'

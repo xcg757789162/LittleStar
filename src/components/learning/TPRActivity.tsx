@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'motion/react'
 import type { TPRCommand, TPRAnimationType } from '@/services/api/types'
 
 /** 动画配置映射 */

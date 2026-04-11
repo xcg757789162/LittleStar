@@ -6,7 +6,7 @@
  */
 
 import { useParams, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 import { useReportStore } from '@/stores/reportStore'
 import { GRADE_LABELS } from '@/types/grades'
 import { LearningTimeChart } from '@/components/charts/LearningTimeChart'

@@ -4,7 +4,7 @@
  */
 
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 import { useReportStore } from '@/stores/reportStore'
 import { GRADE_LABELS } from '@/types/grades'
 import type { ReportData, GradeLevel, Subject } from '@/types/models'

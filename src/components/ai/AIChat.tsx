@@ -3,7 +3,7 @@
  * 气泡式对话，AI 老师头像，幼儿友好 UI
  */
 
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 
 export interface ChatMessage {
   id: string

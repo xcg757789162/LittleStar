@@ -3,7 +3,7 @@
  * 组合 StarRating + 老师头像气泡 + 操作按钮
  */
 
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 import { StarRating } from './StarRating'
 
 export interface PronunciationFeedbackProps {

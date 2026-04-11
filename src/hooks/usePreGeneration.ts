@@ -9,7 +9,6 @@
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react'
-import { OpenMAICClient } from '@/services/openmaic/client'
 import { OpenMAICPipelineClient } from '@/services/openmaic/pipeline-client'
 import { ClassroomCache } from '@/services/openmaic/cache'
 import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
@@ -19,13 +18,17 @@ import {
   RequirementGenerator,
   GenerationScheduler,
 } from '@/services/lesson-planner'
+import type { TemplatePrompt } from '@/services/lesson-planner/requirement-generator'
 import { apiClient } from '@/services/api'
 import { useChildStore } from '@/stores/childStore'
 import type { Subject, KnowledgeNode, MasteryRecord, PlacementTest } from '@/types/models'
 import type { PipelineStepName } from '@/services/openmaic/pipeline-types'
+import { createLogger } from '@/lib/openmaic/logger'
+
+const log = createLogger('PreGeneration')
 
 /** 预生成状态 */
-export type PreGenerationStatus = 'idle' | 'checking' | 'generating' | 'completed' | 'failed'
+export type PreGenerationStatus = 'idle' | 'checking' | 'generating' | 'completed' | 'failed' | 'api-key-missing'
 
 /** Hook 返回值 */
 export interface PreGenerationState {
@@ -83,7 +86,11 @@ export function usePreGeneration(
    * 核心预生成逻辑
    */
   const runPreGeneration = useCallback(async () => {
-    if (!childId || isRunningRef.current) return
+    if (!childId || isRunningRef.current) {
+      log.debug('跳过执行:', { childId: !!childId, isRunning: isRunningRef.current })
+      return
+    }
+    log.info('🚀 开始预生成流程, childId:', childId)
     isRunningRef.current = true
     setStatus('checking')
     setStageText('正在分析学习情况...')
@@ -93,6 +100,7 @@ export function usePreGeneration(
       const numChildId = Number(childId)
       const child = useChildStore.getState().currentChild
       if (!child) {
+        log.warn('currentChild 为空，跳过')
         setStatus('idle')
         isRunningRef.current = false
         return
@@ -103,8 +111,10 @@ export function usePreGeneration(
         filters: [{ column: 'childId', operator: 'eq', value: numChildId }],
       })
       const completedSubjects = new Set(tests.map((t) => t.subject as Subject))
+      log.info('已完成评测科目:', [...completedSubjects])
 
       if (completedSubjects.size === 0) {
+        log.info('无已完成评测，跳过')
         setStatus('idle')
         isRunningRef.current = false
         return
@@ -113,39 +123,52 @@ export function usePreGeneration(
       // 2. 初始化缓存
       const cache = new ClassroomCache(new PostgresCacheStore(numChildId))
       const existingSize = await cache.getCacheSize()
+      log.info('当前缓存数量:', existingSize, '/ 最小水位线:', MIN_CACHE_SIZE)
 
       // 如果缓存已达到最小水位线，不再生成
       if (existingSize >= MIN_CACHE_SIZE) {
+        log.info('缓存已达水位线，无需生成')
         setStatus('completed')
         setCompletedCount(existingSize)
         isRunningRef.current = false
         return
       }
 
-      // 3. 对每个已完成评测的科目生成课堂
+      // 3. 检查 API Key 是否已配置
+      if (!child.settings.llmModel || !child.settings.llmApiKey) {
+        log.warn('API Key 未配置:', { llmModel: child.settings.llmModel, llmApiKey: !!child.settings.llmApiKey })
+        setStatus('api-key-missing')
+        setStageText('请先配置 AI 模型和 API Key')
+        setError('请在「家长面板 → 高级设置 → 高级课堂设置」中配置 LLM 模型和 API Key 后再试')
+        isRunningRef.current = false
+        return
+      }
+      log.info('API Key 已配置, 模型:', child.settings.llmModel)
+
+      // 4. 构建 Pipeline Client
       setStatus('generating')
       setStageText('正在规划课程...')
-      const client = new OpenMAICClient()
+      console.log('[PreGeneration] 开始构建 Pipeline Client...')
       const planner = new LessonPlanner()
       const reqGenerator = new RequirementGenerator()
 
-      // 尝试构建 Pipeline Client（如果孩子设置中配置了 LLM 信息）
-      let pipelineClient: OpenMAICPipelineClient | undefined
-      let pipelineHeaders: Record<string, string> | undefined
+      let pipelineClient: OpenMAICPipelineClient
+      let pipelineHeaders: Record<string, string>
       try {
-        if (child.settings.llmModel && child.settings.llmApiKey) {
-          pipelineClient = new OpenMAICPipelineClient()
-          pipelineHeaders = buildHeadersFromSettings(child.settings)
-        }
-      } catch {
-        // 构建 headers 失败（如缺少必要配置），不使用 Pipeline
+        pipelineClient = new OpenMAICPipelineClient()
+        pipelineHeaders = buildHeadersFromSettings(child.settings)
+      } catch (headerError) {
+        console.error('[PreGeneration] 构建 Pipeline Headers 失败:', headerError)
+        setStatus('api-key-missing')
+        setStageText('API 配置有误，请检查设置')
+        setError('API 配置无效，请在「家长面板 → 高级设置」中检查 LLM 模型、API Key 等配置')
+        isRunningRef.current = false
+        return
       }
 
-      const scheduler = new GenerationScheduler(client, cache, {
+      const scheduler = new GenerationScheduler(cache, {
         maxRetries: 2,
         retryIntervals: [3000, 10000],
-        pollIntervalMs: 5000,
-        maxPollAttempts: 120,
         onTaskProgress: (info) => {
           setCompletedCount(info.completedCount)
           setPendingCount(info.totalCount - info.completedCount - info.failedCount)
@@ -214,7 +237,7 @@ export function usePreGeneration(
                   name: node.name,
                   description: node.description ?? '',
                   difficulty: node.difficulty,
-                  templatePrompts: node.templatePrompts ?? [],
+                  templatePrompts: ((node as unknown as Record<string, unknown>).templatePrompts ?? []) as TemplatePrompt[],
                   prerequisites: node.prerequisites ?? [],
                 },
                 child: {
@@ -235,12 +258,13 @@ export function usePreGeneration(
           }
         } catch (subjectError) {
           // 单科目失败不影响其他科目
-          console.warn(`[PreGeneration] ${subject} 课程规划失败:`, subjectError)
+          log.warn(`${subject} 课程规划失败:`, subjectError)
         }
       }
 
       setPendingCount(totalTasks)
       setTotalCount(totalTasks)
+      console.log('[PreGeneration] 共规划', totalTasks, '个生成任务')
 
       if (totalTasks === 0) {
         // 无知识点数据，回退到简单生成
@@ -267,6 +291,7 @@ export function usePreGeneration(
 
       if (totalTasks > 0) {
         // 6. 执行所有任务（后台并行）
+        console.log('[PreGeneration] 🎬 开始执行', totalTasks, '个生成任务（串行）')
         const results = await scheduler.executeTasks()
         const completed = results.filter((t) => t.status === 'completed').length
         const failed = results.filter((t) => t.status === 'failed').length
@@ -275,7 +300,7 @@ export function usePreGeneration(
         setPendingCount(0)
 
         if (failed > 0) {
-          console.warn(`[PreGeneration] ${failed} 个任务失败`, results.filter((t) => t.status === 'failed'))
+          log.warn(`${failed} 个任务失败`, results.filter((t) => t.status === 'failed'))
         }
 
         setStatus(completed > 0 ? 'completed' : 'failed')
@@ -310,9 +335,31 @@ export function usePreGeneration(
   }, [runPreGeneration])
 
   /**
-   * 自动触发：评测完成 + 缓存为空
+   * 自动触发：评测完成 + 缓存低于水位线
+   *
+   * 修复：当 hasPlacementTest 从 null → true 变化时（评测完成回首页 React Query refetch），
+   * 需要重置 hasTriggeredRef 以确保能触发预生成。
    */
+  const prevHasTestRef = useRef<boolean | null>(null)
   useEffect(() => {
+    // 检测 hasPlacementTest 从 非 true → true 的跳变（评测完成后首次获取到数据）
+    if (prevHasTestRef.current !== true && hasPlacementTest === true) {
+      console.log('[PreGeneration] 检测到评测数据就绪（hasPlacementTest: true），重置触发标记')
+      hasTriggeredRef.current = false
+    }
+    prevHasTestRef.current = hasPlacementTest
+  }, [hasPlacementTest])
+
+  useEffect(() => {
+    console.log('[PreGeneration] 自动触发检查:', {
+      childId: !!childId,
+      hasPlacementTest,
+      cachedCount,
+      MIN_CACHE_SIZE,
+      hasTriggered: hasTriggeredRef.current,
+      isRunning: isRunningRef.current,
+    })
+
     if (
       childId &&
       hasPlacementTest === true &&
@@ -320,6 +367,7 @@ export function usePreGeneration(
       !hasTriggeredRef.current &&
       !isRunningRef.current
     ) {
+      console.log('[PreGeneration] ✅ 条件满足，自动触发预生成')
       hasTriggeredRef.current = true
       void runPreGeneration()
     }
@@ -327,7 +375,7 @@ export function usePreGeneration(
 
   /**
    * 监听课堂完成事件：课堂学完后自动触发新一轮预生成
-   * 由 useLearningFlow.handleClassroomComplete 通过 CustomEvent 触发
+   * 由 NativeClassroom 课堂完成后通过 CustomEvent('classroom-completed') 触发
    */
   useEffect(() => {
     const handleClassroomCompleted = () => {

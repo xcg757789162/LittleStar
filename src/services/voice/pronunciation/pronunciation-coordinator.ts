@@ -15,7 +15,6 @@
 import { applyChildAdjustments, scoreToStars } from './child-scoring'
 import { splitSyllables } from './syllable-splitter'
 import { selectFeedback, type FeedbackPhase } from './feedback-templates'
-import type { PronunciationScore } from './types'
 
 /** 编排器阶段 */
 export type CoordinatorPhase = 'idle' | 'listening' | 'recording' | 'assessing' | 'feedback' | 'retry' | 'drilling'

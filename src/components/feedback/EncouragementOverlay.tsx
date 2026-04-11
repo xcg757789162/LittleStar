@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'motion/react'
 
 /** 鼓励消息列表 */
 const ENCOURAGEMENT_MESSAGES = [

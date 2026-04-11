@@ -50,8 +50,8 @@ services:
   # ============================================================
   app:
     build:
-      context: ..
-      dockerfile: deploy/Dockerfile.app
+      context: ../..
+      dockerfile: docker/deploy/Dockerfile.app
       args:
         # 可自定义 OpenMAIC 源码仓库和分支
         OPENMAIC_REPO: ${OPENMAIC_REPO:-https://github.com/THU-MAIC/OpenMAIC.git}
@@ -83,8 +83,9 @@ services:
       OPENMAIC_PORT: ${OPENMAIC_PORT:-3002}
       PORT: ${OPENMAIC_PORT:-3002}
       # --- LLM / TTS / 图片生成 (透传给 OpenMAIC) ---
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      # 注意：使用 LITTLESTAR_ 前缀的变量，避免宿主机的 OPENAI_API_KEY（如 CodeBuddy）覆盖 .env.local 配置
+      OPENAI_API_KEY: ${LITTLESTAR_OPENAI_API_KEY:-${OPENAI_API_KEY:-}}
+      OPENAI_BASE_URL: ${LITTLESTAR_OPENAI_BASE_URL:-${OPENAI_BASE_URL:-}}
       DEFAULT_MODEL: ${DEFAULT_MODEL:-}
       TTS_MINIMAX_API_KEY: ${TTS_MINIMAX_API_KEY:-}
       IMAGE_QWEN_IMAGE_API_KEY: ${IMAGE_QWEN_IMAGE_API_KEY:-}

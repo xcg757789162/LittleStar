@@ -54,12 +54,12 @@ describe('AppLayout', () => {
     expect(starMapButton).toBeInTheDocument()
   })
 
-  it('学习页面（/learn）不应渲染底部导航栏', () => {
+  it('课堂页面（/classroom）不应渲染底部导航栏', () => {
     renderWithRouter(
       <AppLayout>
-        <div>Learning content</div>
+        <div>Classroom content</div>
       </AppLayout>,
-      ['/learn'],
+      ['/classroom'],
     )
     expect(screen.queryByTestId('bottom-nav')).not.toBeInTheDocument()
   })

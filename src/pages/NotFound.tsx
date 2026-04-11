@@ -2,7 +2,7 @@
  * 404 页面 — Sunny Playground 风格
  */
 
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 
 const T = {

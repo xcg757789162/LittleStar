@@ -1,4 +1,6 @@
-## 1. 诊断验证（优先执行，确认修复方向正确）
+**⚠️ 本 Change 已废弃** — iframe 架构已被 OpenMAIC 原生迁移完全替代（openmaic-frontend-native-migration），图片加载问题通过原生 MediaGenerationStore 和 ImageWithFallback 组件解决。以下任务不再适用。
+
+## 1. 诊断验证（已废弃）
 
 - [ ] 1.1 进入 OpenMAIC 容器 (`docker exec -it openmaic-server sh`)，查看 `/app/data/` 目录结构，确认 AI 生成的图片实际存储路径和文件格式
 - [ ] 1.2 在浏览器 DevTools Network 面板中捕获 iframe 内图片 `<img>` 的实际请求 URL，记录失败的 URL 格式

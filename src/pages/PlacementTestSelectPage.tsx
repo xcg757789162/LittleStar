@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
 import { usePlacementTests } from '@/hooks/queries'

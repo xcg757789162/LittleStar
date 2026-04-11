@@ -3,7 +3,7 @@
  * 展示亲子小任务，大卡片设计，有趣的 emoji 和友好语调
  */
 
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'motion/react'
 import type { ParentActivity } from '@/services/api/types'
 
 /** 活动类型 emoji 映射 */

@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'motion/react'
 
 /** 庆祝等级 */
 export type CelebrationLevel = 'normal' | 'streak3' | 'streak5' | 'complete'

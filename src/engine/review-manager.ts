@@ -50,7 +50,7 @@ export class ReviewManager {
   }
 
   /**
-   * 获取学习流复习项（供 useLearningFlow 调用）
+   * 获取学习流复习项（供课堂复习流程调用）
    * @param childId 孩子 ID
    * @param subject 科目
    * @param maxCount 最大数量

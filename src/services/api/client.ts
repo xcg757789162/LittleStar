@@ -19,6 +19,9 @@ import {
   type PaginatedResponse,
 } from './types'
 import { authApi } from './auth'
+import { createLogger } from '@/lib/openmaic/logger'
+
+const log = createLogger('ApiClient')
 
 // ============================================================
 // camelCase ↔ snake_case 转换工具
@@ -93,14 +96,20 @@ async function refreshTokenIfNeeded(): Promise<string | null> {
   refreshPromise = (async () => {
     try {
       const token = getToken()
-      if (!token) return null
+      if (!token) {
+        log.debug('无 token，跳过刷新')
+        return null
+      }
 
+      log.info('开始刷新 Token...')
       const response = await authApi.refresh(token)
       // 存储刷新后的新 token 到 localStorage
       localStorage.setItem(TOKEN_STORAGE_KEY, response.token)
+      log.info('Token 刷新成功')
       return response.token
-    } catch {
+    } catch (err) {
       // 刷新失败，清除 token
+      log.error('Token 刷新失败:', err)
       clearToken()
       return null
     } finally {
@@ -221,11 +230,13 @@ async function request<T>(options: RequestOptions): Promise<T> {
   // ── Token 守卫：无 token + 非公共表 → 直接拒绝，不发请求 ──
   // 这避免了 PostgREST 用 anon 角色访问私有表导致 "permission denied"
   if (!token && !isPublicPath(path)) {
+    log.warn('无 token 访问非公共路径，拒绝:', method, path)
     throw new ApiError(401, '请先登录后再操作')
   }
 
   // 写操作必须有 token（即使是公共表也不允许匿名写入）
   if (!token && method !== 'GET') {
+    log.warn('无 token 尝试写操作，拒绝:', method, path)
     throw new ApiError(401, '请先登录后再操作')
   }
 
@@ -259,6 +270,9 @@ async function request<T>(options: RequestOptions): Promise<T> {
   // 8 秒超时保底，避免后端不可达时无限等待
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 8000)
+  const startTime = Date.now()
+
+  log.debug(`→ ${method} ${path}${isRetry ? ' (retry)' : ''}`)
 
   let response: Response
   try {
@@ -270,16 +284,22 @@ async function request<T>(options: RequestOptions): Promise<T> {
     })
   } catch (error) {
     clearTimeout(timeout)
+    const elapsed = Date.now() - startTime
     if (error instanceof DOMException && error.name === 'AbortError') {
+      log.error(`✗ ${method} ${path} 超时 (${elapsed}ms)`)
       throw new ApiError(0, '连接超时，请检查后端服务是否正在运行')
     }
+    log.error(`✗ ${method} ${path} 网络错误 (${elapsed}ms):`, error)
     throw error
   } finally {
     clearTimeout(timeout)
   }
 
+  const elapsed = Date.now() - startTime
+
   // 401 处理：尝试刷新 Token
   if (response.status === 401 && !isRetry) {
+    log.warn(`← ${method} ${path} 401 (${elapsed}ms)，尝试刷新 Token...`)
     const newToken = await refreshTokenIfNeeded()
     if (newToken) {
       // 用新 token 重试
@@ -303,8 +323,9 @@ async function request<T>(options: RequestOptions): Promise<T> {
         errorDetails = errorBody.details || errorBody.hint
         errorCode = errorBody.code
       }
-    } catch {
+    } catch (parseErr) {
       // 无法解析错误响应体，使用默认消息
+      log.debug('错误响应体解析失败:', parseErr)
     }
 
     // 403 权限错误：给出更清晰的提示，而不是让用户以为服务离线
@@ -312,6 +333,7 @@ async function request<T>(options: RequestOptions): Promise<T> {
       errorMessage = '权限不足，请确认已登录且有权访问此数据'
     }
 
+    log.error(`← ${method} ${path} ${response.status} (${elapsed}ms):`, errorMessage, errorDetails ?? '')
     throw new ApiError(response.status, errorMessage, errorDetails, errorCode)
   }
 
@@ -322,13 +344,18 @@ async function request<T>(options: RequestOptions): Promise<T> {
 
   // 204 No Content
   if (response.status === 204) {
+    log.debug(`← ${method} ${path} 204 (${elapsed}ms)`)
     return undefined as T
   }
 
   // 解析响应
   const text = await response.text()
-  if (!text) return undefined as T
+  if (!text) {
+    log.debug(`← ${method} ${path} empty (${elapsed}ms)`)
+    return undefined as T
+  }
 
+  log.debug(`← ${method} ${path} ${response.status} (${elapsed}ms)`)
   const data = JSON.parse(text)
   return keysToCamelCase(data) as T
 }

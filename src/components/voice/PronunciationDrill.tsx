@@ -3,7 +3,7 @@
  * 整合所有子组件 + PronunciationCoordinator 状态驱动 UI
  */
 
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 import { VoiceRecorder } from './VoiceRecorder'
 import { SyllableHighlight } from './SyllableHighlight'
 import { PronunciationFeedback } from './PronunciationFeedback'

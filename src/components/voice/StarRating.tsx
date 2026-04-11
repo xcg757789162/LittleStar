@@ -3,7 +3,7 @@
  * 金色大星星 + 逐个点亮动画
  */
 
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 
 export interface StarRatingProps {
   /** 星级 1-5 */

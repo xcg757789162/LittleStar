@@ -52,16 +52,35 @@ export interface ChildSettings {
 
   // === 高级课堂设置（Pipeline Client 使用） ===
 
+  /** LLM 提供商选择器 ID（对应 BACKEND_LLM_PROVIDERS 中的 id） */
+  llmProviderId: string
+  /** LLM 模型标识（如 'openai:gpt-4o'），由提供商选择器自动拼接 */
+  llmModel: string
+  /** LLM API Key */
+  llmApiKey: string
+  /** LLM Base URL */
+  llmBaseUrl: string
+
   /** TTS 语音合成开关 */
   enableTTS: boolean
-  /** TTS 服务提供商 ID（如 'volcengine', 'azure', 'openai'） */
+  /** TTS 服务提供商 ID（如 'minimax', 'openai'） */
   ttsProviderId: string
+  /** TTS API Key（独立于 LLM 的 API Key） */
+  ttsApiKey: string
   /** TTS 语音 ID */
   ttsVoice: string
   /** TTS 语速（0.5-2.0） */
   ttsSpeed: number
+
   /** 图片生成开关 */
   enableImageGeneration: boolean
+  /** 图片生成提供商 ID（如 'qwen-image', 'minimax'） */
+  imageProviderId: string
+  /** 图片生成 API Key */
+  imageApiKey: string
+  /** 图片生成 Base URL */
+  imageBaseUrl: string
+
   /** 视频生成开关 */
   enableVideoGeneration: boolean
   /** 课堂 Agent 模式：preset(预设角色) | auto(自动生成) */
@@ -76,27 +95,30 @@ export interface ChildSettings {
   maxDiscussionRounds: number
   /** 学生自我介绍（传给 OpenMAIC 的 userBio） */
   selfIntroduction: string
-  /** LLM 模型标识（如 'openai:gpt-4o'） */
-  llmModel: string
-  /** LLM API Key */
-  llmApiKey: string
-  /** LLM Base URL */
-  llmBaseUrl: string
 }
 
 /** 高级课堂设置默认值 */
 export const DEFAULT_ADVANCED_SETTINGS: Pick<ChildSettings,
-  | 'enableTTS' | 'ttsProviderId' | 'ttsVoice' | 'ttsSpeed'
-  | 'enableImageGeneration' | 'enableVideoGeneration'
+  | 'llmProviderId' | 'llmModel' | 'llmApiKey' | 'llmBaseUrl'
+  | 'enableTTS' | 'ttsProviderId' | 'ttsApiKey' | 'ttsVoice' | 'ttsSpeed'
+  | 'enableImageGeneration' | 'imageProviderId' | 'imageApiKey' | 'imageBaseUrl'
+  | 'enableVideoGeneration'
   | 'classroomAgentMode' | 'selfIntroduction'
   | 'selectedAgents' | 'agentVoiceMap' | 'teacherVoice' | 'maxDiscussionRounds'
-  | 'llmModel' | 'llmApiKey' | 'llmBaseUrl'
 > = {
+  llmProviderId: 'backend-qwen',
+  llmModel: '',
+  llmApiKey: '',
+  llmBaseUrl: '',
   enableTTS: true,
   ttsProviderId: '',
+  ttsApiKey: '',
   ttsVoice: '',
   ttsSpeed: 1.0,
   enableImageGeneration: false,
+  imageProviderId: '',
+  imageApiKey: '',
+  imageBaseUrl: '',
   enableVideoGeneration: false,
   classroomAgentMode: 'preset',
   selfIntroduction: '',
@@ -104,9 +126,6 @@ export const DEFAULT_ADVANCED_SETTINGS: Pick<ChildSettings,
   agentVoiceMap: {},
   teacherVoice: '',
   maxDiscussionRounds: 3,
-  llmModel: '',
-  llmApiKey: '',
-  llmBaseUrl: '',
 }
 
 /** 用户（孩子） */

@@ -27,12 +27,12 @@ describe('E2E Flow', () => {
     expect(screen.getByTestId('home-page')).toBeInTheDocument()
   })
 
-  it('学习页面应能访问', () => {
+  it('课堂页面应能访问', () => {
     render(
-      <MemoryRouter initialEntries={['/learn']}>
+      <MemoryRouter initialEntries={['/classroom']}>
         <App />
       </MemoryRouter>,
     )
-    expect(screen.getByTestId('learning-session')).toBeInTheDocument()
+    expect(screen.getByTestId('native-classroom')).toBeInTheDocument()
   })
 })

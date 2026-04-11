@@ -1,7 +1,7 @@
 /**
  * 应用全局布局
  * 渲染子组件 + 条件渲染底部导航栏
- * 学习页面 (/learn) 隐藏底部导航
+ * 课堂页面 (/classroom)、预览页面 (/preview) 隐藏底部导航
  */
 
 import type { ReactNode } from 'react'
@@ -9,7 +9,7 @@ import { useLocation } from 'react-router-dom'
 import { BottomNav } from './BottomNav'
 
 /** 需要隐藏底部导航的路径前缀 */
-const HIDDEN_NAV_PATHS = ['/learn']
+const HIDDEN_NAV_PATHS = ['/classroom', '/preview']
 
 interface AppLayoutProps {
   children: ReactNode

@@ -26,6 +26,10 @@ import type {
 } from './pipeline-types'
 import { isSceneOutline } from './pipeline-types'
 import type { Classroom, Scene, Slide } from './types'
+import { getOpenMAICConfig } from '@/services/config'
+import { createLogger } from '@/lib/openmaic/logger'
+
+const log = createLogger('PipelineClient')
 
 // ============================================================
 // 配置
@@ -60,7 +64,10 @@ export class OpenMAICPipelineClient {
 
   constructor(config?: PipelineClientConfig) {
     const isBrowser = typeof window !== 'undefined'
-    this.baseUrl = (config?.baseUrl || (isBrowser ? '/openmaic' : 'http://localhost:3000')).replace(/\/+$/, '')
+    // 优先级：传入参数 > getOpenMAICConfig()（localStorage > 默认值）> 硬编码 fallback
+    const openmaicConfig = isBrowser ? getOpenMAICConfig() : null
+    const defaultUrl = isBrowser ? '/openmaic' : 'http://localhost:3000'
+    this.baseUrl = (config?.baseUrl || openmaicConfig?.url || defaultUrl).replace(/\/+$/, '')
     this.timeoutMs = config?.timeoutMs ?? 60000
     this.maxRetries = config?.maxRetries ?? 2
   }
@@ -83,6 +90,7 @@ export class OpenMAICPipelineClient {
     requirements: UserRequirements,
     headers: Record<string, string>,
   ): Promise<SceneOutline[]> {
+    log.info('→ 生成场景大纲 (SSE)...')
     const response = await this.fetchWithTimeout(
       `${this.baseUrl}/api/generate/scene-outlines-stream`,
       {
@@ -96,12 +104,15 @@ export class OpenMAICPipelineClient {
     )
 
     if (!response.ok) {
+      log.error('← 大纲生成失败:', response.status, response.statusText)
       throw new Error(
         `Failed to generate outlines: ${response.status} ${response.statusText}`,
       )
     }
 
-    return this.parseSSEStream(response)
+    const outlines = await this.parseSSEStream(response)
+    log.info('← 大纲生成完成, 共', outlines.length, '个场景')
+    return outlines
   }
 
   /**
@@ -117,7 +128,8 @@ export class OpenMAICPipelineClient {
     outline: SceneOutline,
     headers: Record<string, string>,
   ): Promise<GeneratedContent> {
-    return this.fetchWithRetry<GeneratedContent>(
+    log.debug('→ 生成场景内容, scene:', outline.index, outline.title)
+    const result = await this.fetchWithRetry<GeneratedContent>(
       `${this.baseUrl}/api/generate/scene-content`,
       {
         method: 'POST',
@@ -128,6 +140,8 @@ export class OpenMAICPipelineClient {
         body: JSON.stringify({ outline }),
       },
     )
+    log.debug('← 场景内容生成完成, scene:', outline.index)
+    return result
   }
 
   /**
@@ -231,6 +245,7 @@ export class OpenMAICPipelineClient {
    */
   async runFullPipeline(input: PipelineInput): Promise<Classroom> {
     const { requirements, headers, callbacks } = input
+    log.info('🚀 开始完整 Pipeline, language:', requirements.language)
 
     // Step 0: auto 模式下先获取 AI 生成的角色列表
     if (headers['x-agent-mode'] === 'auto') {
@@ -303,19 +318,30 @@ export class OpenMAICPipelineClient {
       scenes.push(scene)
     }
 
-    // Step 3: 组装 Classroom
+    // Step 3: 组装 Classroom（v2: 包含 OpenMAIC Stage 元数据）
     this.reportProgress(callbacks, 'assembly', 95, '正在组装课堂数据...')
 
+    const classroomId = `pipeline-${Date.now()}`
     const classroom: Classroom = {
-      id: `pipeline-${Date.now()}`,
+      id: classroomId,
       title: outlines[0]?.title || 'Generated Classroom',
       status: 'completed',
       scenes,
       language: requirements.language,
       createdAt: new Date().toISOString(),
+      // v2: 嵌入 OpenMAIC Stage 元数据，Bridge Store 可直接使用
+      stage: {
+        id: classroomId,
+        name: outlines[0]?.title || 'Generated Classroom',
+        description: outlines.map((o) => o.description).join('; '),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        language: requirements.language,
+      },
     }
 
     this.reportProgress(callbacks, 'assembly', 100, '课堂生成完成！')
+    log.info('✅ Pipeline 完成, classroomId:', classroom.id, 'scenes:', scenes.length)
 
     return classroom
   }
@@ -358,9 +384,13 @@ export class OpenMAICPipelineClient {
     init?: RequestInit,
   ): Promise<T> {
     let lastError: Error | null = null
+    const endpoint = url.replace(this.baseUrl, '')
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
+        if (attempt > 0) {
+          log.warn(`重试 ${endpoint} (第 ${attempt} 次)...`)
+        }
         const response = await this.fetchWithTimeout(url, init)
 
         if (!response.ok) {
@@ -373,15 +403,18 @@ export class OpenMAICPipelineClient {
         return await response.json() as T
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
+        log.warn(`${endpoint} 第 ${attempt + 1} 次请求失败:`, lastError.message)
 
         if (attempt < this.maxRetries) {
           // 指数退避：1s, 2s
           const delay = Math.pow(2, attempt) * 1000
+          log.debug(`等待 ${delay}ms 后重试...`)
           await new Promise((resolve) => setTimeout(resolve, delay))
         }
       }
     }
 
+    log.error(`${endpoint} 重试 ${this.maxRetries} 次后仍然失败`)
     throw lastError!
   }
 
@@ -450,8 +483,9 @@ export class OpenMAICPipelineClient {
       if (line.startsWith('data: ')) {
         try {
           return JSON.parse(line.slice(6)) as Record<string, unknown>
-        } catch {
-          // 无效 JSON，忽略
+        } catch (parseErr) {
+          // 无效 JSON，记录并忽略
+          log.warn('SSE 事件 JSON 解析失败:', line.slice(6, 100), parseErr)
           return null
         }
       }
@@ -460,90 +494,97 @@ export class OpenMAICPipelineClient {
   }
 
   /**
-   * 将大纲、内容、动作组装为 Scene
+   * 将大纲、内容、动作组装为 Scene（v2: 保留 OpenMAIC 原始格式）
+   *
+   * 不再扁平化为简化 Slide[]，而是直接保留 OpenMAIC 原始的 SceneContent + Action[]。
+   * Stage 组件和 PlaybackEngine/ActionEngine 可以直接消费这些数据。
+   *
+   * 数据映射：
+   *   GeneratedContent → Scene.content (SceneContent)
+   *   SceneAction[]    → Scene.actions (Action[])
    */
   private assembleScene(
     outline: SceneOutline,
     content: GeneratedContent,
     actions: SceneAction[],
   ): Scene {
-    const slides: Slide[] = []
+    // 映射 outline.type → OpenMAIC SceneType
+    const sceneType = this.mapSceneType(outline.type)
 
-    // 从 content 提取 slides
+    // 构建 OpenMAIC 原生 SceneContent
+    let sceneContent: Scene['content']
+
     if (content.type === 'slide' && content.canvas) {
-      const elements = content.canvas.elements || []
-      const textElements = elements.filter((el) => el.type === 'text')
-      const imageElements = elements.filter((el) => el.type === 'image')
-
-      // 标题页
-      const titleText = this.stripHtml((textElements[0]?.content ?? '') as string) || outline.title
-      slides.push({
-        type: 'title',
-        title: titleText,
-        content: this.stripHtml((textElements[1]?.content ?? '') as string) || undefined,
-        imageUrl: imageElements[0]?.src as string | undefined,
-      })
-
-      // 内容页
-      const remainingTexts = textElements.slice(2)
-        .map((el) => this.stripHtml((el.content ?? '') as string))
-        .filter(Boolean)
-      if (remainingTexts.length > 0) {
-        slides.push({
-          type: 'content',
-          title: outline.title,
-          content: remainingTexts.join('\n\n'),
-        })
+      // 教学页：保留原始 canvas 数据
+      sceneContent = {
+        type: 'slide' as const,
+        canvas: content.canvas as never, // GeneratedContent.canvas → PPTist Slide
       }
     } else if (content.type === 'quiz' && content.questions) {
-      // 测验页
-      for (const q of content.questions) {
-        const optionLabels = q.options.map((opt) => `${opt.value}. ${opt.label}`)
-        let correctIndex = 0
-        if (q.answer.length > 0) {
-          correctIndex = q.options.findIndex((opt) => opt.value === q.answer[0])
-          if (correctIndex < 0) correctIndex = 0
-        }
-
-        slides.push({
-          type: 'quiz',
-          title: outline.title,
-          quiz: {
-            question: q.question,
-            options: optionLabels,
-            correctAnswer: correctIndex,
-          },
-        })
+      // 测验页：保留原始 questions（OpenMAIC 格式）
+      sceneContent = {
+        type: 'quiz' as const,
+        questions: content.questions.map((q, idx) => ({
+          id: `q-${outline.index}-${idx}`,
+          type: 'single' as const,
+          question: q.question,
+          options: q.options.map((opt) => ({
+            label: opt.label,
+            value: opt.value,
+          })),
+          answer: q.answer,
+          analysis: q.analysis,
+        })),
+      }
+    } else {
+      // fallback: 用 outline 信息构建简单 slide
+      sceneContent = {
+        type: 'slide' as const,
+        canvas: {
+          elements: [
+            { type: 'text', content: `<p>${outline.title}</p>` },
+            { type: 'text', content: `<p>${outline.description}</p>` },
+          ],
+        } as never,
       }
     }
 
-    // 从 speech actions 提取讲解内容
-    const speechTexts = actions
-      .filter((a) => a.type === 'speech' && a.text)
-      .map((a) => a.text!)
-
-    if (speechTexts.length > 0 && slides.length < 3) {
-      slides.push({
-        type: 'content',
-        title: `${outline.title} - 老师讲解`,
-        content: speechTexts.join('\n\n'),
-      })
-    }
-
-    // 确保至少有一张 slide
-    if (slides.length === 0) {
-      slides.push({
-        type: 'content',
-        title: outline.title,
-        content: outline.description,
-      })
-    }
+    // 将 Pipeline 的 SceneAction[] 转换为 OpenMAIC 原生 Action[]
+    // SceneAction 的字段与 Action 基本兼容（都有 type, text, audioBase64 等）
+    const nativeActions = actions.map((a, idx) => ({
+      id: `action-${outline.index}-${idx}`,
+      ...a,
+    }))
 
     return {
       id: `scene-${outline.index}`,
       title: outline.title,
-      type: (outline.type as Scene['type']) || 'teaching',
-      slides,
+      type: sceneType,
+      order: outline.index,
+      content: sceneContent,
+      actions: nativeActions as Scene['actions'],
+    }
+  }
+
+  /**
+   * 映射 outline 场景类型到 LittleStar Scene 类型
+   */
+  private mapSceneType(type?: string): Scene['type'] {
+    switch (type) {
+      case 'slide':
+      case 'teaching':
+      case 'content':
+        return 'slide'
+      case 'quiz':
+        return 'quiz'
+      case 'interactive':
+        return 'interactive'
+      case 'pbl':
+        return 'pbl'
+      case 'summary':
+        return 'summary'
+      default:
+        return 'slide'
     }
   }
 
@@ -570,17 +611,4 @@ export class OpenMAICPipelineClient {
     callbacks.onProgress(progress)
   }
 
-  /**
-   * 去除 HTML 标签
-   */
-  private stripHtml(html: string): string {
-    return html
-      .replace(/<[^>]*>/g, '')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&')
-      .replace(/&quot;/g, '"')
-      .trim()
-  }
 }

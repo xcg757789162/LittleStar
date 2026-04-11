@@ -13,13 +13,13 @@ describe('Router', () => {
     expect(screen.getByTestId('home-page')).toBeInTheDocument()
   })
 
-  it('学习页面应渲染', () => {
+  it('课堂页面应渲染', () => {
     render(
-      <MemoryRouter initialEntries={['/learn']}>
+      <MemoryRouter initialEntries={['/classroom']}>
         <AppRoutes />
       </MemoryRouter>,
     )
-    expect(screen.getByTestId('learning-session')).toBeInTheDocument()
+    expect(screen.getByTestId('native-classroom')).toBeInTheDocument()
   })
 
   it('星空地图应渲染', () => {

@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'motion/react'
 
 export type FeedbackType = 'correct' | 'wrong'
 

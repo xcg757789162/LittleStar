@@ -14,6 +14,9 @@ import { apiClient } from '@/services/api'
 import type { PostgRESTFilter } from '@/services/api/types'
 import type { Subject } from '@/types/models'
 import type { Classroom } from '@/services/openmaic/types'
+import { createLogger } from '@/lib/openmaic/logger'
+
+const log = createLogger('ReviewLearning')
 
 /** 重学模式 */
 export type ReLearnMode = 'quick-review' | 'deep-relearn'
@@ -113,6 +116,8 @@ export class ReviewLearningService {
       isReview = false,
     } = input
 
+    log.info('保存课堂历史:', { childId, knowledgeNodeId, subject, isReview })
+
     // 计算学习轮次：查询该孩子在该知识点上已有多少条记录
     const existingRecords = await apiClient.get<ClassroomHistoryRecord>('/classroom_history', {
       filters: [
@@ -166,6 +171,7 @@ export class ReviewLearningService {
       }
     }
 
+    log.info('课堂历史保存成功, id:', String(created?.id ?? ''))
     return String(created?.id ?? '')
   }
 
@@ -217,14 +223,19 @@ export class ReviewLearningService {
    * @returns 完整的 Classroom 数据，不存在时返回 null
    */
   async loadClassroomFromHistory(historyId: string): Promise<Classroom | null> {
+    log.info('加载历史课堂:', historyId)
     const records = await apiClient.get<ClassroomHistoryRecord>('/classroom_history', {
       filters: [{ column: 'id', operator: 'eq', value: historyId }],
     })
-    if (records.length === 0) return null
+    if (records.length === 0) {
+      log.warn('历史课堂未找到:', historyId)
+      return null
+    }
 
     try {
       return JSON.parse(records[0].classroomData) as Classroom
-    } catch {
+    } catch (err) {
+      log.error('历史课堂 JSON 解析失败:', historyId, err)
       return null
     }
   }
@@ -249,7 +260,8 @@ export class ReviewLearningService {
 
     try {
       return JSON.parse(records[0].classroomData) as Classroom
-    } catch {
+    } catch (err) {
+      log.error('最新课堂 JSON 解析失败:', knowledgeNodeId, err)
       return null
     }
   }

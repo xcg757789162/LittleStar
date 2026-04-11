@@ -47,18 +47,28 @@ function UsersIcon({ size = 22, color = 'currentColor' }: { size?: number; color
   )
 }
 
+function ClassroomIcon({ size = 22, color = 'currentColor' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+      <path d="M6 12v5c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2v-5" />
+    </svg>
+  )
+}
+
 /* ====== 导航项配置 ====== */
 
 interface NavItem {
   key: string
   label: string
-  icon: (size: number, color: string) => JSX.Element
+  icon: (size: number, color: string) => React.JSX.Element
   path: string
 }
 
 const NAV_ITEMS: NavItem[] = [
   { key: 'home', label: '首页', icon: (s, c) => <HomeIcon size={s} color={c} />, path: '/' },
   { key: 'history', label: '复习', icon: (s, c) => <BookOpenIcon size={s} color={c} />, path: '/history' },
+  { key: 'classroom-settings', label: '课堂', icon: (s, c) => <ClassroomIcon size={s} color={c} />, path: '/classroom-settings' },
   { key: 'starmap', label: '星空', icon: (s, c) => <StarIcon size={s} color={c} />, path: '/starmap' },
   { key: 'parent', label: '家长', icon: (s, c) => <UsersIcon size={s} color={c} />, path: '/parent' },
 ]

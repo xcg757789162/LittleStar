@@ -2,7 +2,7 @@
  * 语音录制控制组件
  */
 
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 
 export interface VoiceRecorderProps {
   onRecord: () => void

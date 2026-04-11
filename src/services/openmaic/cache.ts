@@ -10,6 +10,9 @@
  */
 
 import type { Classroom } from './types'
+import { createLogger } from '@/lib/openmaic/logger'
+
+const log = createLogger('ClassroomCache')
 
 /** 缓存条目 */
 export interface CacheEntry {
@@ -172,12 +175,30 @@ export class ClassroomCache {
       const inferredSubject = inferSubjectFromNodeId(entry.knowledgeNodeId)
       if (subject && inferredSubject && inferredSubject !== subject) continue
 
-      // 从 scenes/slides 中提取第一个非空 imageUrl 作为缩略图
+      // 从 scenes 中提取第一个非空 imageUrl 作为缩略图
+      // 支持 v2（Scene.content.canvas.elements）和 v1（scene.slides）
       let thumbnailUrl: string | undefined
       if (entry.classroom.scenes) {
         for (const scene of entry.classroom.scenes) {
           if (thumbnailUrl) break
-          if (scene.slides) {
+
+          // v2: 从 content.canvas.elements 提取 image 元素
+          const content = scene.content as Record<string, unknown> | undefined
+          if (content?.type === 'slide') {
+            const canvas = content.canvas as Record<string, unknown> | undefined
+            const elements = canvas?.elements as Array<Record<string, unknown>> | undefined
+            if (elements) {
+              for (const el of elements) {
+                if (el.type === 'image' && typeof el.src === 'string') {
+                  thumbnailUrl = el.src
+                  break
+                }
+              }
+            }
+          }
+
+          // v1 fallback: 从 slides 提取
+          if (!thumbnailUrl && scene.slides) {
             for (const slide of scene.slides) {
               if (slide.imageUrl) {
                 thumbnailUrl = slide.imageUrl
@@ -224,18 +245,22 @@ export class ClassroomCache {
    */
   async clearExpiredCache(cutoffDate: string): Promise<void> {
     const entries = await this.store.entries()
+    let cleared = 0
 
     for (const [key, entry] of entries) {
       if (entry.date < cutoffDate) {
         await this.store.delete(key)
+        cleared++
       }
     }
+    log.info('清理过期缓存, cutoff:', cutoffDate, '清除:', cleared, '条')
   }
 
   /**
    * 清除所有缓存
    */
   async clearAll(): Promise<void> {
+    log.info('清除所有缓存')
     await this.store.clear()
   }
 

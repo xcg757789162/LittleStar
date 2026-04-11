@@ -14,6 +14,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useChildStore } from '@/stores/childStore'
 import { AuthPage } from '@/pages/AuthPage'
 import { CreateChildPage } from '@/pages/CreateChildPage'
+import { I18nProvider } from '@/lib/openmaic/hooks/use-i18n'
 
 export function App() {
   const { isInitialized } = useInitializeApp()
@@ -56,8 +57,10 @@ export function App() {
 
   // 步骤 4：正常渲染应用路由
   return (
-    <div data-testid="app-root" style={{ minHeight: '100vh' }}>
-      <AppRoutes />
-    </div>
+    <I18nProvider>
+      <div data-testid="app-root" style={{ minHeight: '100vh' }}>
+        <AppRoutes />
+      </div>
+    </I18nProvider>
   )
 }

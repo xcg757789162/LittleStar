@@ -3,7 +3,7 @@
  * 分段展示 + 当前/已完成/待完成三种状态视觉区分
  */
 
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 
 export interface SyllableHighlightProps {
   /** 音节数组 */
@@ -27,7 +27,6 @@ export function SyllableHighlight({ syllables, currentIndex }: SyllableHighlight
       {syllables.map((syllable, i) => {
         const isCurrent = i === currentIndex
         const isCompleted = i < currentIndex
-        const isPending = i > currentIndex
 
         let testId: string
         if (isCurrent) testId = 'syllable-current'

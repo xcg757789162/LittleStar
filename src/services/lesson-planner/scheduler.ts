@@ -5,10 +5,12 @@
  * 成功后写入缓存，失败自动重试。
  */
 
-import type { OpenMAICClient } from '@/services/openmaic/client'
 import type { ClassroomCache } from '@/services/openmaic/cache'
 import type { OpenMAICPipelineClient } from '@/services/openmaic/pipeline-client'
 import type { PipelineProgress } from '@/services/openmaic/pipeline-types'
+import { createLogger } from '@/lib/openmaic/logger'
+
+const log = createLogger('Scheduler')
 
 // ============================================================
 // 类型定义
@@ -41,11 +43,11 @@ export interface SchedulerConfig {
   /** 任务进度回调 */
   onTaskProgress?: (info: TaskProgressInfo) => void
 
-  // === Pipeline Client 配置 ===
-  /** Pipeline Client 实例（提供时优先使用 Pipeline，失败降级到旧 API） */
-  pipelineClient?: OpenMAICPipelineClient
+  // === Pipeline Client 配置（必填） ===
+  /** Pipeline Client 实例 */
+  pipelineClient: OpenMAICPipelineClient
   /** Pipeline API 请求 Headers（通过 buildHeadersFromSettings 构建） */
-  pipelineHeaders?: Record<string, string>
+  pipelineHeaders: Record<string, string>
   /** Pipeline 步骤级进度回调 */
   onPipelineProgress?: (progress: PipelineProgress) => void
 }
@@ -79,34 +81,27 @@ export interface GenerationTask {
 // ============================================================
 
 export class GenerationScheduler {
-  private readonly client: OpenMAICClient
   private readonly cache: ClassroomCache
   private readonly maxRetries: number
   private readonly retryIntervals: number[]
-  private readonly pollIntervalMs: number
-  private readonly maxPollAttempts: number
   private readonly onTaskProgress?: (info: TaskProgressInfo) => void
-  private readonly pipelineClient?: OpenMAICPipelineClient
-  private readonly pipelineHeaders?: Record<string, string>
+  private readonly pipelineClient: OpenMAICPipelineClient
+  private readonly pipelineHeaders: Record<string, string>
   private readonly onPipelineProgress?: (progress: PipelineProgress) => void
   private tasks: GenerationTask[] = []
   private taskIdCounter = 0
 
   constructor(
-    client: OpenMAICClient,
     cache: ClassroomCache,
-    config?: SchedulerConfig,
+    config: SchedulerConfig,
   ) {
-    this.client = client
     this.cache = cache
-    this.maxRetries = config?.maxRetries ?? 3
-    this.retryIntervals = config?.retryIntervals ?? [5000, 15000, 30000]
-    this.pollIntervalMs = config?.pollIntervalMs ?? 5000
-    this.maxPollAttempts = config?.maxPollAttempts ?? 120
-    this.onTaskProgress = config?.onTaskProgress
-    this.pipelineClient = config?.pipelineClient
-    this.pipelineHeaders = config?.pipelineHeaders
-    this.onPipelineProgress = config?.onPipelineProgress
+    this.maxRetries = config.maxRetries ?? 3
+    this.retryIntervals = config.retryIntervals ?? [5000, 15000, 30000]
+    this.onTaskProgress = config.onTaskProgress
+    this.pipelineClient = config.pipelineClient
+    this.pipelineHeaders = config.pipelineHeaders
+    this.onPipelineProgress = config.onPipelineProgress
   }
 
   /**
@@ -129,6 +124,12 @@ export class GenerationScheduler {
 
   /**
    * 执行所有待处理的任务
+   *
+   * **串行执行**（非并行），原因：
+   * 1. OpenMAIC 后端 AI 模型调用资源密集，并行 N 个请求会导致后端过载/限流
+   * 2. 串行时每完成一个任务即更新进度（"1/4 → 2/4"），用户体验更好
+   * 3. 避免并行轮询全部卡在 "0/4" 不动的问题
+   *
    * @returns 所有任务的最终状态
    */
   async executeTasks(): Promise<GenerationTask[]> {
@@ -146,20 +147,29 @@ export class GenerationScheduler {
       })
     }
 
-    // 并行执行，每个任务完成时通过 notify 回调通知
+    // 串行执行：逐个生成，每个完成后立即通知进度
     let completedSoFar = 0
     let failedSoFar = 0
+    const results: GenerationTask[] = []
 
-    const results = await Promise.all(
-      pendingTasks.map(async (task) => {
-        const result = await this.executeTask(task)
-        if (result.status === 'completed') completedSoFar++
-        if (result.status === 'failed') failedSoFar++
-        this.notifyProgress(result, completedSoFar, failedSoFar, totalCount)
-        return result
-      }),
-    )
+    for (const task of pendingTasks) {
+      // 通知正在处理第 N 个任务
+      this.onTaskProgress?.({
+        completedCount: completedSoFar,
+        failedCount: failedSoFar,
+        totalCount,
+        latestTask: { ...task },
+        stageText: `正在生成第 ${completedSoFar + failedSoFar + 1}/${totalCount} 节课堂...`,
+      })
 
+      const result = await this.executeTask(task)
+      if (result.status === 'completed') completedSoFar++
+      if (result.status === 'failed') failedSoFar++
+      this.notifyProgress(result, completedSoFar, failedSoFar, totalCount)
+      results.push(result)
+    }
+
+    log.info('所有任务执行完毕:', completedSoFar, '成功,', failedSoFar, '失败')
     return results
   }
 
@@ -215,14 +225,13 @@ export class GenerationScheduler {
   /**
    * 执行单个任务（含重试逻辑）
    *
-   * 若 pipelineClient 已配置，优先使用 Pipeline Client 生成；
-   * Pipeline 失败时降级到旧的 generateClassroom + pollUntilComplete 流程。
+   * 使用 Pipeline Client 生成课堂。失败时按重试策略重试 Pipeline。
+   * 不再降级到旧 API（旧 API 使用 Docker 环境变量的 OPENAI_API_KEY，已弃用）。
    */
   private async executeTask(task: GenerationTask): Promise<GenerationTask> {
     const totalCount = this.tasks.length
 
-    // === 优先尝试 Pipeline Client ===
-    if (this.pipelineClient && this.pipelineHeaders) {
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
         task.status = 'generating'
         this.onTaskProgress?.({
@@ -230,7 +239,7 @@ export class GenerationScheduler {
           failedCount: this.tasks.filter((t) => t.status === 'failed').length,
           totalCount,
           latestTask: { ...task },
-          stageText: '正在通过 Pipeline 生成课堂...',
+          stageText: `正在通过 Pipeline 生成第 ${this.tasks.filter((t) => t.status === 'completed').length + 1}/${totalCount} 节课堂...`,
         })
 
         const classroom = await this.pipelineClient.runFullPipeline({
@@ -252,70 +261,21 @@ export class GenerationScheduler {
         )
 
         task.status = 'completed'
-        task.retryCount = 0
-        return { ...task }
-      } catch {
-        // Pipeline 失败 → 降级到旧 API（不计入重试次数）
-      }
-    }
-
-    // === 旧 API 流程（含重试） ===
-    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
-      try {
-        // 1. 提交生成请求
-        task.status = 'generating'
-        this.onTaskProgress?.({
-          completedCount: this.tasks.filter((t) => t.status === 'completed').length,
-          failedCount: this.tasks.filter((t) => t.status === 'failed').length,
-          totalCount,
-          latestTask: { ...task },
-          stageText: `正在提交生成请求...`,
-        })
-        const response = await this.client.generateClassroom({
-          requirement: task.requirement,
-          language: task.language,
-        })
-
-        task.classroomId = response.classroomId
-
-        // 2. 轮询等待完成
-        task.status = 'polling'
-        this.onTaskProgress?.({
-          completedCount: this.tasks.filter((t) => t.status === 'completed').length,
-          failedCount: this.tasks.filter((t) => t.status === 'failed').length,
-          totalCount,
-          latestTask: { ...task },
-          stageText: `AI 老师正在创作课堂内容...`,
-        })
-        const classroom = await this.client.pollUntilComplete(
-          response.classroomId,
-          {
-            intervalMs: this.pollIntervalMs,
-            maxAttempts: this.maxPollAttempts,
-          },
-        )
-
-        // 3. 写入缓存
-        await this.cache.saveClassroom(
-          task.knowledgeNodeId,
-          task.date,
-          classroom,
-        )
-
-        // 4. 标记完成
-        task.status = 'completed'
-        task.retryCount = attempt // 0 = 首次成功，N = 经过 N 次重试后成功
+        task.retryCount = attempt
         return { ...task }
       } catch (error) {
         if (attempt < this.maxRetries) {
-          task.retryCount = attempt + 1 // 记录已进行的重试次数
-          // 等待后重试
+          task.retryCount = attempt + 1
+          console.warn(
+            `[Scheduler] Pipeline 第 ${attempt + 1} 次失败，将重试:`,
+            error instanceof Error ? error.message : String(error),
+          )
           const waitMs = this.retryIntervals[attempt] ?? this.retryIntervals[this.retryIntervals.length - 1]
           await new Promise((resolve) => setTimeout(resolve, waitMs))
         } else {
           // 重试耗尽
           task.status = 'failed'
-          task.retryCount = this.maxRetries // 已用尽所有重试次数
+          task.retryCount = this.maxRetries
           task.error = error instanceof Error ? error.message : String(error)
           return { ...task }
         }

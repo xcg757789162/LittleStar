@@ -14,7 +14,7 @@ import { resolveMediaUrl } from '@/utils/media-url'
 export interface AudioSlideProps {
   /** 幻灯片数据 */
   slide: Slide
-  /** 音频播放回调（TODO: 当前 iframe 模式下未使用，保留接口供自渲染模式使用） */
+  /** 音频播放回调 */
   onAudioPlay?: (audioUrl: string) => void
 }
 

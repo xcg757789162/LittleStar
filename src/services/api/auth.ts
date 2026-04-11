@@ -22,6 +22,9 @@ import {
   type AuthUser,
 } from './types'
 import { keysToCamelCase } from './client'
+import { createLogger } from '@/lib/openmaic/logger'
+
+const log = createLogger('AuthApi')
 
 // ============================================================
 // 内部请求方法（Auth Service 专用）
@@ -47,6 +50,9 @@ async function authRequest<T>(
   // 5 秒超时保底，避免后端不可达时无限等待
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 5000)
+  const startTime = Date.now()
+
+  log.debug(`→ ${method} ${path}`)
 
   let response: Response
   try {
@@ -58,13 +64,18 @@ async function authRequest<T>(
     })
   } catch (error) {
     clearTimeout(timeout)
+    const elapsed = Date.now() - startTime
     if (error instanceof DOMException && error.name === 'AbortError') {
+      log.error(`✗ ${method} ${path} 超时 (${elapsed}ms)`)
       throw new ApiError(0, '连接超时，请检查后端服务是否正在运行')
     }
+    log.error(`✗ ${method} ${path} 网络错误 (${elapsed}ms):`, error)
     throw error
   } finally {
     clearTimeout(timeout)
   }
+
+  const elapsed = Date.now() - startTime
 
   // 错误处理
   if (!response.ok) {
@@ -77,13 +88,16 @@ async function authRequest<T>(
         errorMessage = errorBody.message
       }
       errorDetails = errorBody.details || errorBody.error
-    } catch {
+    } catch (parseErr) {
       // 无法解析错误体
+      log.debug('Auth 错误响应体解析失败:', parseErr)
     }
 
+    log.error(`← ${method} ${path} ${response.status} (${elapsed}ms):`, errorMessage)
     throw new ApiError(response.status, errorMessage, errorDetails)
   }
 
+  log.debug(`← ${method} ${path} ${response.status} (${elapsed}ms)`)
   const data = await response.json()
   return keysToCamelCase(data) as T
 }

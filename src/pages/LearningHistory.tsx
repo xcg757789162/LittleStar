@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'motion/react'
 import { useChildStore } from '@/stores/childStore'
 import { ReviewLearningService, type HistoryListItem } from '@/services/review-learning'
 import type { Subject } from '@/types/models'
@@ -92,7 +92,7 @@ export function LearningHistory() {
   useEffect(() => { loadHistory() }, [loadHistory])
 
   const handleQuickReview = useCallback((item: HistoryListItem) => {
-    navigate('/learn', {
+    navigate('/classroom', {
       state: {
         reviewMode: 'quick-review', historyId: item.id,
         knowledgeNodeId: item.knowledgeNodeId, knowledgeNodeName: item.knowledgeNodeName,
@@ -102,7 +102,7 @@ export function LearningHistory() {
   }, [navigate])
 
   const handleDeepRelearn = useCallback((item: HistoryListItem) => {
-    navigate('/learn', {
+    navigate('/classroom', {
       state: {
         reviewMode: 'deep-relearn',
         knowledgeNodeId: item.knowledgeNodeId, knowledgeNodeName: item.knowledgeNodeName,

@@ -70,7 +70,7 @@ export async function fetchRandomTPRSequence(
 
 /**
  * 获取单个随机 TPR 指令命令（非 hook，直接函数调用）
- * 供 useLearningFlow 使用
+ * 供课堂 TPR 活动使用
  */
 export async function fetchRandomTPR(): Promise<TPRCommand> {
   const instructions = await apiClient.get<TPRInstruction>('/tpr_instructions', {

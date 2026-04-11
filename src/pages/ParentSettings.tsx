@@ -1,12 +1,15 @@
 /**
  * 家长设置管理 — Sunny Playground 风格
  * 每日学习时长、科目偏好、难度调整、孩子信息管理、解锁配置
+ * + OpenMAIC 高级 AI 设置面板 (Task 8.6)
  */
 
-import { motion } from 'framer-motion'
+import { useState } from 'react'
+import { motion } from 'motion/react'
 import { useChildStore } from '@/stores/childStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useGradeUnlockStore } from '@/stores/gradeUnlockStore'
+import { SettingsDialog } from '@/components/openmaic/settings'
 
 /* ═══════════════════════════════════════════
    设计 Token
@@ -45,6 +48,7 @@ export function ParentSettings() {
   const currentChild = useChildStore((s) => s.currentChild)
   const logout = useAuthStore((s) => s.logout)
   const { unlockConfig, updateUnlockConfig } = useGradeUnlockStore()
+  const [showAISettings, setShowAISettings] = useState(false)
 
   const childName = currentChild?.name ?? '未设置'
   const childAge = currentChild?.age ?? '-'
@@ -233,6 +237,36 @@ export function ParentSettings() {
           <b style={{ color: T.grassGreen }}>{Math.round(unlockConfig.minMasteredRatio * 100)}%</b> 时，将解锁下一年级
         </div>
       </section>
+
+      {/* AI 课堂高级设置 — OpenMAIC Settings */}
+      <section style={sectionStyle}>
+        <h2 style={{
+          fontSize: '17px', color: T.textMedium, margin: '0 0 14px',
+          fontFamily: T.fontDisplay, fontWeight: 600,
+        }}>
+          🤖 AI 课堂设置
+        </h2>
+        <p style={{ fontSize: '13px', color: T.textLight, margin: '0 0 14px' }}>
+          配置 AI 模型、语音合成、图片/视频生成等高级参数
+        </p>
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setShowAISettings(true)}
+          style={{
+            width: '100%', padding: '14px', borderRadius: '16px',
+            border: 'none', cursor: 'pointer',
+            background: 'linear-gradient(135deg, #7C4DFF22, #B47CFF22)',
+            color: '#7C4DFF', fontSize: '15px', fontWeight: 'bold',
+            fontFamily: T.fontDisplay,
+          }}
+        >
+          ⚙️ 打开 AI 设置面板
+        </motion.button>
+      </section>
+
+      {/* OpenMAIC SettingsDialog */}
+      <SettingsDialog open={showAISettings} onOpenChange={setShowAISettings} />
 
       {/* 退出登录 */}
       <motion.button

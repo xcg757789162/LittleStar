@@ -9,7 +9,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { QuizSlide } from '../QuizSlide'
 import type { Slide } from '@/services/openmaic/types'
 
-// Mock FeedbackAnimation 避免 framer-motion 依赖
+// Mock FeedbackAnimation 避免 motion/react 依赖
 vi.mock('@/components/feedback/FeedbackAnimation', () => ({
   FeedbackAnimation: ({ type, onComplete }: { type: string; onComplete: () => void }) => (
     <div data-testid="feedback-animation" data-type={type}>

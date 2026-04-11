@@ -214,7 +214,8 @@ export class IflytekISEProvider implements PronunciationAssessmentProvider {
 
     // 简易 XML 解析（不依赖 DOMParser 以保持轻量）
     const totalScore = this.extractXmlValue(xmlString, 'total_score', 0)
-    const accuracyScore = this.extractXmlValue(xmlString, 'accuracy_score', 0)
+    // accuracyScore 保留解析能力，未来可用于详细评分
+    this.extractXmlValue(xmlString, 'accuracy_score', 0)
     const fluencyScore = this.extractXmlValue(xmlString, 'fluency_score', 0)
     const integrityScore = this.extractXmlValue(xmlString, 'integrity_score', 0)
 

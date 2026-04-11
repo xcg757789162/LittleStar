@@ -4,6 +4,9 @@
  */
 
 import type { AIProvider, ChatMessage } from './provider'
+import { createLogger } from '@/lib/openmaic/logger'
+
+const log = createLogger('AITeacher')
 
 /** 鼓励生成输入 */
 export interface EncouragementInput {
@@ -95,7 +98,8 @@ export class AITeacher {
     try {
       const response = await this.provider.chatCompletion(messages)
       return this.filterContent(response)
-    } catch {
+    } catch (err) {
+      log.warn('错误分析生成失败，使用默认消息:', err instanceof Error ? err.message : String(err))
       return '这道题有点难，我们多练习几次就会了！'
     }
   }

@@ -4,12 +4,19 @@
  */
 
 import { useState, useEffect, useMemo } from 'react'
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 import { OfflineExtensionCard } from './OfflineExtensionCard'
 import { useParentActivities } from '@/hooks/queries/useParentActivities'
 import type { ParentActivity } from '@/services/api/types'
 import type { Subject } from '@/types/models'
-import type { SessionSummary as SessionSummaryData } from '@/hooks/useLearningFlow'
+
+/** 会话总结数据（原 useLearningFlow 导出的类型，已内联到此处） */
+export interface SessionSummaryData {
+  questionsCompleted: number
+  correctCount: number
+  accuracy: number
+  subject: Subject
+}
 
 /** 鼓励语列表 */
 const ENCOURAGEMENTS = [

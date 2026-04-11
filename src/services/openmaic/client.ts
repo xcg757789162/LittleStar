@@ -473,7 +473,6 @@ export class OpenMAICClient {
           title: (data.message ?? 'Generated Classroom') as string,
           status: 'completed',
           scenes: [],  // 完整场景数据需要从课堂 URL 加载
-          classroomUrl: backendResult.url as string | undefined,
         }
       }
     }
@@ -579,14 +578,8 @@ export class OpenMAICClient {
         // 获取完整课堂数据（轮询响应只有元数据，需要单独请求完整课堂含场景）
         // 优先使用轮询响应中的 classroomId（result.classroomId），因为它可能与 jobId 不同
         const fullClassroomId = (statusResponse.classroom?.id) ?? classroomId
-        // 保留轮询阶段拿到的 classroomUrl（后端生成完成时提供的原生前端 URL）
-        const classroomUrl = statusResponse.classroom?.classroomUrl
         try {
           const fullClassroom = await this.getClassroom(fullClassroomId)
-          // 将 classroomUrl 附加到完整课堂数据中
-          if (classroomUrl && !fullClassroom.classroomUrl) {
-            fullClassroom.classroomUrl = classroomUrl
-          }
           return fullClassroom
         } catch {
           // 如果获取完整数据失败但有最小 classroom 对象，降级返回

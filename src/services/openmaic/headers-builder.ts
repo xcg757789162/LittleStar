@@ -10,9 +10,13 @@
  *   llmBaseUrl        → x-base-url        (非空时才包含)
  *   enableTTS         → x-tts-enabled
  *   ttsProviderId     → x-tts-provider    (非空时才包含)
+ *   ttsApiKey         → x-tts-api-key     (非空时才包含)
  *   ttsVoice          → x-tts-voice       (非空时才包含)
  *   ttsSpeed          → x-tts-speed
  *   enableImageGen    → x-image-generation-enabled
+ *   imageProviderId   → x-image-provider  (非空时才包含)
+ *   imageApiKey       → x-image-api-key   (非空时才包含)
+ *   imageBaseUrl      → x-image-base-url  (非空时才包含)
  *   enableVideoGen    → x-video-generation-enabled
  *   classroomAgentMode → x-agent-mode
  *   [preset 模式]     → x-agent-profiles   (JSON, 角色+音色)
@@ -62,13 +66,27 @@ export function buildHeadersFromSettings(
   if (settings.ttsProviderId) {
     headers['x-tts-provider'] = settings.ttsProviderId
   }
+  if (settings.ttsApiKey) {
+    headers['x-tts-api-key'] = settings.ttsApiKey
+  }
   if (settings.ttsVoice) {
     headers['x-tts-voice'] = settings.ttsVoice
   }
   headers['x-tts-speed'] = String(settings.ttsSpeed)
 
-  // 生成功能开关
+  // 图片生成配置
   headers['x-image-generation-enabled'] = String(settings.enableImageGeneration)
+  if (settings.imageProviderId) {
+    headers['x-image-provider'] = settings.imageProviderId
+  }
+  if (settings.imageApiKey) {
+    headers['x-image-api-key'] = settings.imageApiKey
+  }
+  if (settings.imageBaseUrl) {
+    headers['x-image-base-url'] = settings.imageBaseUrl
+  }
+
+  // 视频生成
   headers['x-video-generation-enabled'] = String(settings.enableVideoGeneration)
 
   // Agent 模式

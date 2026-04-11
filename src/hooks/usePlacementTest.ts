@@ -12,6 +12,9 @@ import { useChildStore } from '@/stores/childStore'
 import { placementTestKeys } from '@/hooks/queries/usePlacementTests'
 import type { TestSession, TestPlanItem } from '@/engine/placement-test-engine'
 import type { GradeLevel, Subject, PlacementResult } from '@/types/models'
+import { createLogger } from '@/lib/openmaic/logger'
+
+const log = createLogger('PlacementTest')
 
 /** 测评阶段 */
 export type PlacementPhase = 'intro' | 'welcome' | 'testing' | 'completing' | 'result' | 'error'
@@ -97,11 +100,13 @@ export function usePlacementTest(
 
   /** 开始测评 */
   const startTest = useCallback(async () => {
+    log.info('开始测评, subject:', subject, 'gradeLevel:', gradeLevel)
     setIsLoading(true)
     setErrorMessage(null)
     try {
       const curriculum = await loadCurriculum(gradeLevel, subject)
       if (!curriculum) {
+        log.error('课程数据加载失败（后端服务连接失败或无数据）')
         setErrorMessage('后端服务连接失败或未找到课程数据，请检查服务是否正常运行后重试')
         setPhase('error')
         setIsLoading(false)
@@ -109,7 +114,9 @@ export function usePlacementTest(
       }
 
       const plan = engine.generateTestPlan(curriculum.modules)
+      log.info('测评计划生成完成, 题目数:', plan.length)
       if (plan.length === 0) {
+        log.warn('该科目暂无测评题目')
         setErrorMessage('该科目暂无测评题目')
         setPhase('error')
         setIsLoading(false)
@@ -123,6 +130,7 @@ export function usePlacementTest(
       setPhase('testing')
     } catch (err) {
       const message = err instanceof Error ? err.message : '未知错误'
+      log.error('加载课程数据失败:', message)
       setErrorMessage(`加载课程数据失败：${message}`)
       setPhase('error')
     } finally {

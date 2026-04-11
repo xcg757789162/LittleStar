@@ -14,6 +14,9 @@ import { useAuthStore } from '@/stores/authStore'
 import { useChildStore } from '@/stores/childStore'
 import { apiClient } from '@/services/api'
 import type { Child } from '@/types/models'
+import { createLogger } from '@/lib/openmaic/logger'
+
+const log = createLogger('InitApp')
 
 /** Hook 返回值 */
 export interface InitializeAppState {
@@ -30,6 +33,7 @@ export function useInitializeApp(): InitializeAppState {
 
   // 第一步：恢复认证状态
   useEffect(() => {
+    log.info('开始恢复认证状态...')
     restoreAuth()
   }, [restoreAuth])
 
@@ -42,25 +46,29 @@ export function useInitializeApp(): InitializeAppState {
     async function loadChildren() {
       if (!isAuthenticated) {
         // 未认证，初始化完成（将跳转到登录页）
+        log.info('未认证，初始化完成')
         if (!cancelled) setIsInitialized(true)
         return
       }
 
       try {
         // 从 API 加载当前用户的孩子列表
+        log.info('加载孩子列表...')
         const children = await apiClient.get<Child>('/children')
         if (cancelled) return
 
+        log.info('孩子列表加载成功, 数量:', children.length)
         // 加载到 childStore
         for (const child of children) {
           addChild(child)
         }
-      } catch {
-        // API 调用失败（后端离线或网络问题），静默处理
+      } catch (err) {
+        // API 调用失败（后端离线或网络问题）
         // 页面组件会通过 React Query 按需重试
-        // 首页/评测页等会显示各自的错误提示
+        log.error('加载孩子列表失败:', err instanceof Error ? err.message : String(err))
       } finally {
         if (!cancelled) {
+          log.info('App 初始化完成')
           setIsInitialized(true)
         }
       }

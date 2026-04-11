@@ -1,51 +1,186 @@
-/* LittleStar 全局样式 */
+/* ========================================
+ * LittleStar + OpenMAIC 全局样式
+ * Tailwind CSS v4 (Vite 插件自动扫描)
+ * ======================================== */
 
+@import "tailwindcss";
+
+/* tw-animate-css 动画库 */
+@import "tw-animate-css";
+
+/* ========================================
+ * Tailwind v4 主题扩展
+ * ======================================== */
+@theme inline {
+  /* OpenMAIC/shadcn 语义色 — 映射到 CSS 变量 */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ========================================
+ * CSS 变量定义
+ * ======================================== */
 :root {
-  /* 主题色 */
-  --color-primary: #7C4DFF;
-  --color-primary-light: #B47CFF;
-  --color-primary-dark: #5C35CC;
+  /* === LittleStar 主题色 === */
+  --ls-color-primary: #7C4DFF;
+  --ls-color-primary-light: #B47CFF;
+  --ls-color-primary-dark: #5C35CC;
 
-  /* 功能色 */
-  --color-success: #66BB6A;
-  --color-warning: #FFB74D;
-  --color-error: #EF5350;
+  --ls-color-success: #66BB6A;
+  --ls-color-warning: #FFB74D;
+  --ls-color-error: #EF5350;
 
-  /* 背景色 */
-  --bg-primary: #F3E5F5;
-  --bg-secondary: #E8EAF6;
-  --bg-card: #FFFFFF;
+  --ls-bg-primary: #F3E5F5;
+  --ls-bg-secondary: #E8EAF6;
+  --ls-bg-card: #FFFFFF;
 
-  /* 文字色 */
-  --text-primary: #333333;
-  --text-secondary: #666666;
-  --text-hint: #999999;
+  --ls-text-primary: #333333;
+  --ls-text-secondary: #666666;
+  --ls-text-hint: #999999;
 
-  /* 圆角 */
-  --radius-sm: 8px;
-  --radius-md: 16px;
-  --radius-lg: 24px;
-  --radius-full: 9999px;
+  --ls-radius-sm: 8px;
+  --ls-radius-md: 16px;
+  --ls-radius-lg: 24px;
+  --ls-radius-full: 9999px;
 
-  /* 字体大小 */
-  --font-xs: 12px;
-  --font-sm: 14px;
-  --font-md: 16px;
-  --font-lg: 20px;
-  --font-xl: 24px;
-  --font-2xl: 32px;
+  --ls-font-xs: 12px;
+  --ls-font-sm: 14px;
+  --ls-font-md: 16px;
+  --ls-font-lg: 20px;
+  --ls-font-xl: 24px;
+  --ls-font-2xl: 32px;
+
+  /* 向后兼容别名（LittleStar 组件仍在使用） */
+  --color-primary: var(--ls-color-primary);
+  --color-primary-light: var(--ls-color-primary-light);
+  --color-primary-dark: var(--ls-color-primary-dark);
+  --color-success: var(--ls-color-success);
+  --color-warning: var(--ls-color-warning);
+  --color-error: var(--ls-color-error);
+  --bg-primary: var(--ls-bg-primary);
+  --bg-secondary: var(--ls-bg-secondary);
+  --bg-card: var(--ls-bg-card);
+  --text-primary: var(--ls-text-primary);
+  --text-secondary: var(--ls-text-secondary);
+  --text-hint: var(--ls-text-hint);
+  /* Note: --radius-sm/md/lg/full 由 Tailwind @theme 管理，LittleStar 用 --ls-radius-* */
+  --radius-full: var(--ls-radius-full);
+  --font-xs: var(--ls-font-xs);
+  --font-sm: var(--ls-font-sm);
+  --font-md: var(--ls-font-md);
+  --font-lg: var(--ls-font-lg);
+  --font-xl: var(--ls-font-xl);
+  --font-2xl: var(--ls-font-2xl);
+
+  /* === OpenMAIC/shadcn CSS 变量（LittleStar 主题适配） === */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.22 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0 0);
+  --primary: #7C4DFF;  /* 匹配 LittleStar 主色调 */
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.01 300);  /* 淡紫底色 */
+  --secondary-foreground: oklch(0.25 0 0);
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.5 0 0);
+  --accent: oklch(0.95 0.02 300);  /* 紫色系强调 */
+  --accent-foreground: oklch(0.25 0 0);
+  --destructive: oklch(0.58 0.22 27);
+  --border: oklch(0.91 0 0);
+  --input: oklch(0.91 0 0);
+  --ring: #B47CFF;  /* 匹配 LittleStar primary-light */
+  --chart-1: #7C4DFF;
+  --chart-2: #B47CFF;
+  --chart-3: #66BB6A;
+  --chart-4: #FFB74D;
+  --chart-5: #EF5350;
+  --radius: 0.75rem;  /* 12px — 更大的圆角适合儿童界面 */
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
 }
 
 /* 暗色主题 */
-[data-theme="dark"] {
-  --bg-primary: #1A1A2E;
-  --bg-secondary: #16213E;
-  --bg-card: #0F3460;
-  --text-primary: #FFFFFF;
-  --text-secondary: #B0BEC5;
-  --text-hint: #78909C;
+[data-theme="dark"], .dark {
+  --ls-bg-primary: #1A1A2E;
+  --ls-bg-secondary: #16213E;
+  --ls-bg-card: #0F3460;
+  --ls-text-primary: #FFFFFF;
+  --ls-text-secondary: #B0BEC5;
+  --ls-text-hint: #78909C;
+
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: #B47CFF;  /* 暗色下用 LittleStar primary-light */
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.371 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* ========================================
+ * LittleStar 全局基础样式
+ * 只影响 LittleStar 自有页面
+ * ======================================== */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -69,7 +204,7 @@ button {
 /* 大按钮基础样式（适合幼儿） */
 .btn-large {
   padding: 16px 32px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--ls-radius-lg);
   border: none;
   font-size: var(--font-lg);
   font-weight: bold;
@@ -81,10 +216,34 @@ button {
   transform: scale(0.95);
 }
 
-/* 卡片基础样式 */
-.card {
+/* ========================================
+ * 课堂样式隔离层
+ * .openmaic-classroom 容器内重置 LittleStar 泄漏样式
+ * ======================================== */
+.openmaic-classroom {
+  /* 重置 body 继承的 LittleStar 字体/颜色 */
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--foreground);
+  font-size: 16px;
+  line-height: 1.5;
+  background-color: transparent;
+}
+
+/* 课堂内卡片：覆盖全局 .card 样式 */
+.openmaic-classroom .card {
+  padding: unset;
+  border-radius: unset;
+  box-shadow: unset;
+  background: unset;
+}
+
+/* ========================================
+ * LittleStar 卡片样式（全局 .card 限定在非课堂区域）
+ * ======================================== */
+:not(.openmaic-classroom) > .card,
+.ls-card {
   background: var(--bg-card);
-  border-radius: var(--radius-lg);
+  border-radius: var(--ls-radius-lg);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   padding: 24px;
 }
@@ -94,4 +253,39 @@ button {
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
+}
+
+/* === OpenMAIC ProseMirror 编辑器样式 === */
+.prosemirror-editor {
+  cursor: text;
+}
+
+/* ========================================
+ * 动画 Keyframes
+ * ======================================== */
+
+/* Audio visualizer wave */
+@keyframes wave {
+  0%, 100% { height: 30%; }
+  50% { height: 100%; }
+}
+
+/* Breathing bars for presentation speech bubbles */
+@keyframes breathing-bar-1 {
+  0%, 100% { height: 3px; }
+  50% { height: 14px; }
+}
+@keyframes breathing-bar-2 {
+  0%, 100% { height: 6px; }
+  50% { height: 14px; }
+}
+@keyframes breathing-bar-3 {
+  0%, 100% { height: 3px; }
+  50% { height: 11px; }
+}
+
+/* Shimmer sweep for skeleton loading */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }

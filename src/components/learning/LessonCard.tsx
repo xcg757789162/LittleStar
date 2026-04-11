@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 import type { Subject } from '@/types/models'
 
 /** 科目 → emoji 映射 */

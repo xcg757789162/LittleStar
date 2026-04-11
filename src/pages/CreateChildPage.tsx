@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { useChildStore } from '@/stores/childStore'

@@ -11,6 +11,9 @@
 import { apiClient } from '@/services/api'
 import type { CacheStore, CacheEntry } from './cache'
 import type { Classroom } from './types'
+import { createLogger } from '@/lib/openmaic/logger'
+
+const log = createLogger('PGCacheStore')
 
 /** 数据库行类型（camelCase，apiClient 已自动转换） */
 interface DbCacheRow {
@@ -48,19 +51,23 @@ export class PostgresCacheStore implements CacheStore {
 
   constructor(childId: number) {
     this.childId = childId
+    log.debug('PostgresCacheStore 初始化, childId:', childId)
   }
 
   async get(key: string): Promise<CacheEntry | undefined> {
+    log.debug('DB get:', key)
     const row = await apiClient.getOne<DbCacheRow>('/classroom_cache', {
       filters: [
         { column: 'childId', operator: 'eq', value: this.childId },
         { column: 'cacheKey', operator: 'eq', value: key },
       ],
     })
+    log.debug('DB get 结果:', key, row ? '找到' : '未找到')
     return row ? toEntry(row) : undefined
   }
 
   async set(key: string, value: CacheEntry): Promise<void> {
+    log.info('DB set:', key, 'nodeId:', value.knowledgeNodeId)
     // 计算 3 天后过期时间
     const expiresAt = new Date(value.cachedAt + 3 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -73,9 +80,11 @@ export class PostgresCacheStore implements CacheStore {
       cachedAt: new Date(value.cachedAt).toISOString(),
       expiresAt,
     }, 'child_id,cache_key')
+    log.debug('DB set 完成:', key)
   }
 
   async delete(key: string): Promise<void> {
+    log.info('DB delete:', key)
     await apiClient.delete('/classroom_cache', {
       filters: [
         { column: 'childId', operator: 'eq', value: this.childId },
@@ -85,15 +94,18 @@ export class PostgresCacheStore implements CacheStore {
   }
 
   async entries(): Promise<[string, CacheEntry][]> {
+    log.debug('DB entries, childId:', this.childId)
     const rows = await apiClient.get<DbCacheRow>('/classroom_cache', {
       filters: [
         { column: 'childId', operator: 'eq', value: this.childId },
       ],
     })
+    log.debug('DB entries 返回:', rows.length, '条')
     return rows.map((r) => [r.cacheKey, toEntry(r)])
   }
 
   async clear(): Promise<void> {
+    log.info('DB clear, childId:', this.childId)
     await apiClient.delete('/classroom_cache', {
       filters: [
         { column: 'childId', operator: 'eq', value: this.childId },
@@ -108,6 +120,7 @@ export class PostgresCacheStore implements CacheStore {
       ],
       select: 'id',
     })
+    log.debug('DB size:', rows.length)
     return rows.length
   }
 }

@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'motion/react'
 import { usePlacementTest } from '@/hooks/usePlacementTest'
 import { useSoundEffects } from '@/hooks/useSoundEffects'
 import { CelebrationAnimation } from '@/components/feedback/CelebrationAnimation'

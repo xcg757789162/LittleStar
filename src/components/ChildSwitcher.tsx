@@ -3,7 +3,7 @@
  * 展示当前用户的所有孩子，支持切换和添加新孩子
  */
 
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
 import type { Child } from '@/types/models'

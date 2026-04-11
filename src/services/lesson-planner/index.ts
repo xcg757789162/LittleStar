@@ -21,7 +21,7 @@
  * const requirement = generator.generate({ knowledgeNode, child, masteryLevel, mode: 'new-teaching' })
  *
  * // 3. 提交生成
- * const scheduler = new GenerationScheduler(client, cache)
+ * const scheduler = new GenerationScheduler(cache, { pipelineClient, pipelineHeaders })
  * scheduler.submitTask({ knowledgeNodeId, date, requirement })
  * await scheduler.executeTasks()
  *

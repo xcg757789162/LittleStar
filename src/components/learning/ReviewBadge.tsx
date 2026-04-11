@@ -3,7 +3,7 @@
  * 在题目上方显示"🌙 复习时间"标记，区分新知识和复习内容
  */
 
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 
 export interface ReviewBadgeProps {
   /** 是否为复习内容 */

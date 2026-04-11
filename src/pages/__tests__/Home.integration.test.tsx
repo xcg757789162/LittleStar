@@ -89,8 +89,8 @@ vi.mock('@/stores/childStore', () => ({
   ),
 }))
 
-// Mock framer-motion
-vi.mock('framer-motion', () => ({
+// Mock motion/react
+vi.mock('motion/react', () => ({
   motion: {
     div: 'div',
     h1: 'h1',

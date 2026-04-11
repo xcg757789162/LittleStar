@@ -2,14 +2,20 @@
  * OpenMAIC 数据类型定义
  *
  * 定义 LittleStar 与 OpenMAIC API 交互所需的所有类型。
- * 基于 OpenMAIC 课堂数据结构：Classroom → Scene → Slide
+ *
+ * v2: 迁移为 OpenMAIC 原生 Scene 格式。
+ *     Classroom.scenes 现在存储 OpenMAIC 原生 Scene（含 SceneContent + Action[]），
+ *     不再使用简化的 Slide[] 格式。Stage 组件可直接消费。
  */
+
+import type { Scene as OpenMAICScene, Stage as OpenMAICStage } from '@/types/openmaic/stage'
+import type { Action } from '@/types/openmaic/action'
 
 // ============================================================
 // 常量
 // ============================================================
 
-/** 幻灯片类型枚举值 */
+/** 幻灯片类型枚举值（保留兼容旧数据） */
 export const SLIDE_TYPES = [
   'title',
   'content',
@@ -27,12 +33,15 @@ export const CLASSROOM_STATUSES = [
   'failed',
 ] as const
 
-/** 场景类型枚举值 */
+/** 场景类型枚举值（扩展为 OpenMAIC 原生类型） */
 export const SCENE_TYPES = [
   'teaching',
   'quiz',
   'interactive',
   'summary',
+  // OpenMAIC 原生类型
+  'slide',
+  'pbl',
 ] as const
 
 // ============================================================
@@ -52,7 +61,7 @@ export type SceneType = (typeof SCENE_TYPES)[number]
 // 数据模型
 // ============================================================
 
-/** 测验题数据 */
+/** 测验题数据（保留兼容旧数据） */
 export interface QuizData {
   /** 题目文本 */
   question: string
@@ -64,7 +73,7 @@ export interface QuizData {
   imageUrl?: string
 }
 
-/** 幻灯片 — 课堂的最小内容单元 */
+/** 幻灯片 — 课堂的最小内容单元（保留兼容旧数据） */
 export interface Slide {
   /** 幻灯片类型 */
   type: SlideType
@@ -86,7 +95,14 @@ export interface Slide {
   animation?: string
 }
 
-/** 场景 — 课堂的一个教学阶段 */
+/**
+ * 场景 — 课堂的一个教学阶段
+ *
+ * v2: 现在存储 OpenMAIC 原生 Scene 数据。
+ * `content` 字段为 OpenMAIC SceneContent（SlideContent | QuizContent | InteractiveContent | PBLContent）。
+ * `actions` 字段为 OpenMAIC Action[] —— PlaybackEngine 和 ActionEngine 直接消费。
+ * `slides` 字段保留向后兼容（旧缓存数据仍包含）。
+ */
 export interface Scene {
   /** 场景唯一标识 */
   id: string
@@ -94,8 +110,30 @@ export interface Scene {
   title: string
   /** 场景类型 */
   type: SceneType
-  /** 该场景包含的幻灯片列表 */
-  slides: Slide[]
+  /** 场景顺序 */
+  order?: number
+
+  // === OpenMAIC 原生数据（v2 新增）===
+
+  /** OpenMAIC 场景内容（SlideContent | QuizContent | InteractiveContent | PBLContent） */
+  content?: OpenMAICScene['content']
+  /** OpenMAIC Action 列表（PlaybackEngine 消费） */
+  actions?: Action[]
+  /** 白板数据 */
+  whiteboards?: OpenMAICScene['whiteboards']
+  /** 多 Agent 讨论配置 */
+  multiAgent?: OpenMAICScene['multiAgent']
+  /** 关联的 Stage ID */
+  stageId?: string
+
+  // === 旧格式兼容字段 ===
+
+  /** 该场景包含的幻灯片列表（v1 格式，向后兼容旧缓存） */
+  slides?: Slide[]
+
+  // === 元数据 ===
+  createdAt?: number
+  updatedAt?: number
 }
 
 /** 课堂 — 一个知识点的完整教学单元 */
@@ -106,7 +144,7 @@ export interface Classroom {
   title: string
   /** 课堂生成状态 */
   status: ClassroomStatus
-  /** 场景列表 */
+  /** 场景列表（v2: OpenMAIC 原生 Scene 格式） */
   scenes: Scene[]
   /** 课堂描述（可选） */
   description?: string
@@ -114,13 +152,15 @@ export interface Classroom {
   createdAt?: string
   /** 语言代码（可选） */
   language?: string
-  /**
-   * OpenMAIC 原生前端的课堂 URL（可选）
-   * 后端生成完成时返回，格式如 /classroom/{id}
-   * 通过 Vite proxy /openmaic 路径嵌入 iframe
-   */
-  classroomUrl?: string
+
+  // === OpenMAIC 原生 Stage 数据（v2 新增）===
+
+  /** OpenMAIC Stage 元数据（v2: 由 Pipeline 生成） */
+  stage?: OpenMAICStage
 }
+
+// Re-export OpenMAIC native types for convenience
+export type { OpenMAICScene, OpenMAICStage, Action }
 
 // ============================================================
 // API 请求/响应类型
@@ -190,21 +230,24 @@ export function isSlide(value: unknown): value is Slide {
 }
 
 /**
- * 检查值是否为有效的 Scene
+ * 检查值是否为有效的 Scene（v2: 支持原生和旧格式）
  */
 export function isScene(value: unknown): value is Scene {
   if (value === null || value === undefined || typeof value !== 'object') {
     return false
   }
   const obj = value as Record<string, unknown>
-  return (
-    typeof obj.id === 'string' &&
-    typeof obj.title === 'string' &&
-    typeof obj.type === 'string' &&
-    (SCENE_TYPES as readonly string[]).includes(obj.type) &&
-    Array.isArray(obj.slides) &&
-    obj.slides.every(isSlide)
-  )
+  // 基本字段检查
+  if (typeof obj.id !== 'string' || typeof obj.title !== 'string') return false
+  if (typeof obj.type !== 'string') return false
+  if (!(SCENE_TYPES as readonly string[]).includes(obj.type)) return false
+
+  // v2: 有 content 字段说明是原生格式（不需要 slides）
+  if (obj.content !== undefined) return true
+  // v1: 有 slides 字段说明是旧格式
+  if (Array.isArray(obj.slides)) return true
+  // 容错：允许两者都没有
+  return true
 }
 
 /**
@@ -220,7 +263,14 @@ export function isClassroom(value: unknown): value is Classroom {
     typeof obj.title === 'string' &&
     typeof obj.status === 'string' &&
     (CLASSROOM_STATUSES as readonly string[]).includes(obj.status) &&
-    Array.isArray(obj.scenes) &&
-    obj.scenes.every(isScene)
+    Array.isArray(obj.scenes)
   )
+}
+
+/**
+ * 判断 Scene 是否为 OpenMAIC 原生格式（v2）
+ * 原生格式包含 content 字段（SceneContent），旧格式只有 slides 字段
+ */
+export function isNativeScene(scene: Scene): boolean {
+  return scene.content !== undefined && scene.content !== null
 }
