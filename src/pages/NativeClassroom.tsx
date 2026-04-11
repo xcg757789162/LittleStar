@@ -441,6 +441,7 @@ export function NativeClassroom() {
                   <LessonCard key={`${lesson.knowledgeNodeId}::${lesson.date}`}
                     title={lesson.classroomTitle}
                     thumbnailUrl={lesson.thumbnailUrl}
+                    slide={lesson.firstSlideCanvas}
                     subject={selectedSubject ?? 'english'}
                     isLocked={false}
                     index={idx}

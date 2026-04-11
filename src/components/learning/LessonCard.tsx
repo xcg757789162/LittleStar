@@ -6,9 +6,11 @@
  * 使用 Framer Motion 实现按压动画和锁定弹动反馈。
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion } from 'motion/react'
 import type { Subject } from '@/types/models'
+import type { Slide } from '@/lib/openmaic/types/slides'
+import { ThumbnailSlide } from '@/components/openmaic/slide-renderer/components/ThumbnailSlide'
 
 /** 科目 → emoji 映射 */
 const SUBJECT_EMOJI: Record<Subject, string> = {
@@ -34,8 +36,10 @@ const SUBJECT_COLOR: Record<Subject, string> = {
 export interface LessonCardProps {
   /** 课程标题 */
   title: string
-  /** 缩略图 URL（可选） */
+  /** 缩略图 URL（可选，降级用） */
   thumbnailUrl?: string
+  /** 完整 slide 数据（可选，用于 ThumbnailSlide 高保真渲染） */
+  slide?: Slide
   /** 科目（用于 emoji fallback 和配色） */
   subject: Subject
   /** 是否锁定 */
@@ -49,13 +53,31 @@ export interface LessonCardProps {
 export function LessonCard({
   title,
   thumbnailUrl,
+  slide,
   subject,
   isLocked,
   index,
   onTap,
 }: LessonCardProps) {
   const [imgError, setImgError] = useState(false)
-  const showEmoji = !thumbnailUrl || imgError
+  const thumbRef = useRef<HTMLDivElement>(null)
+  const [thumbWidth, setThumbWidth] = useState(0)
+
+  // 获取缩略图区域实际宽度，用于 ThumbnailSlide 的 size 参数
+  useEffect(() => {
+    if (!slide || !thumbRef.current) return
+    const el = thumbRef.current
+    const update = () => setThumbWidth(el.clientWidth)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [slide])
+
+  // 渲染优先级：slide > thumbnailUrl > emoji
+  const showSlide = !!slide && thumbWidth > 0
+  const showImg = !slide && !!thumbnailUrl && !imgError
+  const showEmoji = !slide && (!thumbnailUrl || imgError)
 
   const handleTap = useCallback(() => {
     if (!isLocked) {
@@ -92,25 +114,32 @@ export function LessonCard({
       }}
     >
       {/* 缩略图区域 */}
-      <div style={{
+      <div ref={thumbRef} style={{
         width: '100%',
         height: 100,
-        background: gradient,
+        background: showSlide ? '#FFFFFF' : gradient,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         overflow: 'hidden',
         position: 'relative',
       }}>
-        {showEmoji ? (
-          <span style={{
-            fontSize: 40,
-            filter: isLocked ? 'grayscale(0.6)' : 'none',
+        {showSlide ? (
+          <div style={{
+            width: '100%',
+            height: '100%',
+            overflow: 'hidden',
+            filter: isLocked ? 'grayscale(0.5) brightness(0.85)' : 'none',
             transition: 'filter 0.3s ease',
           }}>
-            {emoji}
-          </span>
-        ) : (
+            <ThumbnailSlide
+              slide={slide!}
+              size={thumbWidth}
+              viewportSize={slide!.viewportSize ?? 1000}
+              viewportRatio={slide!.viewportRatio ?? 0.5625}
+            />
+          </div>
+        ) : showImg ? (
           <img
             src={thumbnailUrl}
             alt={title}
@@ -123,7 +152,15 @@ export function LessonCard({
               transition: 'filter 0.3s ease',
             }}
           />
-        )}
+        ) : showEmoji ? (
+          <span style={{
+            fontSize: 40,
+            filter: isLocked ? 'grayscale(0.6)' : 'none',
+            transition: 'filter 0.3s ease',
+          }}>
+            {emoji}
+          </span>
+        ) : null}
 
         {/* 课程序号徽标 */}
         <div style={{

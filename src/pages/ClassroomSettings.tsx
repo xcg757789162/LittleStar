@@ -160,12 +160,22 @@ function VoicePicker({
     )
   }
 
+  // 紧凑内联模式（label 为空时，用于 Agent 卡片行内）
+  const isCompact = !label
+
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        style={{
+        style={isCompact ? {
+          display: 'inline-flex', alignItems: 'center', gap: '4px',
+          padding: '4px 10px', borderRadius: '12px',
+          border: `1.5px solid ${open ? accentColor : `${accentColor}30`}`,
+          backgroundColor: open ? `${accentColor}08` : '#FFFFFF',
+          cursor: 'pointer', transition: 'all 0.2s',
+          whiteSpace: 'nowrap' as const,
+        } : {
           width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
           padding: '12px 14px', borderRadius: '14px',
           border: `1.5px solid ${open ? accentColor : '#FFE8D6'}`,
@@ -173,9 +183,13 @@ function VoicePicker({
           cursor: 'pointer', transition: 'all 0.2s',
         }}
       >
-        <span style={{ fontSize: '14px' }}>🔊</span>
-        <span style={{ fontSize: '13px', color: T.textMedium, fontWeight: 600 }}>{label}</span>
-        <span style={{
+        <span style={{ fontSize: isCompact ? '12px' : '14px' }}>🔊</span>
+        {!isCompact && (
+          <span style={{ fontSize: '13px', color: T.textMedium, fontWeight: 600 }}>{label}</span>
+        )}
+        <span style={isCompact ? {
+          fontSize: '12px', color: accentColor, fontWeight: 600,
+        } : {
           marginLeft: 'auto', fontSize: '13px', color: accentColor, fontWeight: 600,
           padding: '2px 10px', borderRadius: '10px',
           backgroundColor: `${accentColor}12`,
@@ -195,12 +209,16 @@ function VoicePicker({
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            style={{ overflow: 'hidden' }}
+            style={isCompact ? {
+              overflow: 'hidden', position: 'absolute', right: 0, top: '100%',
+              zIndex: 50, minWidth: '200px',
+            } : { overflow: 'hidden' }}
           >
             <div style={{
               marginTop: '6px', padding: '8px',
               borderRadius: '14px', border: '1px solid #FFE8D6',
               backgroundColor: '#FFFAF5', maxHeight: '240px', overflowY: 'auto',
+              boxShadow: isCompact ? '0 8px 24px rgba(0,0,0,0.12)' : 'none',
             }}>
               {availableProviders.map((provider) =>
                 provider.modelGroups.map((group) => (
@@ -325,17 +343,56 @@ export function ClassroomSettings() {
 
   // 构建可用的 TTS 提供商列表
   const serverProviders = getAvailableProvidersWithVoices(ttsProvidersConfig)
+  // 精选浏览器原生音色：最多保留 10 个有代表性的（优先英语，补充中文）
+  const filteredBrowserVoices = (() => {
+    const MAX_BROWSER_VOICES = 10
+    // 按优先级排序的关键词：匹配到的排前面
+    const preferredKeywords = [
+      'samantha', 'daniel', 'karen', 'alex', 'victoria',  // macOS 经典英语
+      'google us', 'google uk',                             // Google 英语
+      'ting-ting', 'mei-jia',                               // 中文代表
+    ]
+    const scored = browserVoices.map((v) => {
+      const nameLower = v.name.toLowerCase()
+      const langLower = v.lang.toLowerCase()
+      // 优先英语音色
+      let score = 0
+      if (langLower.startsWith('en')) score += 100
+      else if (langLower.startsWith('zh') || langLower.startsWith('cmn')) score += 50
+      else score -= 100 // 其他语言排到最后
+      // 匹配关键词加分
+      for (const kw of preferredKeywords) {
+        if (nameLower.includes(kw)) { score += 200; break }
+      }
+      // 非 "compact" / "enhanced" 的普通版优先（避免重复）
+      if (nameLower.includes('(enhanced)') || nameLower.includes('premium')) score += 10
+      if (nameLower.includes('compact')) score -= 50
+      return { voice: v, score }
+    })
+    scored.sort((a, b) => b.score - a.score)
+    // 去重：同名只保留一个（不同版本取分最高的）
+    const seen = new Set<string>()
+    const result: SpeechSynthesisVoice[] = []
+    for (const { voice } of scored) {
+      const key = voice.name.replace(/\s*\(.*?\)/g, '').toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      result.push(voice)
+      if (result.length >= MAX_BROWSER_VOICES) break
+    }
+    return result
+  })()
   const availableProviders: ProviderWithVoices[] = [
     ...serverProviders,
-    ...(browserVoices.length > 0
+    ...(filteredBrowserVoices.length > 0
       ? [{
           providerId: 'browser-native-tts' as TTSProviderId,
-          providerName: 'Browser Native',
-          voices: browserVoices.map((v) => ({ id: v.voiceURI, name: v.name })),
+          providerName: '浏览器语音',
+          voices: filteredBrowserVoices.map((v) => ({ id: v.voiceURI, name: v.name })),
           modelGroups: [{
             modelId: '',
-            modelName: 'Browser Native',
-            voices: browserVoices.map((v) => ({ id: v.voiceURI, name: v.name })),
+            modelName: '浏览器语音',
+            voices: filteredBrowserVoices.map((v) => ({ id: v.voiceURI, name: v.name })),
           }],
         }]
       : []),
@@ -747,54 +804,54 @@ export function ClassroomSettings() {
             const isSelected = selectedAgentIds.includes(agent.id)
             const resolved = resolveAgentVoice(agent, idx + 1, availableProviders)
             return (
-              <div key={agent.id} style={{ marginBottom: '8px' }}>
-                <motion.div
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => toggleAgent(agent.id)}
+              <motion.div
+                key={agent.id}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => toggleAgent(agent.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '10px 12px', borderRadius: '14px',
+                  border: `1.5px solid ${isSelected ? `${agent.color}40` : '#F0F0F0'}`,
+                  backgroundColor: isSelected ? `${agent.color}08` : '#FAFAFA',
+                  cursor: 'pointer', transition: 'all 0.2s',
+                  opacity: isSelected ? 1 : 0.7,
+                  marginBottom: '8px',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  readOnly
                   style={{
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    padding: '12px', borderRadius: '14px',
-                    border: `1.5px solid ${isSelected ? `${agent.color}40` : '#F0F0F0'}`,
-                    backgroundColor: isSelected ? `${agent.color}08` : '#FAFAFA',
-                    cursor: 'pointer', transition: 'all 0.2s',
-                    opacity: isSelected ? 1 : 0.7,
+                    width: '20px', height: '20px',
+                    accentColor: agent.color || T.sunOrange,
+                    cursor: 'pointer', flexShrink: 0,
                   }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    readOnly
-                    style={{
-                      width: '20px', height: '20px',
-                      accentColor: agent.color || T.sunOrange,
-                      cursor: 'pointer',
-                    }}
-                  />
-                  <div style={{
-                    width: '36px', height: '36px', borderRadius: '50%',
-                    overflow: 'hidden', border: `2px solid ${agent.color}30`,
-                    flexShrink: 0,
-                  }}>
-                    <img src={agent.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '14px', fontWeight: 'bold', color: T.textDark }}>
-                      {agent.name}
-                    </div>
-                    <div style={{
-                      fontSize: '11px', color: T.textLight,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>
-                      {agent.role === 'assistant' ? '助教' : '同学'}
-                    </div>
-                  </div>
-                </motion.div>
+                />
+                <div style={{
+                  width: '36px', height: '36px', borderRadius: '50%',
+                  overflow: 'hidden', border: `2px solid ${agent.color}30`,
+                  flexShrink: 0,
+                }}>
+                  <img src={agent.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: 'bold', color: T.textDark, whiteSpace: 'nowrap' }}>
+                  {agent.name}
+                </div>
+                <span style={{
+                  fontSize: '11px', color: T.textLight, whiteSpace: 'nowrap', flexShrink: 0,
+                }}>
+                  {agent.role === 'assistant' ? '助教' : '同学'}
+                </span>
 
-                {/* 选中时显示音色选择器 */}
+                {/* 音色选择器 — 内联在同一行 */}
                 {isSelected && ttsEnabled && availableProviders.length > 0 && (
-                  <div style={{ marginTop: '4px', marginLeft: '30px' }}>
+                  <div
+                    style={{ marginLeft: 'auto', flexShrink: 0 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <VoicePicker
-                      label={`${agent.name} 的声音`}
+                      label=""
                       currentProviderId={resolved.providerId}
                       currentVoiceId={resolved.voiceId}
                       availableProviders={availableProviders}
@@ -811,7 +868,7 @@ export function ClassroomSettings() {
                     />
                   </div>
                 )}
-              </div>
+              </motion.div>
             )
           })}
         </motion.div>

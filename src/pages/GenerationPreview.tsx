@@ -14,7 +14,7 @@
  *   → 用户选择 → navigate('/classroom', { state })
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { useChildStore } from '@/stores/childStore'
@@ -23,6 +23,7 @@ import { usePreGeneration, type PreGenerationStatus } from '@/hooks/usePreGenera
 import { ClassroomCache, type CacheListItem } from '@/services/openmaic/cache'
 import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
 import type { PipelineStepName } from '@/services/openmaic/pipeline-types'
+import { ThumbnailSlide } from '@/components/openmaic/slide-renderer/components/ThumbnailSlide'
 
 /* ═══════════════════════════════════════════
    设计 Token — Sunny Playground 风格
@@ -600,6 +601,22 @@ function LessonPreviewCard({
   subjectBg: string
   onSelect: () => void
 }) {
+  const thumbRef = useRef<HTMLDivElement>(null)
+  const [thumbWidth, setThumbWidth] = useState(0)
+
+  // 获取缩略图区域实际宽度
+  useEffect(() => {
+    if (!item.firstSlideCanvas || !thumbRef.current) return
+    const el = thumbRef.current
+    const update = () => setThumbWidth(el.clientWidth)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [item.firstSlideCanvas])
+
+  const showSlide = !!item.firstSlideCanvas && thumbWidth > 0
+
   return (
     <motion.div
       whileHover={{ scale: 1.03, y: -4 }}
@@ -617,15 +634,23 @@ function LessonPreviewCard({
       }}
     >
       {/* 缩略图区域 */}
-      <div style={{
+      <div ref={thumbRef} style={{
         height: '100px',
-        background: subjectBg,
+        background: showSlide ? '#FFFFFF' : subjectBg,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         position: 'relative',
+        overflow: 'hidden',
       }}>
-        {item.thumbnailUrl ? (
+        {showSlide ? (
+          <ThumbnailSlide
+            slide={item.firstSlideCanvas!}
+            size={thumbWidth}
+            viewportSize={item.firstSlideCanvas!.viewportSize ?? 1000}
+            viewportRatio={item.firstSlideCanvas!.viewportRatio ?? 0.5625}
+          />
+        ) : item.thumbnailUrl ? (
           <img
             src={item.thumbnailUrl}
             alt={item.classroomTitle}

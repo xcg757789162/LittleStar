@@ -10,6 +10,7 @@
  */
 
 import type { Classroom } from './types'
+import type { Slide } from '@/lib/openmaic/types/slides'
 import { createLogger } from '@/lib/openmaic/logger'
 
 const log = createLogger('ClassroomCache')
@@ -35,6 +36,8 @@ export interface CacheListItem {
   cachedAt: number
   /** 课堂缩略图 URL（从 scenes/slides 中提取的第一个非空 imageUrl） */
   thumbnailUrl?: string
+  /** 第一个 slide scene 的完整 canvas 数据（用于 ThumbnailSlide 高保真渲染） */
+  firstSlideCanvas?: Slide
   /** 从 knowledgeNodeId 推断的科目（math/chinese/english） */
   subject?: string
 }
@@ -175,23 +178,39 @@ export class ClassroomCache {
       const inferredSubject = inferSubjectFromNodeId(entry.knowledgeNodeId)
       if (subject && inferredSubject && inferredSubject !== subject) continue
 
-      // 从 scenes 中提取第一个非空 imageUrl 作为缩略图
+      // 从 scenes 中提取缩略图数据：
+      // 1. firstSlideCanvas — 第一个 slide scene 的完整 canvas 数据（用于 ThumbnailSlide 高保真渲染）
+      // 2. thumbnailUrl — 第一个 image 元素的 URL（降级用）
       // 支持 v2（Scene.content.canvas.elements）和 v1（scene.slides）
       let thumbnailUrl: string | undefined
+      let firstSlideCanvas: Slide | undefined
       if (entry.classroom.scenes) {
         for (const scene of entry.classroom.scenes) {
-          if (thumbnailUrl) break
+          if (thumbnailUrl && firstSlideCanvas) break
 
-          // v2: 从 content.canvas.elements 提取 image 元素
+          // v2: 从 content.canvas 提取
           const content = scene.content as Record<string, unknown> | undefined
           if (content?.type === 'slide') {
             const canvas = content.canvas as Record<string, unknown> | undefined
-            const elements = canvas?.elements as Array<Record<string, unknown>> | undefined
-            if (elements) {
-              for (const el of elements) {
-                if (el.type === 'image' && typeof el.src === 'string') {
-                  thumbnailUrl = el.src
-                  break
+
+            // 提取完整的 slide canvas 数据（用于 ThumbnailSlide）
+            if (!firstSlideCanvas && canvas) {
+              // canvas 应该是 Slide 结构：{ id, viewportSize, viewportRatio, elements, background, ... }
+              const candidate = canvas as unknown as Slide
+              if (candidate.elements && Array.isArray(candidate.elements)) {
+                firstSlideCanvas = candidate
+              }
+            }
+
+            // 提取 thumbnailUrl（降级用）
+            if (!thumbnailUrl) {
+              const elements = canvas?.elements as Array<Record<string, unknown>> | undefined
+              if (elements) {
+                for (const el of elements) {
+                  if (el.type === 'image' && typeof el.src === 'string') {
+                    thumbnailUrl = el.src
+                    break
+                  }
                 }
               }
             }
@@ -216,6 +235,7 @@ export class ClassroomCache {
         classroomTitle: entry.classroom.title,
         cachedAt: entry.cachedAt,
         thumbnailUrl,
+        firstSlideCanvas,
         subject: inferredSubject,
       })
     }
