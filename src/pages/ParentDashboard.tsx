@@ -729,38 +729,6 @@ export function ParentDashboard() {
           >
             {configSaved ? '✓ 已保存' : '💾 保存所有配置'}
           </motion.button>
-
-          {/* ═══ 高级课堂设置已移至「课堂」页面 ═══ */}
-          <div style={{
-            marginTop: '24px', borderTop: '2px dashed #FFE8D6', paddingTop: '20px',
-          }}>
-            <div style={{
-              padding: '16px', borderRadius: '16px',
-              border: '1.5px solid #E8D6FF', backgroundColor: '#FAF5FF',
-              textAlign: 'center',
-            }}>
-              <span style={{ fontSize: '28px' }}>🎓</span>
-              <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#6B3FA0', margin: '8px 0 4px' }}>
-                高级课堂设置已移至「课堂」页面
-              </p>
-              <p style={{ fontSize: '12px', color: T.textLight, margin: '0 0 12px' }}>
-                LLM 模型、TTS 语音、图片/视频生成、角色配置等请在底部「课堂」Tab 中设置
-              </p>
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => navigate('/classroom-settings')}
-                style={{
-                  padding: '10px 24px', borderRadius: '14px', border: 'none',
-                  background: 'linear-gradient(135deg, #9B7FD0, #6B3FA0)',
-                  color: '#FFFFFF', fontSize: '14px', fontWeight: 'bold',
-                  fontFamily: T.fontDisplay, cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(107, 63, 160, 0.25)',
-                }}
-              >
-                前往课堂设置 →
-              </motion.button>
-            </div>
-          </div>
         </motion.div>
       )}
 
