@@ -27,6 +27,8 @@ services:
       - ../postgresql/init/05-seed-activities.sql:/docker-entrypoint-initdb.d/05-seed-activities.sql:ro
       - ../postgresql/init/06-seed-curricula.sql:/docker-entrypoint-initdb.d/06-seed-curricula.sql:ro
       - ../postgresql/init/07-add-parent-pin.sql:/docker-entrypoint-initdb.d/07-add-parent-pin.sql:ro
+      - ../postgresql/init/08-avatar-to-text.sql:/docker-entrypoint-initdb.d/08-avatar-to-text.sql:ro
+      - ../postgresql/init/09-generation-tasks.sql:/docker-entrypoint-initdb.d/09-generation-tasks.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-littlestar}"]
       interval: 10s
@@ -77,11 +79,14 @@ services:
       PGRST_DB_POOL: 10
       PGRST_DB_POOL_ACQUISITION_TIMEOUT: 10
       PGRST_SERVER_HOST: "0.0.0.0"
+      PGRST_DB_CHANNEL_ENABLED: "true"
       # --- Auth Service ---
       AUTH_PORT: 3001
       # --- OpenMAIC ---
       OPENMAIC_PORT: ${OPENMAIC_PORT:-3002}
       PORT: ${OPENMAIC_PORT:-3002}
+      # --- Pre-Generation ---
+      PREGEN_PORT: ${PREGEN_PORT:-3003}
       # --- LLM / TTS / 图片生成 (透传给 OpenMAIC) ---
       # 注意：使用 LITTLESTAR_ 前缀的变量，避免宿主机的 OPENAI_API_KEY（如 CodeBuddy）覆盖 .env.local 配置
       OPENAI_API_KEY: ${LITTLESTAR_OPENAI_API_KEY:-${OPENAI_API_KEY:-}}

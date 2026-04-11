@@ -28,6 +28,7 @@ services:
       - ../postgresql/init/06-seed-curricula.sql:/docker-entrypoint-initdb.d/06-seed-curricula.sql:ro
       - ../postgresql/init/07-add-parent-pin.sql:/docker-entrypoint-initdb.d/07-add-parent-pin.sql:ro
       - ../postgresql/init/08-avatar-to-text.sql:/docker-entrypoint-initdb.d/08-avatar-to-text.sql:ro
+      - ../postgresql/init/09-generation-tasks.sql:/docker-entrypoint-initdb.d/09-generation-tasks.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-littlestar}"]
       interval: 10s
@@ -58,6 +59,7 @@ services:
       PGRST_SERVER_PORT: 3000
       PGRST_DB_POOL: 10
       PGRST_DB_POOL_ACQUISITION_TIMEOUT: 10
+      PGRST_DB_CHANNEL_ENABLED: "true"
     depends_on:
       postgres:
         condition: service_healthy

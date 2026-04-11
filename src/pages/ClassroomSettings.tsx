@@ -14,20 +14,21 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { useSettingsStore } from '@/stores/openmaic/settings'
+import { useSettingsStore } from '@/lib/openmaic/store/settings'
 import { useAgentRegistry } from '@/lib/openmaic/orchestration/registry/store'
 import { useUserProfileStore, AVATAR_OPTIONS } from '@/stores/openmaic/user-profile'
 import { useChildStore } from '@/stores/childStore'
-import { useUpdateChild, useUpdateChildSettings } from '@/hooks/queries/useChildren'
-import { resolveAgentVoice, getCurrentProviderVoices } from '@/lib/openmaic/audio/voice-resolver'
+import { syncSettingsToOpenMAIC } from '@/stores/openmaic/settings-sync'
+import { useUpdateChildSettings } from '@/hooks/queries/useChildren'
+import { resolveAgentVoice, getAvailableProvidersWithVoices, getCurrentProviderVoices } from '@/lib/openmaic/audio/voice-resolver'
 import { playBrowserTTSPreview } from '@/lib/openmaic/audio/browser-tts-preview'
 import { DEFAULT_ADVANCED_SETTINGS, MINIMAX_VOICES, OPENAI_VOICES } from '@/types/models'
+import type { ChildSettings } from '@/types/models'
 import {
   BACKEND_LLM_PROVIDERS,
   BACKEND_TTS_PROVIDERS,
   BACKEND_IMAGE_PROVIDERS,
 } from '@/services/config'
-import type { AgentConfig } from '@/lib/openmaic/orchestration/registry/types'
 import type { TTSProviderId } from '@/lib/openmaic/audio/types'
 import type { ProviderWithVoices } from '@/lib/openmaic/audio/voice-resolver'
 
@@ -56,6 +57,31 @@ const T = {
 
 /** 最大上传头像体积 5 MB */
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024
+
+function mapBackendTTSProviderId(providerId: string): TTSProviderId | null {
+  switch (providerId) {
+    case 'openai':
+      return 'openai-tts'
+    case 'minimax':
+      return 'minimax-tts'
+    case 'doubao':
+    case 'volcengine':
+      return 'doubao-tts'
+    case 'azure':
+      return 'azure-tts'
+    case 'qwen':
+      return 'qwen-tts'
+    case 'glm':
+      return 'glm-tts'
+    case 'elevenlabs':
+      return 'elevenlabs-tts'
+    case 'browser-native':
+    case 'browser-native-tts':
+      return 'browser-native-tts'
+    default:
+      return null
+  }
+}
 
 /* ═══════════════════════════════════════════
    迷你音色选择器（内联版本，适配 Sunny Playground 风格）
@@ -92,7 +118,7 @@ function VoicePicker({
         if (v) return v.name
       }
     }
-    return currentVoiceId || '默认'
+    return availableProviders[0]?.voices[0]?.name || currentVoiceId || '请选择音色'
   })()
 
   const stopPreview = useCallback(() => {
@@ -341,7 +367,6 @@ export function ClassroomSettings() {
 
   // === 数据库持久化 Mutation ===
   const updateChildSettingsDb = useUpdateChildSettings()
-  const updateChildDb = useUpdateChild()
 
   // === 高级课堂设置 ===
   const [classroomSettingsOpen, setClassroomSettingsOpen] = useState(false)
@@ -367,6 +392,32 @@ export function ClassroomSettings() {
     }
   })
 
+  useEffect(() => {
+    if (!childSettings) {
+      setAdvancedSettings({ ...DEFAULT_ADVANCED_SETTINGS })
+      return
+    }
+
+    setAdvancedSettings({
+      llmProviderId: childSettings.llmProviderId ?? DEFAULT_ADVANCED_SETTINGS.llmProviderId,
+      llmModel: childSettings.llmModel ?? DEFAULT_ADVANCED_SETTINGS.llmModel,
+      llmApiKey: childSettings.llmApiKey ?? DEFAULT_ADVANCED_SETTINGS.llmApiKey,
+      llmBaseUrl: childSettings.llmBaseUrl ?? DEFAULT_ADVANCED_SETTINGS.llmBaseUrl,
+      enableTTS: childSettings.enableTTS ?? DEFAULT_ADVANCED_SETTINGS.enableTTS,
+      ttsProviderId: childSettings.ttsProviderId ?? DEFAULT_ADVANCED_SETTINGS.ttsProviderId,
+      ttsApiKey: childSettings.ttsApiKey ?? DEFAULT_ADVANCED_SETTINGS.ttsApiKey,
+      ttsVoice: childSettings.ttsVoice ?? DEFAULT_ADVANCED_SETTINGS.ttsVoice,
+      ttsSpeed: childSettings.ttsSpeed ?? DEFAULT_ADVANCED_SETTINGS.ttsSpeed,
+      enableImageGeneration: childSettings.enableImageGeneration ?? DEFAULT_ADVANCED_SETTINGS.enableImageGeneration,
+      imageProviderId: childSettings.imageProviderId ?? DEFAULT_ADVANCED_SETTINGS.imageProviderId,
+      imageApiKey: childSettings.imageApiKey ?? DEFAULT_ADVANCED_SETTINGS.imageApiKey,
+      imageBaseUrl: childSettings.imageBaseUrl ?? DEFAULT_ADVANCED_SETTINGS.imageBaseUrl,
+      enableVideoGeneration: childSettings.enableVideoGeneration ?? DEFAULT_ADVANCED_SETTINGS.enableVideoGeneration,
+    })
+
+    syncSettingsToOpenMAIC(childSettings)
+  }, [childSettings, currentChild?.id])
+
   const updateAdvanced = useCallback(<K extends keyof typeof advancedSettings>(
     key: K, value: (typeof advancedSettings)[K],
   ) => {
@@ -379,17 +430,21 @@ export function ClassroomSettings() {
   const [advancedSaveMsg, setAdvancedSaveMsg] = useState('')
   const saveAdvancedSettings = useCallback(async () => {
     const child = useChildStore.getState().currentChild
-    if (!child) return
+    if (!child?.id) return
 
     // 1. 立即更新内存（UI 即时响应）
     useChildStore.getState().updateChildSettings(child.id, advancedSettings)
+    syncSettingsToOpenMAIC({
+      ...(child.settings as Partial<ChildSettings>),
+      ...advancedSettings,
+    } as ChildSettings)
     setAdvancedDirty(false)
     setAdvancedSaveMsg('⏳ 正在保存到数据库…')
 
     // 2. 同时持久化到 PostgreSQL 数据库
     try {
       await updateChildSettingsDb.mutateAsync({
-        id: child.id,
+        id: Number(child.id),
         settings: advancedSettings,
       })
       setAdvancedSaveMsg('✅ 设置已保存到数据库')
@@ -409,8 +464,13 @@ export function ClassroomSettings() {
   }
 
   // 构建可用的 TTS 音色列表
-  // 只展示当前选择的 TTS 提供商的代表性音色（最多 10 个），避免 100+ 音色让用户不知道如何选择
-  const currentProviderVoices = getCurrentProviderVoices(ttsProviderId)
+  // 优先使用当前已同步到 OpenMAIC store 的 provider；如果还停留在 browser-native，
+  // 就回退到孩子已配置的 TTS provider，再不行回退到第一个可用服务商，避免列表为空。
+  const serverProviders = getAvailableProvidersWithVoices(ttsProvidersConfig)
+  const mappedAdvancedTTSProviderId = mapBackendTTSProviderId(advancedSettings.ttsProviderId)
+  const fallbackTTSProviderId =
+    mappedAdvancedTTSProviderId || serverProviders[0]?.providerId || 'openai-tts'
+  const currentProviderVoices = getCurrentProviderVoices(ttsProviderId, fallbackTTSProviderId)
   const availableProviders: ProviderWithVoices[] = currentProviderVoices ? [currentProviderVoices] : []
 
   // Agent 列表
@@ -436,18 +496,33 @@ export function ClassroomSettings() {
   }
 
   /** 同步头像到数据库（当前孩子的 children.avatar 字段） */
-  const syncAvatarToDb = useCallback((newAvatar: string) => {
+  const syncAvatarToDb = useCallback(async (newAvatar: string) => {
+    // 1. 立即更新 UI（localStorage 持久化）
     setAvatar(newAvatar)
-    // 同时持久化到 PostgreSQL
+
+    // 2. 同时持久化到 PostgreSQL
     const child = useChildStore.getState().currentChild
-    if (child?.id) {
-      useChildStore.getState().updateChild(child.id, { avatar: newAvatar })
-      updateChildDb.mutate({
-        id: Number(child.id),
-        updates: { avatar: newAvatar },
-      })
+    console.log('[syncAvatarToDb] currentChild:', child?.id, child?.name, 'avatar length:', newAvatar.length)
+
+    if (!child?.id) {
+      console.warn('[syncAvatarToDb] ❌ 没有 currentChild，无法写入数据库')
+      return
     }
-  }, [setAvatar, updateChildDb])
+
+    try {
+      // 直接使用 apiClient.patch 确保写入数据库
+      const { apiClient } = await import('@/services/api')
+      const result = await apiClient.patch('/children', { avatar: newAvatar }, {
+        filters: [{ column: 'id', operator: 'eq', value: Number(child.id) }],
+      })
+      console.log('[syncAvatarToDb] ✅ 头像已写入数据库, child_id:', child.id, 'result:', result)
+
+      // 同步 childStore
+      useChildStore.getState().updateChild(String(child.id), { avatar: newAvatar })
+    } catch (err) {
+      console.error('[syncAvatarToDb] ❌ 写入数据库失败:', err)
+    }
+  }, [setAvatar])
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -464,7 +539,7 @@ export function ClassroomSettings() {
         const scale = Math.max(128 / img.width, 128 / img.height)
         const w = img.width * scale, h = img.height * scale
         ctx.drawImage(img, (128 - w) / 2, (128 - h) / 2, w, h)
-        syncAvatarToDb(canvas.toDataURL('image/jpeg', 0.85))
+        void syncAvatarToDb(canvas.toDataURL('image/jpeg', 0.85))
       }
       img.src = reader.result as string
     }
@@ -637,7 +712,7 @@ export function ClassroomSettings() {
                   <button
                     key={url}
                     type="button"
-                    onClick={() => syncAvatarToDb(url)}
+                    onClick={() => void syncAvatarToDb(url)}
                     style={{
                       width: '44px', height: '44px', borderRadius: '50%',
                       overflow: 'hidden', border: avatar === url

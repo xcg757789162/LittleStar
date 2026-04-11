@@ -65,11 +65,16 @@ export function useInitializeApp(): InitializeAppState {
         }
 
         // 从数据库同步第一个孩子的头像到 user-profile store
-        // （如果孩子有自定义头像，如 data: URL）
+        // 支持自定义头像（data: URL）和预设头像（/avatars/ 路径）
         const firstChild = children[0]
-        if (firstChild?.avatar && firstChild.avatar.startsWith('data:')) {
-          log.info('从数据库恢复自定义头像')
-          useUserProfileStore.getState().setAvatar(firstChild.avatar)
+        if (firstChild?.avatar) {
+          const isCustomAvatar = firstChild.avatar.startsWith('data:') || firstChild.avatar.startsWith('/avatars/')
+          if (isCustomAvatar) {
+            log.info('从数据库恢复头像:', firstChild.avatar.substring(0, 50) + '...')
+            useUserProfileStore.getState().setAvatar(firstChild.avatar)
+          } else {
+            log.info('孩子头像为 emoji 或默认值，不覆盖本地头像:', firstChild.avatar)
+          }
         }
       } catch (err) {
         // API 调用失败（后端离线或网络问题）

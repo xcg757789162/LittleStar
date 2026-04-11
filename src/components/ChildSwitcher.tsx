@@ -24,8 +24,8 @@ export function ChildSwitcher({ visible, onClose }: ChildSwitcherProps) {
 
   const handleSelect = (child: Child) => {
     setCurrentChild(child)
-    // 如果孩子有自定义头像(data URL)，同步到课堂 user-profile store
-    if (child.avatar?.startsWith('data:')) {
+    // 同步孩子头像到课堂 user-profile store（data URL 或预设头像路径）
+    if (child.avatar?.startsWith('data:') || child.avatar?.startsWith('/avatars/')) {
       useUserProfileStore.getState().setAvatar(child.avatar)
     }
     onClose()
