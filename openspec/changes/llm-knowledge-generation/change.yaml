@@ -1,0 +1,16 @@
+id: llm-knowledge-generation
+title: "LLM 驱动的个性化知识点生成系统"
+description: >
+  将静态 seed 知识点完全替换为 LLM 动态生成。新建 child_knowledge_nodes 表，
+  评测后 LLM 生成个性化知识图谱，课堂后异步更新。删除 knowledge_nodes 表、
+  questions seed 数据及 useQuestions hook。
+status: ready
+created: 2026-04-11
+scope:
+  - database
+  - engine
+  - frontend
+  - types
+risk: high
+tasks_count: 10
+estimated_effort: large
