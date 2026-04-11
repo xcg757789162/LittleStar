@@ -72,6 +72,44 @@ export interface ChildSettings {
   /** TTS 语速（0.5-2.0） */
   ttsSpeed: number
 
+  /** ASR 语音识别开关 */
+  enableASR: boolean
+  /** ASR 服务提供商 ID（如 'openai-whisper', 'qwen-asr', 'browser-native'） */
+  asrProviderId: string
+  /** ASR API Key */
+  asrApiKey: string
+  /** ASR Base URL */
+  asrBaseUrl: string
+  /** ASR 语言（默认 auto） */
+  asrLanguage: string
+
+  /** ISE 发音评测开关 */
+  enableISE: boolean
+  /** ISE 服务提供商 ID（如 'iflytek-ise', 'text-match-fallback'） */
+  iseProviderId: string
+  /** ISE App ID（讯飞） */
+  iseAppId: string
+  /** ISE API Key（讯飞） */
+  iseApiKey: string
+  /** ISE API Secret（讯飞） */
+  iseApiSecret: string
+
+  /** WebSearch 网络搜索开关 */
+  enableWebSearch: boolean
+  /** WebSearch 提供商 ID（如 'tavily'） */
+  webSearchProviderId: string
+  /** WebSearch API Key */
+  webSearchApiKey: string
+
+  /** PDF 文档解析开关 */
+  enablePDF: boolean
+  /** PDF 文档解析提供商 ID（如 'unpdf', 'mineru'） */
+  pdfProviderId: string
+  /** PDF API Key */
+  pdfApiKey: string
+  /** PDF Base URL */
+  pdfBaseUrl: string
+
   /** 图片生成开关 */
   enableImageGeneration: boolean
   /** 图片生成提供商 ID（如 'qwen-image', 'minimax'） */
@@ -108,6 +146,10 @@ export interface ChildSettings {
 export const DEFAULT_ADVANCED_SETTINGS: Pick<ChildSettings,
   | 'llmProviderId' | 'llmModel' | 'llmApiKey' | 'llmBaseUrl'
   | 'enableTTS' | 'ttsProviderId' | 'ttsApiKey' | 'ttsVoice' | 'ttsSpeed'
+  | 'enableASR' | 'asrProviderId' | 'asrApiKey' | 'asrBaseUrl' | 'asrLanguage'
+  | 'enableISE' | 'iseProviderId' | 'iseAppId' | 'iseApiKey' | 'iseApiSecret'
+  | 'enableWebSearch' | 'webSearchProviderId' | 'webSearchApiKey'
+  | 'enablePDF' | 'pdfProviderId' | 'pdfApiKey' | 'pdfBaseUrl'
   | 'enableImageGeneration' | 'imageProviderId' | 'imageApiKey' | 'imageBaseUrl'
   | 'enableVideoGeneration' | 'videoProviderId' | 'videoApiKey' | 'videoBaseUrl'
   | 'classroomAgentMode' | 'selfIntroduction'
@@ -122,6 +164,23 @@ export const DEFAULT_ADVANCED_SETTINGS: Pick<ChildSettings,
   ttsApiKey: '',
   ttsVoice: '',
   ttsSpeed: 1.0,
+  enableASR: true,
+  asrProviderId: 'openai-whisper',
+  asrApiKey: '',
+  asrBaseUrl: '',
+  asrLanguage: 'auto',
+  enableISE: false,
+  iseProviderId: 'text-match-fallback',
+  iseAppId: '',
+  iseApiKey: '',
+  iseApiSecret: '',
+  enableWebSearch: false,
+  webSearchProviderId: 'tavily',
+  webSearchApiKey: '',
+  enablePDF: false,
+  pdfProviderId: 'unpdf',
+  pdfApiKey: '',
+  pdfBaseUrl: '',
   enableImageGeneration: true,
   imageProviderId: '',
   imageApiKey: '',

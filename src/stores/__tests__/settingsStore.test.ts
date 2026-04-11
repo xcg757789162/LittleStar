@@ -69,6 +69,7 @@ describe('ChildSettings Advanced Classroom Settings', () => {
         voiceEnabled: true,
         soundEffectsEnabled: true,
         // Advanced classroom settings
+        ...DEFAULT_ADVANCED_SETTINGS,
         enableTTS: true,
         ttsProviderId: 'volcengine',
         ttsVoice: 'zh_female_01',

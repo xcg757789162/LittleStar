@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ParentSettings } from '../ParentSettings'
 import { useChildStore } from '@/stores/childStore'
+import { DEFAULT_ADVANCED_SETTINGS } from '@/types/models'
 
 vi.mock('@/stores/gradeUnlockStore', () => ({
   useGradeUnlockStore: vi.fn().mockReturnValue({
@@ -17,6 +18,7 @@ describe('ParentSettings', () => {
     // 设置默认孩子
     useChildStore.getState().addChild({
       id: 'child-1',
+      userId: 'user-1',
       name: '小星星',
       avatar: '⭐',
       age: 5,
@@ -28,6 +30,7 @@ describe('ParentSettings', () => {
         difficultyAdjustment: 0,
         voiceEnabled: true,
         soundEffectsEnabled: true,
+        ...DEFAULT_ADVANCED_SETTINGS,
       },
     })
   })
