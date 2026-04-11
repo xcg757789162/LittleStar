@@ -19,7 +19,7 @@ import { useAgentRegistry } from '@/lib/openmaic/orchestration/registry/store'
 import { useUserProfileStore, AVATAR_OPTIONS } from '@/stores/openmaic/user-profile'
 import { useChildStore } from '@/stores/childStore'
 import { useUpdateChild, useUpdateChildSettings } from '@/hooks/queries/useChildren'
-import { resolveAgentVoice, getAvailableProvidersWithVoices, getAllProvidersWithVoices } from '@/lib/openmaic/audio/voice-resolver'
+import { resolveAgentVoice, getCurrentProviderVoices } from '@/lib/openmaic/audio/voice-resolver'
 import { playBrowserTTSPreview } from '@/lib/openmaic/audio/browser-tts-preview'
 import { DEFAULT_ADVANCED_SETTINGS, MINIMAX_VOICES, OPENAI_VOICES } from '@/types/models'
 import {
@@ -408,16 +408,10 @@ export function ClassroomSettings() {
     transition: 'border-color 0.2s', boxSizing: 'border-box',
   }
 
-  // 构建可用的 TTS 提供商列表
-  // 优先展示有 API key / isServerConfigured 的提供商，其余也展示（与 OpenMAIC 原版一致）
-  const serverProviders = getAvailableProvidersWithVoices(ttsProvidersConfig)
-  const allProviders = getAllProvidersWithVoices()
-  // 合并：已有 API key 的排前面，其余按 constants.ts 注册顺序补充
-  const serverIds = new Set(serverProviders.map((p) => p.providerId))
-  const availableProviders: ProviderWithVoices[] = [
-    ...serverProviders,
-    ...allProviders.filter((p) => !serverIds.has(p.providerId)),
-  ]
+  // 构建可用的 TTS 音色列表
+  // 只展示当前选择的 TTS 提供商的代表性音色（最多 10 个），避免 100+ 音色让用户不知道如何选择
+  const currentProviderVoices = getCurrentProviderVoices(ttsProviderId)
+  const availableProviders: ProviderWithVoices[] = currentProviderVoices ? [currentProviderVoices] : []
 
   // Agent 列表
   const allAgents = listAgents()

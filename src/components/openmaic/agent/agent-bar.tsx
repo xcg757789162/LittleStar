@@ -7,7 +7,7 @@ import { cn } from '@/lib/openmaic/utils';
 import { useI18n } from '@/lib/openmaic/hooks/use-i18n';
 import { useSettingsStore } from '@/lib/openmaic/store/settings';
 import { useAgentRegistry } from '@/lib/openmaic/orchestration/registry/store';
-import { resolveAgentVoice, getAvailableProvidersWithVoices, getAllProvidersWithVoices } from '@/lib/openmaic/audio/voice-resolver';
+import { resolveAgentVoice, getCurrentProviderVoices } from '@/lib/openmaic/audio/voice-resolver';
 import { playBrowserTTSPreview } from '@/lib/openmaic/audio/browser-tts-preview';
 import {
   Sparkles,
@@ -490,14 +490,9 @@ export function AgentBar() {
   const selectedAgents = agents.filter((a) => selectedAgentIds.includes(a.id));
   const nonTeacherSelected = selectedAgents.filter((a) => a.role !== 'teacher');
 
-  const serverProviders = getAvailableProvidersWithVoices(ttsProvidersConfig);
-  // 合并：已有 API key 的排前面，其余按 constants.ts 注册顺序补充
-  const allProviders = getAllProvidersWithVoices();
-  const serverIds = new Set(serverProviders.map((p) => p.providerId));
-  const availableProviders: ProviderWithVoices[] = [
-    ...serverProviders,
-    ...allProviders.filter((p) => !serverIds.has(p.providerId)),
-  ];
+  // 只展示当前选择的 TTS 提供商的代表性音色（最多 10 个）
+  const currentProviderVoices = getCurrentProviderVoices(ttsProviderId);
+  const availableProviders: ProviderWithVoices[] = currentProviderVoices ? [currentProviderVoices] : [];
   const showVoice = availableProviders.length > 0;
 
   useEffect(() => {

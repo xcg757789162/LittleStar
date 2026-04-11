@@ -134,54 +134,58 @@ export function getAvailableProvidersWithVoices(
 }
 
 /**
- * Get ALL providers and their voices for the voice picker UI,
- * regardless of whether they have an API key or are server-configured.
- * Browser-native-tts is excluded (no static voice list).
- *
- * Use this for UI display so users can see all available voice options.
- * The actual TTS generation will check for API key at runtime.
+ * Maximum number of representative voices to show per provider in the picker UI.
  */
-export function getAllProvidersWithVoices(): ProviderWithVoices[] {
-  const result: ProviderWithVoices[] = [];
+const MAX_REPRESENTATIVE_VOICES = 10;
 
-  for (const [id, config] of Object.entries(TTS_PROVIDERS)) {
-    const providerId = id as TTSProviderId;
-    if (providerId === 'browser-native-tts') continue;
-    if (config.voices.length === 0) continue;
+/**
+ * Get representative voices for the currently selected TTS provider.
+ * Returns a single ProviderWithVoices entry with at most MAX_REPRESENTATIVE_VOICES voices,
+ * prioritizing: English voices first, then Chinese, capped at the limit.
+ *
+ * For providers with models (OpenAI, Qwen, ElevenLabs, MiniMax), only the default
+ * or first model's compatible voices are used to keep the list short.
+ *
+ * If the provider is browser-native-tts or has no voices, returns null.
+ */
+export function getCurrentProviderVoices(
+  ttsProviderId: TTSProviderId,
+): ProviderWithVoices | null {
+  if (ttsProviderId === 'browser-native-tts') return null;
+  const config = TTS_PROVIDERS[ttsProviderId];
+  if (!config || config.voices.length === 0) return null;
 
-    const allVoices = config.voices.map((v) => ({ id: v.id, name: v.name }));
+  // Pick the default model (or first model) to filter compatible voices
+  const targetModelId = config.defaultModelId || (config.models.length > 0 ? config.models[0].id : '');
+  const compatibleVoices = targetModelId
+    ? config.voices.filter((v) => !v.compatibleModels || v.compatibleModels.includes(targetModelId))
+    : config.voices;
 
-    // Build model groups
-    const modelGroups: ModelVoiceGroup[] = [];
-    if (config.models.length > 0) {
-      for (const model of config.models) {
-        const compatibleVoices = config.voices
-          .filter((v) => !v.compatibleModels || v.compatibleModels.includes(model.id))
-          .map((v) => ({ id: v.id, name: v.name }));
-        modelGroups.push({
-          modelId: model.id,
-          modelName: model.name,
-          voices: compatibleVoices,
-        });
-      }
-    } else {
-      // Provider has no model concept (Azure, Doubao)
-      modelGroups.push({
-        modelId: '',
-        modelName: config.name,
-        voices: allVoices,
-      });
-    }
+  // Sort: English first → Chinese → other languages
+  const sorted = [...compatibleVoices].sort((a, b) => {
+    const langA = (a.language || '').toLowerCase();
+    const langB = (b.language || '').toLowerCase();
+    const scoreA = langA.startsWith('en') ? 0 : (langA.startsWith('zh') || langA.startsWith('cmn')) ? 1 : 2;
+    const scoreB = langB.startsWith('en') ? 0 : (langB.startsWith('zh') || langB.startsWith('cmn')) ? 1 : 2;
+    return scoreA - scoreB;
+  });
 
-    result.push({
-      providerId,
-      providerName: config.name,
-      voices: allVoices,
-      modelGroups,
-    });
-  }
+  const selected = sorted.slice(0, MAX_REPRESENTATIVE_VOICES);
+  const voices = selected.map((v) => ({ id: v.id, name: v.name }));
 
-  return result;
+  const targetModel = config.models.find((m) => m.id === targetModelId);
+  const modelGroups: ModelVoiceGroup[] = [{
+    modelId: targetModelId,
+    modelName: targetModel?.name || config.name,
+    voices,
+  }];
+
+  return {
+    providerId: ttsProviderId,
+    providerName: config.name,
+    voices,
+    modelGroups,
+  };
 }
 
 /**
