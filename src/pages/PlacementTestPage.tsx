@@ -16,6 +16,7 @@ import { GRADE_LABELS } from '@/types/grades'
 import type { GradeLevel, Subject, PlacementResult } from '@/types/models'
 import type { CelebrationLevel } from '@/components/feedback/CelebrationAnimation'
 import type { ChoiceQuestion } from '@/engine/placement-test-engine'
+import { loadCurriculum } from '@/curriculum'
 
 /* ====== 设计 Token ====== */
 const T = {
@@ -397,11 +398,28 @@ function LevelDisplay({ level }: { level: number }) {
 }
 
 /** 结果页模块掌握度展示 */
-function ModuleMasteryDisplay({ result, phase1Analysis }: {
+function ModuleMasteryDisplay({ result, phase1Analysis, subject, gradeLevel }: {
   result: PlacementResult
   phase1Analysis: { moduleScores?: Record<string, number> } | null
+  subject: Subject
+  gradeLevel: GradeLevel
 }) {
   const scores = phase1Analysis?.moduleScores
+  const [moduleNames, setModuleNames] = useState<Record<string, string>>({})
+
+  // 从已缓存的课程大纲中获取模块中文名称
+  useEffect(() => {
+    if (!scores || Object.keys(scores).length === 0) return
+    loadCurriculum(gradeLevel, subject).then(curriculum => {
+      if (!curriculum) return
+      const names: Record<string, string> = {}
+      for (const mod of curriculum.modules) {
+        names[mod.id] = mod.name
+      }
+      setModuleNames(names)
+    })
+  }, [scores, gradeLevel, subject])
+
   if (!scores || Object.keys(scores).length === 0) return null
 
   const getMasteryEmoji = (score: number) => {
@@ -441,7 +459,7 @@ function ModuleMasteryDisplay({ result, phase1Analysis }: {
             fontFamily: T.fontBody, overflow: 'hidden',
             textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            {moduleId}
+            {moduleNames[moduleId] || moduleId}
           </span>
           <span style={{
             fontSize: '14px', fontWeight: 'bold',
@@ -914,7 +932,7 @@ export function PlacementTestPage({
           )}
 
           {/* 模块掌握度 */}
-          <ModuleMasteryDisplay result={result} phase1Analysis={phase1Analysis} />
+          <ModuleMasteryDisplay result={result} phase1Analysis={phase1Analysis} subject={subject} gradeLevel={gradeLevel} />
 
           {/* 鼓励语 */}
           <motion.p

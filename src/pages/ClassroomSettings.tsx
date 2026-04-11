@@ -20,7 +20,7 @@ import { useUserProfileStore, AVATAR_OPTIONS } from '@/stores/openmaic/user-prof
 import { useChildStore } from '@/stores/childStore'
 import { resolveAgentVoice, getAvailableProvidersWithVoices } from '@/lib/openmaic/audio/voice-resolver'
 import { playBrowserTTSPreview } from '@/lib/openmaic/audio/browser-tts-preview'
-import { DEFAULT_ADVANCED_SETTINGS } from '@/types/models'
+import { DEFAULT_ADVANCED_SETTINGS, MINIMAX_VOICES, OPENAI_VOICES } from '@/types/models'
 import {
   BACKEND_LLM_PROVIDERS,
   BACKEND_TTS_PROVIDERS,
@@ -366,13 +366,19 @@ export function ClassroomSettings() {
     key: K, value: (typeof advancedSettings)[K],
   ) => {
     setAdvancedSettings((prev) => ({ ...prev, [key]: value }))
+    setAdvancedDirty(true)
   }, [])
 
-  // 高级设置变更时自动保存到 child settings
-  useEffect(() => {
+  // 高级设置 dirty 状态 & 手动保存
+  const [advancedDirty, setAdvancedDirty] = useState(false)
+  const [advancedSaveMsg, setAdvancedSaveMsg] = useState('')
+  const saveAdvancedSettings = useCallback(() => {
     const child = useChildStore.getState().currentChild
     if (!child) return
     useChildStore.getState().updateChildSettings(child.id, advancedSettings)
+    setAdvancedDirty(false)
+    setAdvancedSaveMsg('✅ 设置已保存')
+    setTimeout(() => setAdvancedSaveMsg(''), 2000)
   }, [advancedSettings])
 
   const advInputStyle: React.CSSProperties = {
@@ -1229,17 +1235,43 @@ export function ClassroomSettings() {
                     <label style={{ fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600 }}>
                       语音角色
                     </label>
-                    <input
-                      type="text" value={advancedSettings.ttsVoice}
-                      onChange={(e) => updateAdvanced('ttsVoice', e.target.value)}
-                      placeholder={(() => {
-                        const p = BACKEND_TTS_PROVIDERS.find(x => x.ttsProviderId === advancedSettings.ttsProviderId)
-                        return p?.defaultVoice || '语音 ID（如 zh_female_01）'
-                      })()}
-                      style={advInputStyle}
-                      onFocus={(e) => { e.currentTarget.style.borderColor = T.skyBlue }}
-                      onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
-                    />
+                    {(() => {
+                      const voiceOptions = advancedSettings.ttsProviderId === 'minimax'
+                        ? MINIMAX_VOICES.map(v => ({ id: v.id, label: `${v.label} (${v.id})` }))
+                        : advancedSettings.ttsProviderId === 'openai'
+                          ? OPENAI_VOICES.map(v => ({ id: v.id, label: v.label }))
+                          : null
+
+                      if (voiceOptions) {
+                        return (
+                          <select
+                            value={advancedSettings.ttsVoice}
+                            onChange={(e) => updateAdvanced('ttsVoice', e.target.value)}
+                            style={{ ...advInputStyle, appearance: 'auto' }}
+                          >
+                            <option value="">请选择语音角色</option>
+                            {voiceOptions.map((v) => (
+                              <option key={v.id} value={v.id}>{v.label}</option>
+                            ))}
+                          </select>
+                        )
+                      }
+
+                      // 其他服务商保留文本输入
+                      return (
+                        <input
+                          type="text" value={advancedSettings.ttsVoice}
+                          onChange={(e) => updateAdvanced('ttsVoice', e.target.value)}
+                          placeholder={(() => {
+                            const p = BACKEND_TTS_PROVIDERS.find(x => x.ttsProviderId === advancedSettings.ttsProviderId)
+                            return p?.defaultVoice || '语音 ID（如 zh_female_01）'
+                          })()}
+                          style={advInputStyle}
+                          onFocus={(e) => { e.currentTarget.style.borderColor = T.skyBlue }}
+                          onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
+                        />
+                      )
+                    })()}
                   </div>
 
                   <div>
@@ -1371,12 +1403,39 @@ export function ClassroomSettings() {
         )}
       </div>
 
-      {/* 底部提示 */}
+      {/* 底部保存按钮 */}
       <div style={{
         textAlign: 'center', padding: '20px 0',
-        fontSize: '12px', color: T.textLight,
       }}>
-        ✨ 所有设置自动保存，即时生效
+        {advancedSaveMsg && (
+          <p style={{ fontSize: '13px', color: T.grassGreen, margin: '0 0 8px', fontWeight: 600 }}>
+            {advancedSaveMsg}
+          </p>
+        )}
+        <motion.button
+          whileTap={{ scale: 0.95 }}
+          onClick={saveAdvancedSettings}
+          disabled={!advancedDirty}
+          style={{
+            padding: '12px 48px', borderRadius: '20px',
+            border: 'none', cursor: advancedDirty ? 'pointer' : 'default',
+            background: advancedDirty
+              ? `linear-gradient(135deg, ${T.skyBlue}, ${T.grassGreen})`
+              : '#E0E0E0',
+            color: '#fff', fontSize: '15px', fontWeight: 'bold',
+            fontFamily: T.fontDisplay,
+            boxShadow: advancedDirty ? '0 4px 16px rgba(91,192,235,0.3)' : 'none',
+            transition: 'all 0.2s',
+            opacity: advancedDirty ? 1 : 0.6,
+          }}
+        >
+          💾 保存设置
+        </motion.button>
+        {!advancedDirty && !advancedSaveMsg && (
+          <p style={{ fontSize: '12px', color: T.textLight, margin: '8px 0 0' }}>
+            修改后点击保存按钮生效
+          </p>
+        )}
       </div>
     </div>
   )

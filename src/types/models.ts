@@ -515,6 +515,16 @@ export interface PresetAgent {
   isTeacher: boolean
 }
 
+/** OpenAI TTS 音色列表 */
+export const OPENAI_VOICES: { id: string; label: string }[] = [
+  { id: 'alloy', label: 'Alloy (中性)' },
+  { id: 'echo', label: 'Echo (男声)' },
+  { id: 'fable', label: 'Fable (叙事)' },
+  { id: 'onyx', label: 'Onyx (低沉男声)' },
+  { id: 'nova', label: 'Nova (女声)' },
+  { id: 'shimmer', label: 'Shimmer (柔和女声)' },
+]
+
 /** MiniMax 官方系统音色列表（12 个） */
 export const MINIMAX_VOICES: MiniMaxVoice[] = [
   // 👧 女声
