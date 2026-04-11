@@ -25,7 +25,7 @@ CREATE TABLE api.children (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES api.users(id),
   name VARCHAR(50) NOT NULL,
-  avatar VARCHAR(255) NOT NULL,
+  avatar TEXT NOT NULL,
   age INTEGER NOT NULL,
   grade_level VARCHAR(30) NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

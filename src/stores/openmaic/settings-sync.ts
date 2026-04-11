@@ -138,5 +138,14 @@ export function syncSettingsToOpenMAIC(settings: ChildSettings): void {
     }
   }
 
+  // === 视频生成配置 ===
+  if (settings.enableVideoGeneration !== undefined) {
+    try {
+      store.setVideoGenerationEnabled(settings.enableVideoGeneration)
+    } catch (err) {
+      log.warn('视频生成启用设置失败:', err)
+    }
+  }
+
   log.info('设置同步完成')
 }

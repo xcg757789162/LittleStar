@@ -12,6 +12,7 @@
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { useChildStore } from '@/stores/childStore'
+import { useUserProfileStore } from '@/stores/openmaic/user-profile'
 import { apiClient } from '@/services/api'
 import type { Child } from '@/types/models'
 import { createLogger } from '@/lib/openmaic/logger'
@@ -61,6 +62,14 @@ export function useInitializeApp(): InitializeAppState {
         // 加载到 childStore
         for (const child of children) {
           addChild(child)
+        }
+
+        // 从数据库同步第一个孩子的头像到 user-profile store
+        // （如果孩子有自定义头像，如 data: URL）
+        const firstChild = children[0]
+        if (firstChild?.avatar && firstChild.avatar.startsWith('data:')) {
+          log.info('从数据库恢复自定义头像')
+          useUserProfileStore.getState().setAvatar(firstChild.avatar)
         }
       } catch (err) {
         // API 调用失败（后端离线或网络问题）

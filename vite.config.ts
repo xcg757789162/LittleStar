@@ -45,10 +45,15 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
+      // Pre-Generation Backend API（直连后端服务 3003 端口）
+      '/api/pre-generate': {
+        target: 'http://localhost:3003',
+        changeOrigin: true,
+      },
       // OpenMAIC 内部 API 通配符代理（SSE 支持）
       // 覆盖 /api/generate/*, /api/chat, /api/server-providers,
       // /api/proxy-media 等 OpenMAIC Next.js API Routes
-      // 注意：/api/auth 和 /api/rest 在上面精确匹配，优先级更高
+      // 注意：/api/auth、/api/rest、/api/pre-generate 在上面精确匹配，优先级更高
       '/api/': {
         target: 'http://localhost:8080',
         changeOrigin: true,

@@ -6,6 +6,7 @@
 import { motion } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
+import { useUserProfileStore } from '@/stores/openmaic/user-profile'
 import type { Child } from '@/types/models'
 
 interface ChildSwitcherProps {
@@ -23,6 +24,10 @@ export function ChildSwitcher({ visible, onClose }: ChildSwitcherProps) {
 
   const handleSelect = (child: Child) => {
     setCurrentChild(child)
+    // 如果孩子有自定义头像(data URL)，同步到课堂 user-profile store
+    if (child.avatar?.startsWith('data:')) {
+      useUserProfileStore.getState().setAvatar(child.avatar)
+    }
     onClose()
   }
 
