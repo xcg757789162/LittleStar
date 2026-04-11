@@ -134,6 +134,57 @@ export function getAvailableProvidersWithVoices(
 }
 
 /**
+ * Get ALL providers and their voices for the voice picker UI,
+ * regardless of whether they have an API key or are server-configured.
+ * Browser-native-tts is excluded (no static voice list).
+ *
+ * Use this for UI display so users can see all available voice options.
+ * The actual TTS generation will check for API key at runtime.
+ */
+export function getAllProvidersWithVoices(): ProviderWithVoices[] {
+  const result: ProviderWithVoices[] = [];
+
+  for (const [id, config] of Object.entries(TTS_PROVIDERS)) {
+    const providerId = id as TTSProviderId;
+    if (providerId === 'browser-native-tts') continue;
+    if (config.voices.length === 0) continue;
+
+    const allVoices = config.voices.map((v) => ({ id: v.id, name: v.name }));
+
+    // Build model groups
+    const modelGroups: ModelVoiceGroup[] = [];
+    if (config.models.length > 0) {
+      for (const model of config.models) {
+        const compatibleVoices = config.voices
+          .filter((v) => !v.compatibleModels || v.compatibleModels.includes(model.id))
+          .map((v) => ({ id: v.id, name: v.name }));
+        modelGroups.push({
+          modelId: model.id,
+          modelName: model.name,
+          voices: compatibleVoices,
+        });
+      }
+    } else {
+      // Provider has no model concept (Azure, Doubao)
+      modelGroups.push({
+        modelId: '',
+        modelName: config.name,
+        voices: allVoices,
+      });
+    }
+
+    result.push({
+      providerId,
+      providerName: config.name,
+      voices: allVoices,
+      modelGroups,
+    });
+  }
+
+  return result;
+}
+
+/**
  * Find a voice display name across all providers.
  */
 export function findVoiceDisplayName(providerId: TTSProviderId, voiceId: string): string {

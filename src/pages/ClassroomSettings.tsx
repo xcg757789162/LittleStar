@@ -18,8 +18,8 @@ import { useSettingsStore } from '@/stores/openmaic/settings'
 import { useAgentRegistry } from '@/lib/openmaic/orchestration/registry/store'
 import { useUserProfileStore, AVATAR_OPTIONS } from '@/stores/openmaic/user-profile'
 import { useChildStore } from '@/stores/childStore'
-import { useUpdateChildSettings } from '@/hooks/queries/useChildren'
-import { resolveAgentVoice, getAvailableProvidersWithVoices } from '@/lib/openmaic/audio/voice-resolver'
+import { useUpdateChild, useUpdateChildSettings } from '@/hooks/queries/useChildren'
+import { resolveAgentVoice, getAvailableProvidersWithVoices, getAllProvidersWithVoices } from '@/lib/openmaic/audio/voice-resolver'
 import { playBrowserTTSPreview } from '@/lib/openmaic/audio/browser-tts-preview'
 import { DEFAULT_ADVANCED_SETTINGS, MINIMAX_VOICES, OPENAI_VOICES } from '@/types/models'
 import {
@@ -341,6 +341,7 @@ export function ClassroomSettings() {
 
   // === 数据库持久化 Mutation ===
   const updateChildSettingsDb = useUpdateChildSettings()
+  const updateChildDb = useUpdateChild()
 
   // === 高级课堂设置 ===
   const [classroomSettingsOpen, setClassroomSettingsOpen] = useState(false)
@@ -407,71 +408,15 @@ export function ClassroomSettings() {
     transition: 'border-color 0.2s', boxSizing: 'border-box',
   }
 
-  // 浏览器 TTS voices
-  const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([])
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return
-    const loadVoices = () => setBrowserVoices(speechSynthesis.getVoices())
-    loadVoices()
-    speechSynthesis.addEventListener('voiceschanged', loadVoices)
-    return () => speechSynthesis.removeEventListener('voiceschanged', loadVoices)
-  }, [])
-
   // 构建可用的 TTS 提供商列表
+  // 优先展示有 API key / isServerConfigured 的提供商，其余也展示（与 OpenMAIC 原版一致）
   const serverProviders = getAvailableProvidersWithVoices(ttsProvidersConfig)
-  // 精选浏览器原生音色：最多保留 10 个有代表性的（优先英语，补充中文）
-  const filteredBrowserVoices = (() => {
-    const MAX_BROWSER_VOICES = 10
-    // 按优先级排序的关键词：匹配到的排前面
-    const preferredKeywords = [
-      'samantha', 'daniel', 'karen', 'alex', 'victoria',  // macOS 经典英语
-      'google us', 'google uk',                             // Google 英语
-      'ting-ting', 'mei-jia',                               // 中文代表
-    ]
-    const scored = browserVoices.map((v) => {
-      const nameLower = v.name.toLowerCase()
-      const langLower = v.lang.toLowerCase()
-      // 优先英语音色
-      let score = 0
-      if (langLower.startsWith('en')) score += 100
-      else if (langLower.startsWith('zh') || langLower.startsWith('cmn')) score += 50
-      else score -= 100 // 其他语言排到最后
-      // 匹配关键词加分
-      for (const kw of preferredKeywords) {
-        if (nameLower.includes(kw)) { score += 200; break }
-      }
-      // 非 "compact" / "enhanced" 的普通版优先（避免重复）
-      if (nameLower.includes('(enhanced)') || nameLower.includes('premium')) score += 10
-      if (nameLower.includes('compact')) score -= 50
-      return { voice: v, score }
-    })
-    scored.sort((a, b) => b.score - a.score)
-    // 去重：同名只保留一个（不同版本取分最高的）
-    const seen = new Set<string>()
-    const result: SpeechSynthesisVoice[] = []
-    for (const { voice } of scored) {
-      const key = voice.name.replace(/\s*\(.*?\)/g, '').toLowerCase()
-      if (seen.has(key)) continue
-      seen.add(key)
-      result.push(voice)
-      if (result.length >= MAX_BROWSER_VOICES) break
-    }
-    return result
-  })()
+  const allProviders = getAllProvidersWithVoices()
+  // 合并：已有 API key 的排前面，其余按 constants.ts 注册顺序补充
+  const serverIds = new Set(serverProviders.map((p) => p.providerId))
   const availableProviders: ProviderWithVoices[] = [
     ...serverProviders,
-    ...(filteredBrowserVoices.length > 0
-      ? [{
-          providerId: 'browser-native-tts' as TTSProviderId,
-          providerName: '浏览器语音',
-          voices: filteredBrowserVoices.map((v) => ({ id: v.voiceURI, name: v.name })),
-          modelGroups: [{
-            modelId: '',
-            modelName: '浏览器语音',
-            voices: filteredBrowserVoices.map((v) => ({ id: v.voiceURI, name: v.name })),
-          }],
-        }]
-      : []),
+    ...allProviders.filter((p) => !serverIds.has(p.providerId)),
   ]
 
   // Agent 列表
@@ -496,6 +441,20 @@ export function ClassroomSettings() {
     setEditingName(false)
   }
 
+  /** 同步头像到数据库（当前孩子的 children.avatar 字段） */
+  const syncAvatarToDb = useCallback((newAvatar: string) => {
+    setAvatar(newAvatar)
+    // 同时持久化到 PostgreSQL
+    const child = useChildStore.getState().currentChild
+    if (child?.id) {
+      useChildStore.getState().updateChild(child.id, { avatar: newAvatar })
+      updateChildDb.mutate({
+        id: Number(child.id),
+        updates: { avatar: newAvatar },
+      })
+    }
+  }, [setAvatar, updateChildDb])
+
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -511,7 +470,7 @@ export function ClassroomSettings() {
         const scale = Math.max(128 / img.width, 128 / img.height)
         const w = img.width * scale, h = img.height * scale
         ctx.drawImage(img, (128 - w) / 2, (128 - h) / 2, w, h)
-        setAvatar(canvas.toDataURL('image/jpeg', 0.85))
+        syncAvatarToDb(canvas.toDataURL('image/jpeg', 0.85))
       }
       img.src = reader.result as string
     }
@@ -684,7 +643,7 @@ export function ClassroomSettings() {
                   <button
                     key={url}
                     type="button"
-                    onClick={() => setAvatar(url)}
+                    onClick={() => syncAvatarToDb(url)}
                     style={{
                       width: '44px', height: '44px', borderRadius: '50%',
                       overflow: 'hidden', border: avatar === url

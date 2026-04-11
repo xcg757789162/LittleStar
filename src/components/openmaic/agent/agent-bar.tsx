@@ -7,7 +7,7 @@ import { cn } from '@/lib/openmaic/utils';
 import { useI18n } from '@/lib/openmaic/hooks/use-i18n';
 import { useSettingsStore } from '@/lib/openmaic/store/settings';
 import { useAgentRegistry } from '@/lib/openmaic/orchestration/registry/store';
-import { resolveAgentVoice, getAvailableProvidersWithVoices } from '@/lib/openmaic/audio/voice-resolver';
+import { resolveAgentVoice, getAvailableProvidersWithVoices, getAllProvidersWithVoices } from '@/lib/openmaic/audio/voice-resolver';
 import { playBrowserTTSPreview } from '@/lib/openmaic/audio/browser-tts-preview';
 import {
   Sparkles,
@@ -482,17 +482,7 @@ export function AgentBar() {
   const ttsEnabled = useSettingsStore((s) => s.ttsEnabled);
 
   const [open, setOpen] = useState(false);
-  const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Load browser native TTS voices
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
-    const loadVoices = () => setBrowserVoices(speechSynthesis.getVoices());
-    loadVoices();
-    speechSynthesis.addEventListener('voiceschanged', loadVoices);
-    return () => speechSynthesis.removeEventListener('voiceschanged', loadVoices);
-  }, []);
 
   const allAgents = listAgents();
   const agents = allAgents.filter((a) => !a.isGenerated);
@@ -501,24 +491,12 @@ export function AgentBar() {
   const nonTeacherSelected = selectedAgents.filter((a) => a.role !== 'teacher');
 
   const serverProviders = getAvailableProvidersWithVoices(ttsProvidersConfig);
+  // 合并：已有 API key 的排前面，其余按 constants.ts 注册顺序补充
+  const allProviders = getAllProvidersWithVoices();
+  const serverIds = new Set(serverProviders.map((p) => p.providerId));
   const availableProviders: ProviderWithVoices[] = [
     ...serverProviders,
-    ...(browserVoices.length > 0
-      ? [
-          {
-            providerId: 'browser-native-tts' as TTSProviderId,
-            providerName: 'Browser Native',
-            voices: browserVoices.map((v) => ({ id: v.voiceURI, name: v.name })),
-            modelGroups: [
-              {
-                modelId: '',
-                modelName: 'Browser Native',
-                voices: browserVoices.map((v) => ({ id: v.voiceURI, name: v.name })),
-              },
-            ],
-          },
-        ]
-      : []),
+    ...allProviders.filter((p) => !serverIds.has(p.providerId)),
   ];
   const showVoice = availableProviders.length > 0;
 
