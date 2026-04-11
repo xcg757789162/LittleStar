@@ -408,6 +408,26 @@ export function usePreGeneration(
     }
   }, [runPreGeneration, childId])
 
+  /**
+   * 监听评测完成事件：评测结束后立即触发预生成
+   * 由 usePlacementTest 的 triggerPreGeneration 通过 CustomEvent('placement-test-completed') 分发
+   */
+  useEffect(() => {
+    const handlePlacementTestCompleted = () => {
+      log.info('收到 placement-test-completed 事件，重置触发标记并启动预生成')
+      hasTriggeredRef.current = false
+      // 延迟 1 秒，等待 mastery_records 和 placement_tests 写入完成
+      setTimeout(() => {
+        void runPreGeneration()
+      }, 1000)
+    }
+
+    window.addEventListener('placement-test-completed', handlePlacementTestCompleted)
+    return () => {
+      window.removeEventListener('placement-test-completed', handlePlacementTestCompleted)
+    }
+  }, [runPreGeneration])
+
   return {
     status,
     pendingCount,

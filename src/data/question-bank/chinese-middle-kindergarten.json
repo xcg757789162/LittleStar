@@ -1,0 +1,146 @@
+{
+  "cn-kg-listen-story": [
+    {
+      "stem": "小兔子去摘萝卜，路上遇到了谁？故事说它遇到了小鹿",
+      "options": [
+        { "text": "小猫", "emoji": "🐱" },
+        { "text": "小鹿", "emoji": "🦌" },
+        { "text": "小狗", "emoji": "🐶" },
+        { "text": "小鸟", "emoji": "🐦" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "故事《龟兔赛跑》中，谁最后赢了比赛？",
+      "options": [
+        { "text": "兔子", "emoji": "🐰" },
+        { "text": "乌龟", "emoji": "🐢" },
+        { "text": "一起到终点", "emoji": "🏁" },
+        { "text": "都没到终点", "emoji": "❌" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    }
+  ],
+  "cn-kg-daily-dialogue": [
+    {
+      "stem": "早上见到老师，应该说什么？",
+      "options": [
+        { "text": "老师再见", "emoji": "👋" },
+        { "text": "老师早上好", "emoji": "🌅" },
+        { "text": "老师晚安", "emoji": "🌙" },
+        { "text": "谢谢老师", "emoji": "🙏" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "别人帮助了你，应该说什么？",
+      "options": [
+        { "text": "再见", "emoji": "👋" },
+        { "text": "对不起", "emoji": "😢" },
+        { "text": "谢谢", "emoji": "🙏" },
+        { "text": "你好", "emoji": "😊" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 1
+    }
+  ],
+  "cn-kg-picture-book": [
+    {
+      "stem": "看图：小猫在树上，小狗在树下。谁在上面？",
+      "options": [
+        { "text": "小狗", "emoji": "🐶" },
+        { "text": "小猫", "emoji": "🐱" },
+        { "text": "都在上面", "emoji": "⬆️" },
+        { "text": "都在下面", "emoji": "⬇️" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "图画书里太阳出来了，小朋友们在做什么？最可能是——",
+      "options": [
+        { "text": "在睡觉", "emoji": "😴" },
+        { "text": "在户外玩耍", "emoji": "🎉" },
+        { "text": "在看电视", "emoji": "📺" },
+        { "text": "在洗澡", "emoji": "🛁" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    }
+  ],
+  "cn-kg-pencil-grip": [
+    {
+      "stem": "正确的握笔姿势，哪根手指放在笔的上面？",
+      "options": [
+        { "text": "大拇指", "emoji": "👍" },
+        { "text": "食指", "emoji": "☝️" },
+        { "text": "中指", "emoji": "🖕" },
+        { "text": "小拇指", "emoji": "🤙" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "写字时应该怎么坐？",
+      "options": [
+        { "text": "趴在桌子上", "emoji": "😴" },
+        { "text": "身体坐直，两脚放平", "emoji": "🪑" },
+        { "text": "躺在椅子上", "emoji": "🛋️" },
+        { "text": "站着写", "emoji": "🧍" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    }
+  ],
+  "cn-kg-name-recognition": [
+    {
+      "stem": "下面哪个是汉字"大"？",
+      "options": [
+        { "text": "大", "emoji": "✅" },
+        { "text": "太", "emoji": "❌" },
+        { "text": "天", "emoji": "❌" },
+        { "text": "犬", "emoji": "❌" }
+      ],
+      "correctIndex": 0,
+      "difficulty": 2
+    },
+    {
+      "stem": "\"小\"的反义词是什么？",
+      "options": [
+        { "text": "多", "emoji": "➕" },
+        { "text": "少", "emoji": "➖" },
+        { "text": "大", "emoji": "🔝" },
+        { "text": "长", "emoji": "📏" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 2
+    }
+  ],
+  "cn-kg-common-signs": [
+    {
+      "stem": "洗手间门上写着\"男\"，这是给谁用的？",
+      "options": [
+        { "text": "女生", "emoji": "👩" },
+        { "text": "男生", "emoji": "👨" },
+        { "text": "所有人", "emoji": "👥" },
+        { "text": "老师", "emoji": "👨‍🏫" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "看到\"出口\"两个字，说明这里可以——",
+      "options": [
+        { "text": "进去", "emoji": "➡️" },
+        { "text": "出去", "emoji": "🚪" },
+        { "text": "休息", "emoji": "😴" },
+        { "text": "吃东西", "emoji": "🍔" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    }
+  ]
+}
