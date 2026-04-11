@@ -265,24 +265,11 @@ export class PlacementTestEngine {
       if (bankItem) {
         plan.push(this.bankItemToChoiceQuestion(bankItem, targetNode, mod, 'preset'))
       } else {
-        // 题库中没有 → 生成占位选择题（后续由 AI 补充或跳过）
-        // 这里仍然加入 plan，但标记为需要 AI 生成
-        plan.push({
-          nodeId: targetNode.id,
-          nodeName: targetNode.name,
-          moduleId: mod.id,
-          moduleOrder: mod.order,
-          difficulty: targetNode.difficulty,
-          stem: `关于「${targetNode.name}」的问题`,
-          options: [
-            { text: '选项 A', emoji: '🅰️' },
-            { text: '选项 B', emoji: '🅱️' },
-            { text: '选项 C', emoji: '©️' },
-            { text: '选项 D', emoji: '🇩' },
-          ],
-          correctIndex: 0,
-          source: 'preset',
-        })
+        // 题库中没有 → 跳过该知识点（不展示占位题）
+        // 后续补题逻辑会从其他知识点填充
+        console.warn(
+          `[PlacementEngine] 题库缺少知识点 "${targetNode.id}" (${targetNode.name}) 的题目，跳过`,
+        )
       }
     }
 

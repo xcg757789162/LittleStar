@@ -3,12 +3,27 @@
  *
  * 从 JSON 文件加载预设评测题目，按知识点 ID 索引。
  * 每个科目+年级组合对应一个 JSON 文件。
+ *
+ * 注意：使用静态 import 确保 Vite 打包时正确包含 JSON 文件，
+ * 避免纯动态 import(`./${var}`) 在生产构建后找不到模块。
  */
 
 import type { Subject, GradeLevel, QuestionBankItem } from '@/types/models'
 
+// === 静态 import 所有题库 JSON ===
+import mathMiddleKindergarten from './math-middle-kindergarten.json'
+import chineseMiddleKindergarten from './chinese-middle-kindergarten.json'
+import englishMiddleKindergarten from './english-middle-kindergarten.json'
+
 /** 题库 JSON 文件格式：知识点 ID → 题目数组 */
 export type QuestionBankData = Record<string, QuestionBankItem[]>
+
+/** 静态题库映射表（确保 Vite 打包时正确包含） */
+const questionBankRegistry: Record<string, QuestionBankData> = {
+  'math:middle-kindergarten': mathMiddleKindergarten as unknown as QuestionBankData,
+  'chinese:middle-kindergarten': chineseMiddleKindergarten as unknown as QuestionBankData,
+  'english:middle-kindergarten': englishMiddleKindergarten as unknown as QuestionBankData,
+}
 
 /** 内存缓存 */
 const bankCache = new Map<string, Map<string, QuestionBankItem[]>>()
@@ -36,10 +51,17 @@ export async function loadQuestionBank(
   if (cached) return cached
 
   try {
-    // 将 gradeLevel 转换为文件名格式（如 middle-kindergarten）
-    const fileName = `${subject}-${gradeLevel}.json`
-    // 动态 import JSON 文件
-    const data: QuestionBankData = (await import(`./${fileName}`)).default
+    // 从静态注册表获取题库数据
+    const data: QuestionBankData | undefined = questionBankRegistry[cacheKey]
+
+    if (!data) {
+      console.warn(
+        `[QuestionBank] 题库 ${subject}-${gradeLevel} 未注册，将使用 AI 生成题目`,
+      )
+      const emptyMap = new Map<string, QuestionBankItem[]>()
+      bankCache.set(cacheKey, emptyMap)
+      return emptyMap
+    }
 
     // 转换为 Map
     const questionMap = new Map<string, QuestionBankItem[]>()
@@ -67,13 +89,17 @@ export async function loadQuestionBank(
       }
     }
 
+    console.info(
+      `[QuestionBank] 题库 ${subject}-${gradeLevel} 加载成功，共 ${questionMap.size} 个知识点`,
+    )
+
     // 缓存
     bankCache.set(cacheKey, questionMap)
 
     return questionMap
-  } catch {
+  } catch (err) {
     console.warn(
-      `[QuestionBank] 题库 ${subject}-${gradeLevel} 加载失败，将使用 AI 生成题目`,
+      `[QuestionBank] 题库 ${subject}-${gradeLevel} 加载失败:`, err,
     )
     // 返回空 Map（由调用方降级到 AI 生成）
     const emptyMap = new Map<string, QuestionBankItem[]>()

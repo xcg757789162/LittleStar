@@ -97,7 +97,7 @@
   ],
   "cn-kg-name-recognition": [
     {
-      "stem": "下面哪个是汉字"大"？",
+      "stem": "下面哪个是汉字「大」？",
       "options": [
         { "text": "大", "emoji": "✅" },
         { "text": "太", "emoji": "❌" },
@@ -108,7 +108,7 @@
       "difficulty": 2
     },
     {
-      "stem": "\"小\"的反义词是什么？",
+      "stem": "「小」的反义词是什么？",
       "options": [
         { "text": "多", "emoji": "➕" },
         { "text": "少", "emoji": "➖" },
