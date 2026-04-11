@@ -16,6 +16,8 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
 import { usePlacementTests } from '@/hooks/queries'
+import { useMasteryRecords } from '@/hooks/queries/useMasteryRecords'
+import { useKnowledgeNodes } from '@/hooks/queries/useKnowledgeNodes'
 import { ClassroomCache } from '@/services/openmaic/cache'
 import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
 import { usePreGeneration } from '@/hooks/usePreGeneration'
@@ -355,6 +357,48 @@ export function Home() {
 
   // 查询评测状态
   const { data: placementTests, isLoading: isLoadingTests, isError: isTestsError, refetch: refetchTests } = usePlacementTests(childId)
+
+  // 查询学习记录 + 知识点列表（用于首页科目卡片展示真实学习情况）
+  const { data: masteryRecords } = useMasteryRecords(childId)
+  const { data: allKnowledgeNodes } = useKnowledgeNodes()
+
+  // 按科目计算基于学习记录的已掌握数量：masteryLevel ≥ 80 为已掌握
+  const subjectMasteryStats = useMemo(() => {
+    const stats = new Map<string, { mastered: number; learning: number; total: number }>()
+    if (!allKnowledgeNodes) return stats
+
+    // 先统计每科目的知识点总数
+    const subjectNodeIds = new Map<string, Set<string>>()
+    for (const node of allKnowledgeNodes) {
+      if (!subjectNodeIds.has(node.subject)) {
+        subjectNodeIds.set(node.subject, new Set())
+      }
+      subjectNodeIds.get(node.subject)!.add(node.id ?? '')
+    }
+
+    // 初始化各科目统计
+    for (const [subj, nodeIds] of subjectNodeIds) {
+      stats.set(subj, { mastered: 0, learning: 0, total: nodeIds.size })
+    }
+
+    // 用学习记录填充
+    if (masteryRecords) {
+      for (const rec of masteryRecords) {
+        // 找到这个知识点属于哪个科目
+        const node = allKnowledgeNodes.find(n => n.id === rec.knowledgeNodeId)
+        if (!node) continue
+        const s = stats.get(node.subject)
+        if (!s) continue
+        if (rec.masteryLevel >= 80) {
+          s.mastered++
+        } else {
+          s.learning++
+        }
+      }
+    }
+
+    return stats
+  }, [allKnowledgeNodes, masteryRecords])
 
   // 保留评测结果数据的 Map：subject → PlacementTest（取最新一次）
   const completedSubjectsMap = useMemo(() => {
@@ -875,7 +919,8 @@ export function Home() {
               const result: PlacementResult | undefined = test?.result
               const score = result?.overallScore ?? 0
               const stars = result ? getScoreStars(result.overallScore) : 0
-              const masteredCount = result?.masteredNodes?.length ?? 0
+              const masteredCount = subjectMasteryStats.get(subject.key)?.mastered ?? 0
+              const learningCount = subjectMasteryStats.get(subject.key)?.learning ?? 0
               const label = result ? getScoreLabel(result.overallScore) : '已完成'
 
               return (
@@ -947,13 +992,15 @@ export function Home() {
                       </span>
                       <MiniStarRating stars={stars} size={13} color={subject.color} />
                     </div>
-                    {masteredCount > 0 && (
+                    {(masteredCount > 0 || learningCount > 0) && (
                       <span style={{
                         fontFamily: T.fontBody,
                         fontSize: '12px',
                         color: T.textLight,
                       }}>
-                        已掌握 {masteredCount} 个知识点
+                        {masteredCount > 0 && `⭐ 已掌握 ${masteredCount} 个`}
+                        {masteredCount > 0 && learningCount > 0 && '　'}
+                        {learningCount > 0 && `📖 学习中 ${learningCount} 个`}
                       </span>
                     )}
                   </div>

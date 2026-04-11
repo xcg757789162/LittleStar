@@ -1,11 +1,12 @@
 /**
- * 知识点详情页 — 科目掌握情况
+ * 知识点详情页 — 科目学习情况
  *
- * 展示某科目下所有知识点及其掌握状态：
- *   ✅ 已掌握（来自 placementTest.result.masteredNodes）
- *   📖 学习中（有 masteryRecord 但未在 masteredNodes 中）
- *   ⬜ 未学习
+ * 纯学习记录驱动的掌握判定（不依赖评测结果）：
+ *   ✅ 已掌握：masteryRecord 存在且 masteryLevel ≥ 80
+ *   📖 学习中：masteryRecord 存在但 masteryLevel < 80
+ *   ⬜ 未学习：没有 masteryRecord
  *
+ * 数据来源统一：masteryRecords.knowledgeNodeId === knowledge_nodes.id
  * 设计风格：Sunny Playground — 与 Home.tsx 统一
  */
 
@@ -13,10 +14,9 @@ import { useMemo } from 'react'
 import { motion } from 'motion/react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
-import { usePlacementTests } from '@/hooks/queries'
 import { useKnowledgeNodesBySubject } from '@/hooks/queries/useKnowledgeNodes'
 import { useMasteryRecords } from '@/hooks/queries/useMasteryRecords'
-import type { Subject, PlacementResult, KnowledgeNode, MasteryRecord } from '@/types/models'
+import type { Subject, KnowledgeNode } from '@/types/models'
 
 /* ═══════════════════════════════════════════
    设计 Token — 与 Home.tsx 保持一致
@@ -193,23 +193,11 @@ export function SubjectMasteryPage() {
 
   const theme = SUBJECT_THEMES[subject ?? ''] ?? SUBJECT_THEMES.math
 
-  // 查询数据
-  const { data: placementTests } = usePlacementTests(childId)
+  // 查询数据：知识点列表 + 学习记录（不依赖评测结果）
   const { data: knowledgeNodes, isLoading: isLoadingNodes } = useKnowledgeNodesBySubject(subject as Subject | undefined)
   const { data: masteryRecords } = useMasteryRecords(childId)
 
-  // 从最新评测中提取已掌握节点 ID
-  const masteredNodeIds = useMemo(() => {
-    if (!placementTests || !subject) return new Set<string>()
-    const subjectTests = placementTests.filter((t) => t.subject === subject)
-    if (subjectTests.length === 0) return new Set<string>()
-    // 取最新一次评测
-    const latest = subjectTests[0]
-    const result: PlacementResult | undefined = latest?.result
-    return new Set(result?.masteredNodes ?? [])
-  }, [placementTests, subject])
-
-  // 有掌握率记录的节点 ID → masteryLevel
+  // 学习记录映射：knowledgeNodeId → masteryLevel
   const masteryMap = useMemo(() => {
     if (!masteryRecords) return new Map<string, number>()
     const m = new Map<string, number>()
@@ -219,7 +207,7 @@ export function SubjectMasteryPage() {
     return m
   }, [masteryRecords])
 
-  // 将知识点按状态分组
+  // 纯基于学习记录判定状态：≥80 已掌握 | <80 学习中 | 无记录 未学习
   const { nodesWithStatus, masteredCount, learningCount, notStartedCount } = useMemo(() => {
     if (!knowledgeNodes) return { nodesWithStatus: [], masteredCount: 0, learningCount: 0, notStartedCount: 0 }
 
@@ -229,20 +217,22 @@ export function SubjectMasteryPage() {
 
     const nodes: NodeWithStatus[] = knowledgeNodes.map((node) => {
       const nodeId = node.id ?? ''
-      if (masteredNodeIds.has(nodeId)) {
+      const level = masteryMap.get(nodeId)
+
+      if (level != null && level >= 80) {
         mastered++
-        return { node, status: 'mastered' as NodeStatus, masteryLevel: masteryMap.get(nodeId) ?? 100 }
+        return { node, status: 'mastered' as NodeStatus, masteryLevel: level }
       }
-      if (masteryMap.has(nodeId)) {
+      if (level != null) {
         learning++
-        return { node, status: 'learning' as NodeStatus, masteryLevel: masteryMap.get(nodeId) }
+        return { node, status: 'learning' as NodeStatus, masteryLevel: level }
       }
       notStarted++
       return { node, status: 'not_started' as NodeStatus }
     })
 
     return { nodesWithStatus: nodes, masteredCount: mastered, learningCount: learning, notStartedCount: notStarted }
-  }, [knowledgeNodes, masteredNodeIds, masteryMap])
+  }, [knowledgeNodes, masteryMap])
 
   const totalCount = nodesWithStatus.length
   const progressPercent = totalCount > 0 ? Math.round((masteredCount / totalCount) * 100) : 0
@@ -301,11 +291,11 @@ export function SubjectMasteryPage() {
               fontWeight: 700,
               color: theme.color,
             }}>
-              {theme.emoji} {theme.label}知识点
+              {theme.emoji} {theme.label}学习情况
             </div>
           </div>
 
-          {/* 掌握率圆形进度 */}
+          {/* 学习进度圆形指示器 */}
           <div style={{
             position: 'relative',
             width: '44px',
@@ -761,8 +751,8 @@ function KnowledgeNodeCard({
             ))}
           </span>
 
-          {/* 掌握率（仅学习中显示） */}
-          {status === 'learning' && masteryLevel != null && (
+          {/* 掌握率（已掌握和学习中都显示） */}
+          {(status === 'mastered' || status === 'learning') && masteryLevel != null && (
             <span style={{
               fontFamily: T.fontBody,
               fontSize: '11px',
