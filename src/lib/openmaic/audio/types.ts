@@ -159,6 +159,39 @@ export type ASRProviderId = 'openai-whisper' | 'browser-native' | 'qwen-asr';
 // | 'deepgram-asr'
 // | 'azure-asr'
 
+// ============================================================================
+// ISE (Intelligent Speech Evaluation / 发音评测) Types
+// ============================================================================
+
+/**
+ * ISE Provider IDs
+ *
+ * Add new ISE providers here as union members.
+ * Keep in sync with ISE_PROVIDERS registry in ise-constants.ts
+ */
+export type ISEProviderId = 'iflytek-ise' | 'text-match-fallback';
+// Add new ISE providers below (uncomment and modify):
+// | 'tencent-ise'
+// | 'azure-pronunciation'
+
+/**
+ * ISE Provider Configuration
+ */
+export interface ISEProviderConfig {
+  id: ISEProviderId;
+  name: string;
+  requiresApiKey: boolean;
+  description?: string;
+  icon?: string;
+  /** Config fields required for this provider */
+  configFields?: Array<{
+    key: string;
+    label: string;
+    type: 'text' | 'password';
+    placeholder?: string;
+  }>;
+}
+
 /**
  * ASR Provider Configuration
  */

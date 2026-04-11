@@ -50,6 +50,9 @@ import type { TTSProviderId } from '@/lib/openmaic/audio/types';
 import { ASRSettings } from './asr-settings';
 import { ASR_PROVIDERS } from '@/lib/openmaic/audio/constants';
 import type { ASRProviderId } from '@/lib/openmaic/audio/types';
+import { ISESettings } from './ise-settings';
+import { ISE_PROVIDERS } from '@/lib/openmaic/audio/ise-constants';
+import type { ISEProviderId } from '@/lib/openmaic/audio/types';
 import { WebSearchSettings } from './web-search-settings';
 import { WEB_SEARCH_PROVIDERS } from '@/lib/openmaic/web-search/constants';
 import type { WebSearchProviderId } from '@/lib/openmaic/web-search/types';
@@ -75,37 +78,54 @@ function ProviderListColumn<T extends string>({
   t: (key: string) => string;
 }) {
   return (
-    <div className="flex-shrink-0 bg-background flex flex-col" style={{ width }}>
-      <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+    <div
+      className="flex-shrink-0 flex flex-col border-r border-orange-100/70 bg-white/70 backdrop-blur-sm"
+      style={{ width }}
+    >
+      <div className="border-b border-orange-100/70 px-4 py-4">
+        <div className="rounded-2xl bg-gradient-to-br from-sky-50 via-white to-orange-50 p-3">
+          <div className="text-sm font-semibold text-slate-800">可选服务</div>
+          <p className="mt-1 text-xs leading-5 text-slate-500">选择一个服务，再在右侧完成配置。</p>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {providers.map((provider) => (
           <button
             key={provider.id}
             onClick={() => onSelect(provider.id)}
             className={cn(
-              'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all border text-left',
+              'w-full rounded-2xl border px-3 py-3 text-left transition-all duration-200',
               selectedId === provider.id
-                ? 'bg-primary/5 border-primary/50 shadow-sm'
-                : 'border-transparent hover:bg-muted/50',
+                ? 'border-orange-200 bg-gradient-to-r from-orange-50 via-rose-50 to-white shadow-[0_10px_24px_rgba(249,115,22,0.10)]'
+                : 'border-transparent bg-white/80 hover:border-orange-100 hover:bg-white',
             )}
           >
-            {provider.icon ? (
-              <img
-                src={provider.icon}
-                alt={provider.name}
-                className="w-5 h-5 rounded"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              <Box className="h-5 w-5 text-muted-foreground" />
-            )}
-            <span className="font-medium text-sm flex-1 truncate">{provider.name}</span>
-            {configs[provider.id]?.isServerConfigured && (
-              <span className="text-[10px] px-1 py-0 h-4 leading-4 rounded shrink-0 bg-muted text-muted-foreground">
-                {t('settings.serverConfigured')}
-              </span>
-            )}
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-50 ring-1 ring-slate-200/70">
+                {provider.icon ? (
+                  <img
+                    src={provider.icon}
+                    alt={provider.name}
+                    className="h-5 w-5 rounded"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <Box className="h-4 w-4 text-slate-400" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-semibold text-slate-800">{provider.name}</span>
+                  {configs[provider.id]?.isServerConfigured && (
+                    <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-600 ring-1 ring-emerald-100">
+                      {t('settings.serverConfigured')}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
           </button>
         ))}
       </div>
@@ -135,6 +155,35 @@ function getASRProviderName(providerId: ASRProviderId, t: (key: string) => strin
     'qwen-asr': t('settings.providerQwenASR'),
   };
   return names[providerId];
+}
+
+function getISEProviderName(providerId: ISEProviderId): string {
+  return ISE_PROVIDERS[providerId]?.name || providerId;
+}
+
+function getSectionSummary(section: SettingsSection): string {
+  switch (section) {
+    case 'providers':
+      return '先配置课堂最核心的大模型服务，决定对话、推理和生成的基础能力。';
+    case 'image':
+      return '给课堂、绘本和任务生成插图。常用服务配好后就能直接出图。';
+    case 'video':
+      return '把故事、课堂内容或创作任务生成短视频。';
+    case 'tts':
+      return '让老师和同学开口说话，决定发音、音色和语速。';
+    case 'asr':
+      return '默认推荐浏览器原生语音识别，直接可用；只有切换到高精度服务时才需要单独配置 Key。';
+    case 'ise':
+      return '用于发音评测、口语打分和跟读反馈。';
+    case 'pdf':
+      return '给 AI 解析 PDF 资料，适合导入课件或讲义。';
+    case 'web-search':
+      return '为 AI 提供联网搜索能力，补充实时信息。';
+    case 'general':
+      return '通用偏好、系统行为和体验设置。';
+    default:
+      return '';
+  }
 }
 
 // ─── Image/Video provider name helpers ───
@@ -182,8 +231,8 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
   const { t } = useI18n();
 
   // Get settings from store
-  const providerId = useSettingsStore((state) => state.providerId);
-  const _modelId = useSettingsStore((state) => state.modelId);
+  const activeProviderId = useSettingsStore((state) => state.providerId);
+  const activeModelId = useSettingsStore((state) => state.modelId);
   const providersConfig = useSettingsStore((state) => state.providersConfig);
   const pdfProviderId = useSettingsStore((state) => state.pdfProviderId);
   const pdfProvidersConfig = useSettingsStore((state) => state.pdfProvidersConfig);
@@ -197,6 +246,8 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
   const ttsProvidersConfig = useSettingsStore((state) => state.ttsProvidersConfig);
   const asrProviderId = useSettingsStore((state) => state.asrProviderId);
   const asrProvidersConfig = useSettingsStore((state) => state.asrProvidersConfig);
+  const iseProviderId = useSettingsStore((state) => state.iseProviderId);
+  const iseProvidersConfig = useSettingsStore((state) => state.iseProvidersConfig);
 
   // Store actions
   const setModel = useSettingsStore((state) => state.setModel);
@@ -204,6 +255,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
   const setProvidersConfig = useSettingsStore((state) => state.setProvidersConfig);
   const setTTSProvider = useSettingsStore((state) => state.setTTSProvider);
   const setASRProvider = useSettingsStore((state) => state.setASRProvider);
+  const setISEProvider = useSettingsStore((state) => state.setISEProvider);
 
   // Navigation
   const [activeSection, setActiveSection] = useState<SettingsSection>('providers');
@@ -452,7 +504,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
       const firstRemainingPid = Object.keys(updatedConfig)[0] as ProviderId | undefined;
       setSelectedProviderId(firstRemainingPid || 'openai');
     }
-    if (providerId === pid) {
+    if (activeProviderId === pid) {
       const firstRemainingPid = Object.keys(updatedConfig)[0] as ProviderId | undefined;
       const firstModel = firstRemainingPid
         ? updatedConfig[firstRemainingPid]?.serverModels?.[0] ||
@@ -486,16 +538,65 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
     isServerConfigured: config.isServerConfigured,
   }));
 
-  // Sections that show a provider list column
-  const _hasProviderList = [
-    'providers',
-    'pdf',
-    'web-search',
-    'image',
-    'video',
-    'tts',
-    'asr',
-  ].includes(activeSection);
+  const sectionItems = [
+    {
+      id: 'providers' as SettingsSection,
+      label: t('settings.providers'),
+      subtitle: '先配对话模型',
+      icon: Box,
+    },
+    {
+      id: 'image' as SettingsSection,
+      label: t('settings.imageSettings'),
+      subtitle: '课堂插图生成',
+      icon: ImageIcon,
+    },
+    {
+      id: 'video' as SettingsSection,
+      label: t('settings.videoSettings'),
+      subtitle: '故事视频生成',
+      icon: Film,
+    },
+    {
+      id: 'tts' as SettingsSection,
+      label: t('settings.ttsSettings'),
+      subtitle: '老师开口说话',
+      icon: Volume2,
+    },
+    {
+      id: 'asr' as SettingsSection,
+      label: t('settings.asrSettings'),
+      subtitle: '默认免配置可用',
+      icon: Mic,
+    },
+    {
+      id: 'ise' as SettingsSection,
+      label: '发音评测',
+      subtitle: '口语打分反馈',
+      icon: Mic,
+    },
+    {
+      id: 'pdf' as SettingsSection,
+      label: t('settings.pdfSettings'),
+      subtitle: '解析 PDF 资料',
+      icon: FileText,
+    },
+    {
+      id: 'web-search' as SettingsSection,
+      label: t('settings.webSearchSettings'),
+      subtitle: '联网搜索信息',
+      icon: Search,
+    },
+    {
+      id: 'general' as SettingsSection,
+      label: t('settings.systemSettings'),
+      subtitle: '通用系统偏好',
+      icon: Settings,
+    },
+  ];
+
+  const activeSectionItem = sectionItems.find((item) => item.id === activeSection) ?? sectionItems[0];
+  const ActiveSectionIcon = activeSectionItem.icon;
 
   // Get header content based on section
   const getHeaderContent = () => {
@@ -661,6 +762,26 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
           </>
         );
       }
+      case 'ise': {
+        const iseIcon = ISE_PROVIDERS[iseProviderId]?.icon;
+        return (
+          <>
+            {iseIcon ? (
+              <img
+                src={iseIcon}
+                alt=""
+                className="w-8 h-8 rounded"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <Mic className="h-6 w-6 text-muted-foreground" />
+            )}
+            <h2 className="text-lg font-semibold">{getISEProviderName(iseProviderId)}</h2>
+          </>
+        );
+      }
       default:
         return null;
     }
@@ -668,115 +789,59 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[85vh] p-0 gap-0 block" showCloseButton={false}>
+      <DialogContent
+        className="block h-[88vh] w-[min(1280px,96vw)] max-w-[96vw] gap-0 overflow-hidden rounded-[28px] border border-white/70 bg-[#fffaf6] p-0 shadow-[0_30px_120px_rgba(15,23,42,0.18)]"
+        showCloseButton={false}
+      >
         <DialogTitle className="sr-only">{t('settings.title')}</DialogTitle>
         <DialogDescription className="sr-only">{t('settings.description')}</DialogDescription>
-        <div className="flex h-full overflow-hidden">
+        <div className="flex h-full overflow-hidden bg-gradient-to-br from-orange-50 via-rose-50 to-sky-50">
           {/* Left Sidebar - Navigation */}
-          <div className="flex-shrink-0 bg-muted/30 p-3 space-y-1" style={{ width: sidebarWidth }}>
-            <button
-              onClick={() => setActiveSection('providers')}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-left min-w-0',
-                activeSection === 'providers'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'hover:bg-muted',
-              )}
-            >
-              <Box className="h-4 w-4 shrink-0" />
-              <span className="truncate">{t('settings.providers')}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('image')}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-left min-w-0',
-                activeSection === 'image'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'hover:bg-muted',
-              )}
-            >
-              <ImageIcon className="h-4 w-4 shrink-0" />
-              <span className="truncate">{t('settings.imageSettings')}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('video')}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-left min-w-0',
-                activeSection === 'video'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'hover:bg-muted',
-              )}
-            >
-              <Film className="h-4 w-4 shrink-0" />
-              <span className="truncate">{t('settings.videoSettings')}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('tts')}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-left min-w-0',
-                activeSection === 'tts'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'hover:bg-muted',
-              )}
-            >
-              <Volume2 className="h-4 w-4 shrink-0" />
-              <span className="truncate">{t('settings.ttsSettings')}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('asr')}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-left min-w-0',
-                activeSection === 'asr'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'hover:bg-muted',
-              )}
-            >
-              <Mic className="h-4 w-4 shrink-0" />
-              <span className="truncate">{t('settings.asrSettings')}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('pdf')}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-left min-w-0',
-                activeSection === 'pdf'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'hover:bg-muted',
-              )}
-            >
-              <FileText className="h-4 w-4 shrink-0" />
-              <span className="truncate">{t('settings.pdfSettings')}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('web-search')}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-left min-w-0',
-                activeSection === 'web-search'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'hover:bg-muted',
-              )}
-            >
-              <Search className="h-4 w-4 shrink-0" />
-              <span className="truncate">{t('settings.webSearchSettings')}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('general')}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-left min-w-0',
-                activeSection === 'general'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'hover:bg-muted',
-              )}
-            >
-              <Settings className="h-4 w-4 shrink-0" />
-              <span className="truncate">{t('settings.systemSettings')}</span>
-            </button>
+          <div
+            className="flex-shrink-0 border-r border-orange-100/80 bg-white/70 p-3 backdrop-blur-sm"
+            style={{ width: sidebarWidth }}
+          >
+            <div className="mb-3 rounded-[24px] border border-orange-100 bg-gradient-to-br from-orange-100 via-amber-50 to-white p-4 shadow-sm">
+              <div className="mb-1 text-base font-semibold text-slate-800">家长 AI 设置</div>
+              <p className="text-xs leading-5 text-slate-500">
+                先配置最常用的模型与语音能力；语音识别默认可直接使用，不必额外再配一套 Key。
+              </p>
+            </div>
+            <div className="space-y-2 overflow-y-auto pb-2">
+              {sectionItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeSection === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveSection(item.id)}
+                    className={cn(
+                      'group w-full rounded-2xl border px-3 py-3 text-left transition-all duration-200',
+                      isActive
+                        ? 'border-orange-200 bg-gradient-to-r from-orange-50 via-rose-50 to-white shadow-[0_10px_24px_rgba(249,115,22,0.10)]'
+                        : 'border-transparent bg-white/70 hover:border-orange-100 hover:bg-white',
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={cn(
+                          'flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ring-1 transition-colors',
+                          isActive
+                            ? 'bg-gradient-to-br from-orange-400 to-pink-400 text-white ring-orange-200'
+                            : 'bg-slate-50 text-slate-500 ring-slate-200/70 group-hover:bg-orange-50 group-hover:text-orange-500',
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold text-slate-800">{item.label}</div>
+                        <div className="mt-1 truncate text-[11px] text-slate-500">{item.subtitle}</div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Sidebar resize handle */}
@@ -936,36 +1001,98 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
             </>
           )}
 
+          {activeSection === 'ise' && (
+            <>
+              <ProviderListColumn
+                providers={Object.values(ISE_PROVIDERS).map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  icon: p.icon,
+                }))}
+                configs={iseProvidersConfig}
+                selectedId={iseProviderId}
+                onSelect={setISEProvider}
+                width={providerListWidth}
+                t={t}
+              />
+              <div
+                onMouseDown={(e) => handleResizeStart(e, 'providerList')}
+                className="flex-shrink-0 w-[5px] cursor-col-resize group flex justify-center"
+              >
+                <div className="w-px h-full bg-border group-hover:bg-primary/50 transition-colors" />
+              </div>
+            </>
+          )}
+
           {/* Right - Configuration Panel */}
-          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b">
-              <div className="flex items-center gap-3">{getHeaderContent()}</div>
-              <div className="flex items-center gap-2">
-                {activeSection === 'providers' &&
-                  !providersConfig[selectedProviderId]?.isBuiltIn && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-destructive hover:text-destructive"
-                      onClick={() => handleDeleteProvider(selectedProviderId)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
-                  <X className="h-4 w-4" />
-                </Button>
+            <div className="border-b border-orange-100/80 bg-white/75 px-6 py-5 backdrop-blur-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex items-start gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-400 to-pink-400 text-white shadow-[0_12px_30px_rgba(249,115,22,0.18)]">
+                    <ActiveSectionIcon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-orange-50 px-2.5 py-1 text-[11px] font-medium text-orange-600 ring-1 ring-orange-100">
+                        {activeSectionItem.label}
+                      </span>
+                      {activeSection === 'asr' && (
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-600 ring-1 ring-emerald-100">
+                          默认免 Key
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex min-w-0 items-center gap-3 text-slate-800">{getHeaderContent()}</div>
+                    <p className="mt-2 text-sm leading-6 text-slate-500">{getSectionSummary(activeSection)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {activeSection === 'providers' &&
+                    !providersConfig[selectedProviderId]?.isBuiltIn && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 rounded-2xl px-3 text-destructive hover:bg-red-50 hover:text-destructive"
+                        onClick={() => handleDeleteProvider(selectedProviderId)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 rounded-2xl hover:bg-slate-100"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-5">
+            <div className="flex-1 overflow-y-auto p-6">
+              {activeSection !== 'asr' && (
+                <div className="mb-5 rounded-[24px] border border-orange-100 bg-white/85 p-4 shadow-sm">
+                  <div className="text-sm font-semibold text-slate-800">
+                    {`当前分区：${activeSectionItem.label}`}
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    {getSectionSummary(activeSection)}
+                  </p>
+                </div>
+              )}
+
               {activeSection === 'general' && <GeneralSettings />}
 
               {activeSection === 'providers' && selectedProvider && (
                 <ProviderConfigPanel
                   provider={selectedProvider}
+                  activeProviderId={activeProviderId}
+                  activeModelId={activeModelId}
+                  onSetActiveModel={(modelId) => setModel(selectedProviderId, modelId)}
                   initialApiKey={providersConfig[selectedProviderId]?.apiKey || ''}
                   initialBaseUrl={providersConfig[selectedProviderId]?.baseUrl || ''}
                   initialRequiresApiKey={
@@ -998,28 +1125,45 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
               )}
               {activeSection === 'tts' && <TTSSettings selectedProviderId={ttsProviderId} />}
               {activeSection === 'asr' && <ASRSettings selectedProviderId={asrProviderId} />}
+              {activeSection === 'ise' && <ISESettings selectedProviderId={iseProviderId} />}
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-3 px-5 py-3 border-t bg-muted/30">
-              {saveStatus === 'saved' && (
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>{t('settings.saveSuccess')}</span>
-                </div>
-              )}
-              {saveStatus === 'error' && (
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <XCircle className="h-4 w-4" />
-                  <span>{t('settings.saveFailed')}</span>
-                </div>
-              )}
-              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-                {t('settings.close')}
-              </Button>
-              <Button size="sm" onClick={handleSave}>
-                {t('settings.save')}
-              </Button>
+            <div className="flex items-center justify-between gap-3 border-t border-orange-100/80 bg-white/80 px-6 py-4 backdrop-blur-sm">
+              <div className="flex min-h-6 items-center gap-2 text-sm">
+                {saveStatus === 'saved' && (
+                  <div className="flex items-center gap-1.5 text-emerald-600">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>{t('settings.saveSuccess')}</span>
+                  </div>
+                )}
+                {saveStatus === 'error' && (
+                  <div className="flex items-center gap-1.5 text-red-500">
+                    <XCircle className="h-4 w-4" />
+                    <span>{t('settings.saveFailed')}</span>
+                  </div>
+                )}
+                {saveStatus === 'idle' && (
+                  <span className="text-xs text-slate-400">改完后点保存即可生效</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-2xl border-orange-200 bg-white hover:bg-orange-50"
+                  onClick={() => onOpenChange(false)}
+                >
+                  {t('settings.close')}
+                </Button>
+                <Button
+                  size="sm"
+                  className="rounded-2xl bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-[0_10px_24px_rgba(249,115,22,0.18)] hover:from-orange-500 hover:to-pink-500"
+                  onClick={handleSave}
+                >
+                  {t('settings.save')}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

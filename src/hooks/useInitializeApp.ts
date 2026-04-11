@@ -76,6 +76,19 @@ export function useInitializeApp(): InitializeAppState {
             log.info('孩子头像为 emoji 或默认值，不覆盖本地头像:', firstChild.avatar)
           }
         }
+
+        // 从数据库恢复昵称（children.name）
+        if (firstChild?.name) {
+          log.info('从数据库恢复昵称:', firstChild.name)
+          useUserProfileStore.getState().setNickname(firstChild.name)
+        }
+
+        // 从数据库恢复自我介绍（children.settings.bio）
+        const childSettings = firstChild?.settings as Record<string, unknown> | undefined
+        if (childSettings?.bio && typeof childSettings.bio === 'string') {
+          log.info('从数据库恢复自我介绍:', (childSettings.bio as string).substring(0, 30))
+          useUserProfileStore.getState().setBio(childSettings.bio as string)
+        }
       } catch (err) {
         // API 调用失败（后端离线或网络问题）
         // 页面组件会通过 React Query 按需重试

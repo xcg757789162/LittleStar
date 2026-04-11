@@ -28,6 +28,17 @@ export function ChildSwitcher({ visible, onClose }: ChildSwitcherProps) {
     if (child.avatar?.startsWith('data:') || child.avatar?.startsWith('/avatars/')) {
       useUserProfileStore.getState().setAvatar(child.avatar)
     }
+    // 同步昵称
+    if (child.name) {
+      useUserProfileStore.getState().setNickname(child.name)
+    }
+    // 同步自我介绍（存在 settings.bio 中）
+    const settings = child.settings as Record<string, unknown> | undefined
+    if (settings?.bio && typeof settings.bio === 'string') {
+      useUserProfileStore.getState().setBio(settings.bio)
+    } else {
+      useUserProfileStore.getState().setBio('')
+    }
     onClose()
   }
 

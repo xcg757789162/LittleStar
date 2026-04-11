@@ -108,9 +108,9 @@ export function ModelEditDialog({
             ? t('settings.addNewModelDescription')
             : t('settings.editModelDescription')}
         </DialogDescription>
-        <div className="space-y-4">
-          <div className="pb-3 border-b">
-            <h2 className="text-lg font-semibold">
+        <div className="space-y-5">
+          <div className="pb-4 border-b border-slate-100">
+            <h2 className="text-lg font-semibold text-slate-800">
               {editingModel.modelIndex === null
                 ? t('settings.addNewModel')
                 : t('settings.editModel')}
@@ -119,7 +119,7 @@ export function ModelEditDialog({
 
           {/* Model ID */}
           <div className="space-y-2">
-            <Label>{t('settings.modelId')}</Label>
+            <Label className="text-sm font-medium text-slate-700">{t('settings.modelId')}</Label>
             <Input
               placeholder={t('settings.modelIdPlaceholder')}
               value={editingModel.model.id}
@@ -297,9 +297,9 @@ export function ModelEditDialog({
           </div>
 
           {/* Test Model */}
-          <div className="space-y-3 pt-3 border-t">
+          <div className="space-y-3 pt-4 border-t border-slate-100">
             <div className="flex items-center justify-between">
-              <Label className="text-base">{t('settings.testModel')}</Label>
+              <Label className="text-sm font-semibold text-slate-800">{t('settings.testModel')}</Label>
               <Button
                 variant="outline"
                 size="sm"
@@ -310,11 +310,12 @@ export function ModelEditDialog({
                   (requiresApiKey && !apiKey && !isServerConfigured)
                 }
                 className={cn(
-                  testStatus === 'success' && 'border-green-600 text-green-600 hover:bg-green-50',
-                  testStatus === 'error' && 'border-red-600 text-red-600 hover:bg-red-50',
+                  'shadow-sm',
+                  testStatus === 'success' && 'border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-700',
+                  testStatus === 'error' && 'border-red-200 text-red-600 bg-red-50 hover:bg-red-100 hover:text-red-700',
                 )}
               >
-                {testStatus === 'testing' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {testStatus === 'testing' && <Loader2 className="mr-2 h-4 w-4 animate-spin text-slate-400" />}
                 {testStatus === 'success' && <CheckCircle className="mr-2 h-4 w-4" />}
                 {testStatus === 'error' && <XCircle className="mr-2 h-4 w-4" />}
                 {testStatus === 'testing' ? t('settings.testing') : t('settings.testConnection')}
@@ -323,26 +324,26 @@ export function ModelEditDialog({
             {testMessage && (
               <div
                 className={cn(
-                  'rounded-lg p-3 text-sm',
-                  testStatus === 'success' && 'bg-green-50 text-green-700 border border-green-200',
-                  testStatus === 'error' && 'bg-red-50 text-red-700 border border-red-200',
+                  'rounded-lg p-3 text-sm shadow-sm border',
+                  testStatus === 'success' && 'bg-emerald-50 text-emerald-700 border-emerald-100',
+                  testStatus === 'error' && 'bg-red-50 text-red-700 border-red-100',
                 )}
               >
                 <div className="flex items-start gap-2 flex-wrap">
-                  {testStatus === 'success' && <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />}
-                  {testStatus === 'error' && <XCircle className="h-4 w-4 mt-0.5 shrink-0" />}
-                  <p className="flex-1 break-words">{testMessage}</p>
+                  {testStatus === 'success' && <CheckCircle className="h-4 w-4 mt-0.5 shrink-0 text-emerald-500" />}
+                  {testStatus === 'error' && <XCircle className="h-4 w-4 mt-0.5 shrink-0 text-red-500" />}
+                  <p className="flex-1 break-words leading-relaxed">{testMessage}</p>
                 </div>
               </div>
             )}
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-2 pt-3 border-t">
-            <Button variant="outline" size="sm" onClick={handleClose}>
+          <div className="flex items-center justify-end gap-3 pt-5 border-t border-slate-100 mt-2">
+            <Button variant="outline" size="sm" onClick={handleClose} className="rounded-full px-5 text-slate-600">
               {t('settings.cancelEdit')}
             </Button>
-            <Button size="sm" onClick={onSave}>
+            <Button size="sm" onClick={onSave} className="rounded-full px-5 bg-slate-900 hover:bg-slate-800 text-white shadow-sm">
               {t('settings.saveModel')}
             </Button>
           </div>

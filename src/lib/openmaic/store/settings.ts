@@ -8,8 +8,9 @@ import { persist } from 'zustand/middleware';
 import type { ProviderId } from '@/lib/openmaic/ai/providers';
 import type { ProvidersConfig } from '@/lib/openmaic/types/settings';
 import { PROVIDERS } from '@/lib/openmaic/ai/providers';
-import type { TTSProviderId, ASRProviderId } from '@/lib/openmaic/audio/types';
+import type { TTSProviderId, ASRProviderId, ISEProviderId } from '@/lib/openmaic/audio/types';
 import { ASR_PROVIDERS, DEFAULT_TTS_VOICES, TTS_PROVIDERS } from '@/lib/openmaic/audio/constants';
+import { ISE_PROVIDERS, DEFAULT_ISE_PROVIDER } from '@/lib/openmaic/audio/ise-constants';
 import { PDF_PROVIDERS } from '@/lib/openmaic/pdf/constants';
 import type { PDFProviderId } from '@/lib/openmaic/pdf/types';
 import type { ImageProviderId, VideoProviderId } from '@/lib/openmaic/media/types';
@@ -68,6 +69,21 @@ export interface SettingsState {
       modelId?: string;
       customModels?: Array<{ id: string; name: string }>;
       providerOptions?: Record<string, unknown>;
+      isServerConfigured?: boolean;
+      serverBaseUrl?: string;
+    }
+  >;
+
+  // ISE (Intelligent Speech Evaluation) settings
+  iseProviderId: ISEProviderId;
+  iseProvidersConfig: Record<
+    ISEProviderId,
+    {
+      apiKey: string;
+      baseUrl: string;
+      enabled: boolean;
+      appId?: string;
+      apiSecret?: string;
       isServerConfigured?: boolean;
       serverBaseUrl?: string;
     }
@@ -206,6 +222,19 @@ export interface SettingsState {
   ) => void;
   setTTSEnabled: (enabled: boolean) => void;
   setASREnabled: (enabled: boolean) => void;
+
+  // ISE actions
+  setISEProvider: (providerId: ISEProviderId) => void;
+  setISEProviderConfig: (
+    providerId: ISEProviderId,
+    config: Partial<{
+      apiKey: string;
+      baseUrl: string;
+      enabled: boolean;
+      appId: string;
+      apiSecret: string;
+    }>,
+  ) => void;
 
   // PDF actions
   setPDFProvider: (providerId: PDFProviderId) => void;
@@ -346,6 +375,15 @@ const getDefaultWebSearchConfig = () => ({
   } as Record<WebSearchProviderId, { apiKey: string; baseUrl: string; enabled: boolean }>,
 });
 
+// Initialize default ISE config
+const getDefaultISEConfig = () => ({
+  iseProviderId: DEFAULT_ISE_PROVIDER,
+  iseProvidersConfig: {
+    'iflytek-ise': { apiKey: '', baseUrl: '', enabled: true, appId: '', apiSecret: '' },
+    'text-match-fallback': { apiKey: '', baseUrl: '', enabled: true },
+  } as Record<ISEProviderId, { apiKey: string; baseUrl: string; enabled: boolean; appId?: string; apiSecret?: string }>,
+});
+
 /**
  * Check whether a provider ID exists in the given provider registry.
  */
@@ -364,6 +402,7 @@ function ensureValidProviderSelections(state: Partial<SettingsState>): void {
   const defaultImageConfig = getDefaultImageConfig();
   const defaultVideoConfig = getDefaultVideoConfig();
   const defaultWebSearchConfig = getDefaultWebSearchConfig();
+  const defaultISEConfig = getDefaultISEConfig();
 
   if (!hasProviderId(PDF_PROVIDERS, state.pdfProviderId)) {
     state.pdfProviderId = defaultPdfConfig.pdfProviderId;
@@ -387,6 +426,10 @@ function ensureValidProviderSelections(state: Partial<SettingsState>): void {
 
   if (!hasProviderId(ASR_PROVIDERS, state.asrProviderId)) {
     state.asrProviderId = defaultAudioConfig.asrProviderId;
+  }
+
+  if (!hasProviderId(ISE_PROVIDERS, state.iseProviderId)) {
+    state.iseProviderId = defaultISEConfig.iseProviderId;
   }
 }
 
@@ -535,6 +578,7 @@ export const useSettingsStore = create<SettingsState>()(
       const defaultImageConfig = getDefaultImageConfig();
       const defaultVideoConfig = getDefaultVideoConfig();
       const defaultWebSearchConfig = getDefaultWebSearchConfig();
+      const defaultISEConfig = getDefaultISEConfig();
 
       return {
         // Initial state (use migrated data if available)
@@ -582,6 +626,9 @@ export const useSettingsStore = create<SettingsState>()(
 
         // Web Search settings (use defaults)
         ...defaultWebSearchConfig,
+
+        // ISE settings (use defaults)
+        ...defaultISEConfig,
 
         // Actions
         setModel: (providerId, modelId) => set({ providerId, modelId }),
@@ -743,6 +790,19 @@ export const useSettingsStore = create<SettingsState>()(
               ...state.webSearchProvidersConfig,
               [providerId]: {
                 ...state.webSearchProvidersConfig[providerId],
+                ...config,
+              },
+            },
+          })),
+
+        // ISE actions
+        setISEProvider: (providerId) => set({ iseProviderId: providerId }),
+        setISEProviderConfig: (providerId, config) =>
+          set((state) => ({
+            iseProvidersConfig: {
+              ...state.iseProvidersConfig,
+              [providerId]: {
+                ...state.iseProvidersConfig[providerId],
                 ...config,
               },
             },
@@ -1332,6 +1392,12 @@ export const useSettingsStore = create<SettingsState>()(
           } as SettingsState['webSearchProvidersConfig'];
           delete stateRecord.webSearchApiKey;
           delete stateRecord.webSearchIsServerConfigured;
+        }
+
+        // Add default ISE config if missing
+        if (!state.iseProvidersConfig) {
+          const defaultISEConfig = getDefaultISEConfig();
+          Object.assign(state, defaultISEConfig);
         }
 
         ensureValidProviderSelections(state);

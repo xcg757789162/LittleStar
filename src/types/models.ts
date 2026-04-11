@@ -83,6 +83,13 @@ export interface ChildSettings {
 
   /** 视频生成开关 */
   enableVideoGeneration: boolean
+  /** 视频生成提供商 ID（如 'seedance', 'kling', 'minimax-video'） */
+  videoProviderId: string
+  /** 视频生成 API Key */
+  videoApiKey: string
+  /** 视频生成 Base URL */
+  videoBaseUrl: string
+
   /** 课堂 Agent 模式：preset(预设角色) | auto(自动生成) */
   classroomAgentMode: ClassroomAgentMode
   /** 已选中的学生角色 ID 列表（不含 teacher，teacher 始终启用） */
@@ -102,7 +109,7 @@ export const DEFAULT_ADVANCED_SETTINGS: Pick<ChildSettings,
   | 'llmProviderId' | 'llmModel' | 'llmApiKey' | 'llmBaseUrl'
   | 'enableTTS' | 'ttsProviderId' | 'ttsApiKey' | 'ttsVoice' | 'ttsSpeed'
   | 'enableImageGeneration' | 'imageProviderId' | 'imageApiKey' | 'imageBaseUrl'
-  | 'enableVideoGeneration'
+  | 'enableVideoGeneration' | 'videoProviderId' | 'videoApiKey' | 'videoBaseUrl'
   | 'classroomAgentMode' | 'selfIntroduction'
   | 'selectedAgents' | 'agentVoiceMap' | 'teacherVoice' | 'maxDiscussionRounds'
 > = {
@@ -120,6 +127,9 @@ export const DEFAULT_ADVANCED_SETTINGS: Pick<ChildSettings,
   imageApiKey: '',
   imageBaseUrl: '',
   enableVideoGeneration: true,
+  videoProviderId: '',
+  videoApiKey: '',
+  videoBaseUrl: '',
   classroomAgentMode: 'preset',
   selfIntroduction: '',
   selectedAgents: ['assistant', 'showoff', 'curious'],

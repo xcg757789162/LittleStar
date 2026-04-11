@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
+import { VoicePicker } from '@/components/classroom/VoicePicker'
 import { useSettingsStore } from '@/lib/openmaic/store/settings'
 import { useAgentRegistry } from '@/lib/openmaic/orchestration/registry/store'
 import { useUserProfileStore, AVATAR_OPTIONS } from '@/stores/openmaic/user-profile'
@@ -21,14 +22,9 @@ import { useChildStore } from '@/stores/childStore'
 import { syncSettingsToOpenMAIC } from '@/stores/openmaic/settings-sync'
 import { useUpdateChildSettings } from '@/hooks/queries/useChildren'
 import { resolveAgentVoice, getAvailableProvidersWithVoices, getCurrentProviderVoices } from '@/lib/openmaic/audio/voice-resolver'
-import { playBrowserTTSPreview } from '@/lib/openmaic/audio/browser-tts-preview'
 import { DEFAULT_ADVANCED_SETTINGS, MINIMAX_VOICES, OPENAI_VOICES } from '@/types/models'
 import type { ChildSettings } from '@/types/models'
-import {
-  BACKEND_LLM_PROVIDERS,
-  BACKEND_TTS_PROVIDERS,
-  BACKEND_IMAGE_PROVIDERS,
-} from '@/services/config'
+
 import type { TTSProviderId } from '@/lib/openmaic/audio/types'
 import type { ProviderWithVoices } from '@/lib/openmaic/audio/voice-resolver'
 
@@ -82,251 +78,6 @@ function mapBackendTTSProviderId(providerId: string): TTSProviderId | null {
       return null
   }
 }
-
-/* ═══════════════════════════════════════════
-   迷你音色选择器（内联版本，适配 Sunny Playground 风格）
-   ═══════════════════════════════════════════ */
-
-function VoicePicker({
-  label,
-  currentProviderId,
-  currentVoiceId,
-  availableProviders,
-  onSelect,
-  disabled,
-  accentColor = T.sunOrange,
-}: {
-  label: string
-  currentProviderId: string
-  currentVoiceId: string
-  availableProviders: ProviderWithVoices[]
-  onSelect: (providerId: TTSProviderId, voiceId: string, modelId?: string) => void
-  disabled?: boolean
-  accentColor?: string
-}) {
-  const [open, setOpen] = useState(false)
-  const [previewingKey, setPreviewingKey] = useState<string | null>(null)
-  const previewCancelRef = useRef<(() => void) | null>(null)
-  const previewAudioRef = useRef<HTMLAudioElement | null>(null)
-  const previewAbortRef = useRef<AbortController | null>(null)
-  const ttsProvidersConfig = useSettingsStore((s) => s.ttsProvidersConfig)
-
-  const displayName = (() => {
-    for (const p of availableProviders) {
-      if (p.providerId === currentProviderId) {
-        const v = p.voices.find((voice) => voice.id === currentVoiceId)
-        if (v) return v.name
-      }
-    }
-    return availableProviders[0]?.voices[0]?.name || currentVoiceId || '请选择音色'
-  })()
-
-  const stopPreview = useCallback(() => {
-    previewCancelRef.current?.()
-    previewCancelRef.current = null
-    previewAbortRef.current?.abort()
-    previewAbortRef.current = null
-    if (previewAudioRef.current) {
-      previewAudioRef.current.pause()
-      previewAudioRef.current.src = ''
-      previewAudioRef.current = null
-    }
-    setPreviewingKey(null)
-  }, [])
-
-  const handlePreview = useCallback(
-    async (providerId: TTSProviderId, voiceId: string, modelId?: string) => {
-      const key = `${providerId}::${voiceId}`
-      if (previewingKey === key) { stopPreview(); return }
-      stopPreview()
-      setPreviewingKey(key)
-      const previewText = '欢迎来到AI课堂'
-      if (providerId === 'browser-native-tts') {
-        const { promise, cancel } = playBrowserTTSPreview({ text: previewText, voice: voiceId })
-        previewCancelRef.current = cancel
-        try { await promise } catch { /* ignore */ }
-        setPreviewingKey(null)
-        return
-      }
-      try {
-        const controller = new AbortController()
-        previewAbortRef.current = controller
-        const providerConfig = ttsProvidersConfig[providerId]
-        const res = await fetch('/api/generate/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: previewText, audioId: 'voice-preview',
-            ttsProviderId: providerId,
-            ttsModelId: modelId || providerConfig?.modelId,
-            ttsVoice: voiceId, ttsSpeed: 1,
-            ttsApiKey: providerConfig?.apiKey,
-            ttsBaseUrl: providerConfig?.serverBaseUrl || providerConfig?.baseUrl,
-          }),
-          signal: controller.signal,
-        })
-        if (!res.ok) throw new Error('TTS error')
-        const data = await res.json()
-        if (!data.base64) throw new Error('No audio')
-        const audio = new Audio(`data:audio/${data.format || 'mp3'};base64,${data.base64}`)
-        previewAudioRef.current = audio
-        audio.addEventListener('ended', () => setPreviewingKey(null))
-        audio.addEventListener('error', () => setPreviewingKey(null))
-        await audio.play()
-      } catch { setPreviewingKey(null) }
-    },
-    [previewingKey, stopPreview, ttsProvidersConfig],
-  )
-
-  useEffect(() => () => stopPreview(), [stopPreview])
-
-  if (disabled) {
-    return (
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '8px',
-        padding: '10px 14px', borderRadius: '14px',
-        border: '1.5px solid #E0E0E0', backgroundColor: '#F8F8F8',
-        opacity: 0.5,
-      }}>
-        <span style={{ fontSize: '13px', color: T.textLight }}>{label}</span>
-        <span style={{ fontSize: '13px', color: T.textLight, marginLeft: 'auto' }}>🔇 TTS 已关闭</span>
-      </div>
-    )
-  }
-
-  // 紧凑内联模式（label 为空时，用于 Agent 卡片行内）
-  const isCompact = !label
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        style={isCompact ? {
-          display: 'inline-flex', alignItems: 'center', gap: '4px',
-          padding: '4px 10px', borderRadius: '12px',
-          border: `1.5px solid ${open ? accentColor : `${accentColor}30`}`,
-          backgroundColor: open ? `${accentColor}08` : '#FFFFFF',
-          cursor: 'pointer', transition: 'all 0.2s',
-          whiteSpace: 'nowrap' as const,
-        } : {
-          width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
-          padding: '12px 14px', borderRadius: '14px',
-          border: `1.5px solid ${open ? accentColor : '#FFE8D6'}`,
-          backgroundColor: open ? `${accentColor}08` : '#FFFCF8',
-          cursor: 'pointer', transition: 'all 0.2s',
-        }}
-      >
-        <span style={{ fontSize: isCompact ? '12px' : '14px' }}>🔊</span>
-        {!isCompact && (
-          <span style={{ fontSize: '13px', color: T.textMedium, fontWeight: 600 }}>{label}</span>
-        )}
-        <span style={isCompact ? {
-          fontSize: '12px', color: accentColor, fontWeight: 600,
-        } : {
-          marginLeft: 'auto', fontSize: '13px', color: accentColor, fontWeight: 600,
-          padding: '2px 10px', borderRadius: '10px',
-          backgroundColor: `${accentColor}12`,
-        }}>
-          {displayName}
-        </span>
-        <span style={{
-          transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-          transition: 'transform 0.2s', fontSize: '10px', color: T.textLight,
-        }}>▼</span>
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            style={isCompact ? {
-              overflow: 'hidden', position: 'absolute', right: 0, top: '100%',
-              zIndex: 50, minWidth: '200px',
-            } : { overflow: 'hidden' }}
-          >
-            <div style={{
-              marginTop: '6px', padding: '8px',
-              borderRadius: '14px', border: '1px solid #FFE8D6',
-              backgroundColor: '#FFFAF5', maxHeight: '240px', overflowY: 'auto',
-              boxShadow: isCompact ? '0 8px 24px rgba(0,0,0,0.12)' : 'none',
-            }}>
-              {availableProviders.map((provider) =>
-                provider.modelGroups.map((group) => (
-                  <div key={`${provider.providerId}::${group.modelId}`}>
-                    <div style={{
-                      fontSize: '11px', color: T.textLight, fontWeight: 600,
-                      padding: '6px 8px', position: 'sticky', top: 0,
-                      backgroundColor: '#FFFAF5',
-                    }}>
-                      {group.modelId
-                        ? `${provider.providerName} · ${group.modelName}`
-                        : provider.providerName}
-                    </div>
-                    {group.voices.map((voice) => {
-                      const isActive = currentProviderId === provider.providerId && currentVoiceId === voice.id
-                      const previewKey = `${provider.providerId}::${voice.id}`
-                      const isPreviewing = previewingKey === previewKey
-                      return (
-                        <div
-                          key={previewKey}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: '6px',
-                            padding: '6px 8px', borderRadius: '10px',
-                            backgroundColor: isActive ? `${accentColor}12` : 'transparent',
-                            cursor: 'pointer', transition: 'background 0.15s',
-                          }}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onSelect(provider.providerId, voice.id, group.modelId || undefined)
-                              setOpen(false)
-                            }}
-                            style={{
-                              flex: 1, textAlign: 'left', fontSize: '13px',
-                              color: isActive ? accentColor : T.textDark,
-                              fontWeight: isActive ? 600 : 400,
-                              border: 'none', background: 'none', cursor: 'pointer',
-                              padding: 0,
-                            }}
-                          >
-                            {voice.name}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handlePreview(provider.providerId, voice.id, group.modelId)
-                            }}
-                            style={{
-                              width: '24px', height: '24px', borderRadius: '50%',
-                              border: 'none', cursor: 'pointer', display: 'flex',
-                              alignItems: 'center', justifyContent: 'center',
-                              backgroundColor: isPreviewing ? `${accentColor}20` : 'transparent',
-                              color: isPreviewing ? accentColor : T.textLight,
-                              fontSize: '12px',
-                            }}
-                          >
-                            {isPreviewing ? '⏹' : '▶'}
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )),
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
 
 /* ═══════════════════════════════════════════
    主页面
@@ -389,6 +140,9 @@ export function ClassroomSettings() {
       imageApiKey: childSettings.imageApiKey ?? DEFAULT_ADVANCED_SETTINGS.imageApiKey,
       imageBaseUrl: childSettings.imageBaseUrl ?? DEFAULT_ADVANCED_SETTINGS.imageBaseUrl,
       enableVideoGeneration: childSettings.enableVideoGeneration ?? DEFAULT_ADVANCED_SETTINGS.enableVideoGeneration,
+      videoProviderId: childSettings.videoProviderId ?? DEFAULT_ADVANCED_SETTINGS.videoProviderId,
+      videoApiKey: childSettings.videoApiKey ?? DEFAULT_ADVANCED_SETTINGS.videoApiKey,
+      videoBaseUrl: childSettings.videoBaseUrl ?? DEFAULT_ADVANCED_SETTINGS.videoBaseUrl,
     }
   })
 
@@ -413,6 +167,9 @@ export function ClassroomSettings() {
       imageApiKey: childSettings.imageApiKey ?? DEFAULT_ADVANCED_SETTINGS.imageApiKey,
       imageBaseUrl: childSettings.imageBaseUrl ?? DEFAULT_ADVANCED_SETTINGS.imageBaseUrl,
       enableVideoGeneration: childSettings.enableVideoGeneration ?? DEFAULT_ADVANCED_SETTINGS.enableVideoGeneration,
+      videoProviderId: childSettings.videoProviderId ?? DEFAULT_ADVANCED_SETTINGS.videoProviderId,
+      videoApiKey: childSettings.videoApiKey ?? DEFAULT_ADVANCED_SETTINGS.videoApiKey,
+      videoBaseUrl: childSettings.videoBaseUrl ?? DEFAULT_ADVANCED_SETTINGS.videoBaseUrl,
     })
 
     syncSettingsToOpenMAIC(childSettings)
@@ -490,10 +247,52 @@ export function ClassroomSettings() {
     setEditingName(true)
   }
 
-  const commitName = () => {
-    setNickname(nameDraft.trim())
+  const commitName = async () => {
+    const trimmed = nameDraft.trim()
+    setNickname(trimmed)
     setEditingName(false)
+
+    // 持久化到数据库 children.name
+    const child = useChildStore.getState().currentChild
+    if (child?.id && trimmed) {
+      try {
+        const { apiClient } = await import('@/services/api')
+        await apiClient.patch('/children', { name: trimmed }, {
+          filters: [{ column: 'id', operator: 'eq', value: Number(child.id) }],
+        })
+        console.log('[commitName] ✅ 昵称已写入数据库:', trimmed)
+        useChildStore.getState().updateChild(String(child.id), { name: trimmed })
+      } catch (err) {
+        console.error('[commitName] ❌ 昵称写入数据库失败:', err)
+      }
+    }
   }
+
+  /** 同步自我介绍到数据库（写入 children.settings.bio） */
+  const bioTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const syncBioToDb = useCallback((newBio: string) => {
+    // 1. 立即更新 UI
+    setBio(newBio)
+
+    // 2. debounce 写入数据库（500ms 无输入后写入）
+    if (bioTimerRef.current) clearTimeout(bioTimerRef.current)
+    bioTimerRef.current = setTimeout(async () => {
+      const child = useChildStore.getState().currentChild
+      if (!child?.id) return
+      try {
+        const currentSettings = (child.settings || {}) as Record<string, unknown>
+        const { apiClient } = await import('@/services/api')
+        await apiClient.patch('/children', {
+          settings: { ...currentSettings, bio: newBio },
+        }, {
+          filters: [{ column: 'id', operator: 'eq', value: Number(child.id) }],
+        })
+        console.log('[syncBioToDb] ✅ 自我介绍已写入数据库:', newBio.substring(0, 30))
+      } catch (err) {
+        console.error('[syncBioToDb] ❌ 自我介绍写入数据库失败:', err)
+      }
+    }, 500)
+  }, [setBio])
 
   /** 同步头像到数据库（当前孩子的 children.avatar 字段） */
   const syncAvatarToDb = useCallback(async (newAvatar: string) => {
@@ -755,7 +554,7 @@ export function ClassroomSettings() {
           </label>
           <textarea
             value={bio}
-            onChange={(e) => setBio(e.target.value)}
+            onChange={(e) => syncBioToDb(e.target.value)}
             placeholder="告诉 AI 老师关于你的情况，课堂内容会更贴合…"
             maxLength={200}
             rows={3}
@@ -910,52 +709,92 @@ export function ClassroomSettings() {
             return (
               <motion.div
                 key={agent.id}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => toggleAgent(agent.id)}
+                layout
+                transition={{ type: 'spring', stiffness: 320, damping: 28 }}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: '10px',
-                  padding: '10px 12px', borderRadius: '14px',
+                  padding: '12px',
+                  borderRadius: '18px',
                   border: `1.5px solid ${isSelected ? `${agent.color}40` : '#F0F0F0'}`,
                   backgroundColor: isSelected ? `${agent.color}08` : '#FAFAFA',
-                  cursor: 'pointer', transition: 'all 0.2s',
-                  opacity: isSelected ? 1 : 0.7,
-                  marginBottom: '8px',
+                  transition: 'all 0.2s',
+                  opacity: isSelected ? 1 : 0.78,
+                  marginBottom: '10px',
+                  boxShadow: isSelected ? '0 8px 18px rgba(31, 41, 55, 0.06)' : 'none',
                 }}
               >
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  readOnly
+                <div
+                  onClick={() => toggleAgent(agent.id)}
                   style={{
-                    width: '20px', height: '20px',
-                    accentColor: agent.color || T.sunOrange,
-                    cursor: 'pointer', flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    cursor: 'pointer',
+                    minHeight: '52px',
                   }}
-                />
-                <div style={{
-                  width: '36px', height: '36px', borderRadius: '50%',
-                  overflow: 'hidden', border: `2px solid ${agent.color}30`,
-                  flexShrink: 0,
-                }}>
-                  <img src={agent.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    readOnly
+                    style={{
+                      width: '20px', height: '20px',
+                      accentColor: agent.color || T.sunOrange,
+                      cursor: 'pointer', flexShrink: 0,
+                    }}
+                  />
+                  <div style={{
+                    width: '40px', height: '40px', borderRadius: '50%',
+                    overflow: 'hidden', border: `2px solid ${agent.color}30`,
+                    flexShrink: 0,
+                  }}>
+                    <img src={agent.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: '15px',
+                      fontWeight: 'bold',
+                      color: T.textDark,
+                      lineHeight: 1.2,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {agent.name}
+                    </div>
+                    <div style={{
+                      fontSize: '11px',
+                      color: T.textLight,
+                      marginTop: '4px',
+                    }}>
+                      {agent.role === 'assistant' ? '课堂助教' : 'AI 同学'}
+                    </div>
+                  </div>
+                  {isSelected && (
+                    <span style={{
+                      fontSize: '11px',
+                      color: agent.color || T.sunOrange,
+                      fontWeight: 700,
+                      padding: '4px 10px',
+                      borderRadius: '999px',
+                      backgroundColor: `${agent.color || T.sunOrange}14`,
+                      flexShrink: 0,
+                    }}>
+                      已加入
+                    </span>
+                  )}
                 </div>
-                <div style={{ fontSize: '14px', fontWeight: 'bold', color: T.textDark, whiteSpace: 'nowrap' }}>
-                  {agent.name}
-                </div>
-                <span style={{
-                  fontSize: '11px', color: T.textLight, whiteSpace: 'nowrap', flexShrink: 0,
-                }}>
-                  {agent.role === 'assistant' ? '助教' : '同学'}
-                </span>
 
-                {/* 音色选择器 — 内联在同一行 */}
                 {isSelected && ttsEnabled && availableProviders.length > 0 && (
                   <div
-                    style={{ marginLeft: 'auto', flexShrink: 0 }}
+                    style={{
+                      marginTop: '12px',
+                      paddingTop: '12px',
+                      borderTop: `1px dashed ${agent.color}30`,
+                    }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <VoicePicker
-                      label=""
+                      label="同学音色"
                       currentProviderId={resolved.providerId}
                       currentVoiceId={resolved.voiceId}
                       availableProviders={availableProviders}
@@ -1054,436 +893,6 @@ export function ClassroomSettings() {
         </motion.div>
       )}
 
-      {/* ═══ 6. 高级课堂设置（折叠面板） ═══ */}
-      <div style={{ marginTop: '8px', borderTop: '2px dashed #FFE8D6', paddingTop: '20px' }}>
-        <motion.button
-          whileTap={{ scale: 0.97 }}
-          onClick={() => setClassroomSettingsOpen(!classroomSettingsOpen)}
-          style={{
-            width: '100%', padding: '14px 16px', borderRadius: '16px',
-            border: '2px solid #E8D6FF', backgroundColor: '#FAF5FF',
-            cursor: 'pointer', display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between', fontSize: '15px', color: '#6B3FA0',
-            fontFamily: T.fontDisplay, fontWeight: 'bold',
-          }}
-        >
-          <span>🎓 高级课堂设置</span>
-          <span style={{
-            transform: classroomSettingsOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-            transition: 'transform 0.3s', fontSize: '12px',
-          }}>▼</span>
-        </motion.button>
-
-        {classroomSettingsOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}
-          >
-            {/* LLM 模型配置 */}
-            <div style={{
-              padding: '16px', borderRadius: '16px',
-              border: '1.5px solid #E8D6FF', backgroundColor: '#FDFBFF',
-            }}>
-              <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#6B3FA0', margin: '0 0 12px' }}>
-                🤖 LLM 模型配置
-              </p>
-              <p style={{ fontSize: '12px', color: T.textLight, margin: '0 0 12px', lineHeight: 1.5 }}>
-                选择大模型提供商后，只需填写 API Key 和模型名称，系统会自动生成正确格式
-              </p>
-
-              <label style={{ fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                提供商
-              </label>
-              <select
-                value={advancedSettings.llmProviderId}
-                onChange={(e) => {
-                  const providerId = e.target.value
-                  const provider = BACKEND_LLM_PROVIDERS.find(p => p.id === providerId)
-                  updateAdvanced('llmProviderId', providerId)
-                  if (provider && providerId !== 'backend-custom') {
-                    updateAdvanced('llmBaseUrl', provider.defaultBaseUrl)
-                    const modelStr = provider.providerPrefix
-                      ? `${provider.providerPrefix}:${provider.defaultModel}`
-                      : provider.defaultModel
-                    updateAdvanced('llmModel', modelStr)
-                  }
-                }}
-                style={{ ...advInputStyle, appearance: 'auto', marginBottom: '12px' }}
-              >
-                {BACKEND_LLM_PROVIDERS.map((p) => (
-                  <option key={p.id} value={p.id}>{p.label}</option>
-                ))}
-              </select>
-
-              {(() => {
-                const p = BACKEND_LLM_PROVIDERS.find(x => x.id === advancedSettings.llmProviderId)
-                return p?.description ? (
-                  <p style={{ fontSize: '11px', color: T.textLight, margin: '-8px 0 12px', fontStyle: 'italic' }}>
-                    💡 {p.description}
-                  </p>
-                ) : null
-              })()}
-
-              {advancedSettings.llmProviderId === 'backend-custom' ? (
-                <>
-                  <label style={{ fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                    模型标识（provider:model 格式）
-                  </label>
-                  <input
-                    type="text" value={advancedSettings.llmModel}
-                    onChange={(e) => updateAdvanced('llmModel', e.target.value)}
-                    placeholder="如 openai:gpt-4o 或 google:gemini-2.0-flash"
-                    style={{ ...advInputStyle, marginBottom: '12px' }}
-                    onFocus={(e) => { e.currentTarget.style.borderColor = '#9B7FD0' }}
-                    onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
-                  />
-                </>
-              ) : (
-                <>
-                  <label style={{ fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                    模型名称
-                  </label>
-                  <input
-                    type="text"
-                    value={(() => {
-                      const p = BACKEND_LLM_PROVIDERS.find(x => x.id === advancedSettings.llmProviderId)
-                      const prefix = p?.providerPrefix ? `${p.providerPrefix}:` : ''
-                      return advancedSettings.llmModel.startsWith(prefix)
-                        ? advancedSettings.llmModel.slice(prefix.length)
-                        : advancedSettings.llmModel
-                    })()}
-                    onChange={(e) => {
-                      const p = BACKEND_LLM_PROVIDERS.find(x => x.id === advancedSettings.llmProviderId)
-                      const prefix = p?.providerPrefix ? `${p.providerPrefix}:` : ''
-                      updateAdvanced('llmModel', prefix + e.target.value)
-                    }}
-                    placeholder={(() => {
-                      const p = BACKEND_LLM_PROVIDERS.find(x => x.id === advancedSettings.llmProviderId)
-                      return p?.defaultModel || '模型名称'
-                    })()}
-                    style={{ ...advInputStyle, marginBottom: '4px' }}
-                    onFocus={(e) => { e.currentTarget.style.borderColor = '#9B7FD0' }}
-                    onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
-                  />
-                  {advancedSettings.llmModel && (
-                    <p style={{ fontSize: '11px', color: T.grassGreen, margin: '0 0 12px' }}>
-                      → 最终模型标识：<code style={{ background: '#E8F8E8', padding: '2px 6px', borderRadius: '4px' }}>{advancedSettings.llmModel}</code>
-                    </p>
-                  )}
-                </>
-              )}
-
-              <label style={{ fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                API Key
-              </label>
-              <input
-                type="password" value={advancedSettings.llmApiKey}
-                onChange={(e) => updateAdvanced('llmApiKey', e.target.value)}
-                placeholder="输入模型的 API Key"
-                style={{ ...advInputStyle, marginBottom: '12px' }}
-                onFocus={(e) => { e.currentTarget.style.borderColor = '#9B7FD0' }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
-              />
-
-              <label style={{ fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                Base URL（可选）
-              </label>
-              <input
-                type="text" value={advancedSettings.llmBaseUrl}
-                onChange={(e) => updateAdvanced('llmBaseUrl', e.target.value)}
-                placeholder="自定义 API 地址（留空使用默认）"
-                style={advInputStyle}
-                onFocus={(e) => { e.currentTarget.style.borderColor = '#9B7FD0' }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
-              />
-            </div>
-
-            {/* TTS 语音设置 */}
-            <div style={{
-              padding: '16px', borderRadius: '16px',
-              border: '1.5px solid #C8E9FA', backgroundColor: '#FBFEFF',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <p style={{ fontSize: '14px', fontWeight: 'bold', color: T.skyBlue, margin: 0 }}>
-                  🔊 TTS 语音合成
-                </p>
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '6px' }}>
-                  <input
-                    type="checkbox"
-                    checked={advancedSettings.enableTTS}
-                    onChange={(e) => updateAdvanced('enableTTS', e.target.checked)}
-                    style={{ width: '18px', height: '18px', accentColor: T.skyBlue }}
-                  />
-                  <span style={{ fontSize: '13px', color: T.textMedium }}>
-                    {advancedSettings.enableTTS ? '已开启' : '已关闭'}
-                  </span>
-                </label>
-              </div>
-
-              {advancedSettings.enableTTS && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div>
-                    <label style={{ fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                      TTS 服务商
-                    </label>
-                    <select
-                      value={(() => {
-                        const match = BACKEND_TTS_PROVIDERS.find(p => p.ttsProviderId === advancedSettings.ttsProviderId)
-                        return match?.id ?? 'backend-tts-default'
-                      })()}
-                      onChange={(e) => {
-                        const selected = BACKEND_TTS_PROVIDERS.find(p => p.id === e.target.value)
-                        if (selected) {
-                          updateAdvanced('ttsProviderId', selected.ttsProviderId)
-                          if (selected.defaultVoice && !advancedSettings.ttsVoice) {
-                            updateAdvanced('ttsVoice', selected.defaultVoice)
-                          }
-                        }
-                      }}
-                      style={{ ...advInputStyle, appearance: 'auto' }}
-                    >
-                      {BACKEND_TTS_PROVIDERS.map((p) => (
-                        <option key={p.id} value={p.id}>{p.label}</option>
-                      ))}
-                    </select>
-                    {(() => {
-                      const p = BACKEND_TTS_PROVIDERS.find(x => x.ttsProviderId === advancedSettings.ttsProviderId)
-                      return p?.description ? (
-                        <p style={{ fontSize: '11px', color: T.textLight, margin: '4px 0 0', fontStyle: 'italic' }}>
-                          💡 {p.description}
-                        </p>
-                      ) : null
-                    })()}
-                  </div>
-
-                  {/* TTS API Key */}
-                  {(() => {
-                    const p = BACKEND_TTS_PROVIDERS.find(x => x.ttsProviderId === advancedSettings.ttsProviderId)
-                    return p?.needsApiKey !== false && advancedSettings.ttsProviderId ? (
-                      <div>
-                        <label style={{ fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                          TTS API Key
-                        </label>
-                        <input
-                          type="password" value={advancedSettings.ttsApiKey}
-                          onChange={(e) => updateAdvanced('ttsApiKey', e.target.value)}
-                          placeholder="输入 TTS 服务的 API Key"
-                          style={advInputStyle}
-                          onFocus={(e) => { e.currentTarget.style.borderColor = T.skyBlue }}
-                          onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
-                        />
-                      </div>
-                    ) : null
-                  })()}
-
-                  <div>
-                    <label style={{ fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                      语音角色
-                    </label>
-                    {(() => {
-                      const voiceOptions = advancedSettings.ttsProviderId === 'minimax'
-                        ? MINIMAX_VOICES.map(v => ({ id: v.id, label: `${v.label} (${v.id})` }))
-                        : advancedSettings.ttsProviderId === 'openai'
-                          ? OPENAI_VOICES.map(v => ({ id: v.id, label: v.label }))
-                          : null
-
-                      if (voiceOptions) {
-                        return (
-                          <select
-                            value={advancedSettings.ttsVoice}
-                            onChange={(e) => updateAdvanced('ttsVoice', e.target.value)}
-                            style={{ ...advInputStyle, appearance: 'auto' }}
-                          >
-                            <option value="">请选择语音角色</option>
-                            {voiceOptions.map((v) => (
-                              <option key={v.id} value={v.id}>{v.label}</option>
-                            ))}
-                          </select>
-                        )
-                      }
-
-                      // 其他服务商保留文本输入
-                      return (
-                        <input
-                          type="text" value={advancedSettings.ttsVoice}
-                          onChange={(e) => updateAdvanced('ttsVoice', e.target.value)}
-                          placeholder={(() => {
-                            const p = BACKEND_TTS_PROVIDERS.find(x => x.ttsProviderId === advancedSettings.ttsProviderId)
-                            return p?.defaultVoice || '语音 ID（如 zh_female_01）'
-                          })()}
-                          style={advInputStyle}
-                          onFocus={(e) => { e.currentTarget.style.borderColor = T.skyBlue }}
-                          onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
-                        />
-                      )
-                    })()}
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                      语速：{advancedSettings.ttsSpeed.toFixed(1)}x
-                    </label>
-                    <input
-                      type="range" min="0.5" max="2.0" step="0.1"
-                      value={advancedSettings.ttsSpeed}
-                      onChange={(e) => updateAdvanced('ttsSpeed', parseFloat(e.target.value))}
-                      style={{ width: '100%', accentColor: T.skyBlue }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 图片生成 */}
-            <div style={{
-              padding: '16px', borderRadius: '16px',
-              border: '1.5px solid #C8F7F1', backgroundColor: '#FBFFFD',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <p style={{ fontSize: '14px', fontWeight: 'bold', color: T.grassGreen, margin: 0 }}>
-                  🖼️ 图片生成
-                </p>
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '6px' }}>
-                  <input
-                    type="checkbox"
-                    checked={advancedSettings.enableImageGeneration}
-                    onChange={(e) => updateAdvanced('enableImageGeneration', e.target.checked)}
-                    style={{ width: '18px', height: '18px', accentColor: T.grassGreen }}
-                  />
-                  <span style={{ fontSize: '13px', color: T.textMedium }}>
-                    {advancedSettings.enableImageGeneration ? '已开启' : '已关闭'}
-                  </span>
-                </label>
-              </div>
-
-              {advancedSettings.enableImageGeneration && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div>
-                    <label style={{ fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                      图片生成服务商
-                    </label>
-                    <select
-                      value={(() => {
-                        const match = BACKEND_IMAGE_PROVIDERS.find(p => p.imageProviderId === advancedSettings.imageProviderId)
-                        return match?.id ?? 'backend-img-default'
-                      })()}
-                      onChange={(e) => {
-                        const selected = BACKEND_IMAGE_PROVIDERS.find(p => p.id === e.target.value)
-                        if (selected) {
-                          updateAdvanced('imageProviderId', selected.imageProviderId)
-                          updateAdvanced('imageBaseUrl', selected.defaultBaseUrl)
-                        }
-                      }}
-                      style={{ ...advInputStyle, appearance: 'auto' }}
-                    >
-                      {BACKEND_IMAGE_PROVIDERS.map((p) => (
-                        <option key={p.id} value={p.id}>{p.label}</option>
-                      ))}
-                    </select>
-                    {(() => {
-                      const p = BACKEND_IMAGE_PROVIDERS.find(x => x.imageProviderId === advancedSettings.imageProviderId)
-                      return p?.description ? (
-                        <p style={{ fontSize: '11px', color: T.textLight, margin: '4px 0 0', fontStyle: 'italic' }}>
-                          💡 {p.description}
-                        </p>
-                      ) : null
-                    })()}
-                  </div>
-
-                  {(() => {
-                    const p = BACKEND_IMAGE_PROVIDERS.find(x => x.imageProviderId === advancedSettings.imageProviderId)
-                    return p?.needsApiKey ? (
-                      <>
-                        <div>
-                          <label style={{ fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                            图片生成 API Key
-                          </label>
-                          <input
-                            type="password" value={advancedSettings.imageApiKey}
-                            onChange={(e) => updateAdvanced('imageApiKey', e.target.value)}
-                            placeholder="输入图片生成服务的 API Key"
-                            style={advInputStyle}
-                            onFocus={(e) => { e.currentTarget.style.borderColor = T.grassGreen }}
-                            onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: '13px', color: T.textMedium, display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                            Base URL（可选）
-                          </label>
-                          <input
-                            type="text" value={advancedSettings.imageBaseUrl}
-                            onChange={(e) => updateAdvanced('imageBaseUrl', e.target.value)}
-                            placeholder="留空使用默认"
-                            style={advInputStyle}
-                            onFocus={(e) => { e.currentTarget.style.borderColor = T.grassGreen }}
-                            onBlur={(e) => { e.currentTarget.style.borderColor = '#FFE8D6' }}
-                          />
-                        </div>
-                      </>
-                    ) : null
-                  })()}
-                </div>
-              )}
-            </div>
-
-            {/* 视频生成开关 */}
-            <div style={{
-              padding: '16px', borderRadius: '16px',
-              border: '1.5px solid #C8F7F1', backgroundColor: '#FBFFFD',
-            }}>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px' }}>
-                <input
-                  type="checkbox"
-                  checked={advancedSettings.enableVideoGeneration}
-                  onChange={(e) => updateAdvanced('enableVideoGeneration', e.target.checked)}
-                  style={{ width: '18px', height: '18px', accentColor: T.grassGreen }}
-                />
-                <span style={{ fontSize: '14px', color: T.textDark, fontWeight: 600 }}>
-                  🎬 启用视频生成
-                </span>
-              </label>
-            </div>
-          </motion.div>
-        )}
-      </div>
-
-      {/* 底部保存按钮 */}
-      <div style={{
-        textAlign: 'center', padding: '20px 0',
-      }}>
-        {advancedSaveMsg && (
-          <p style={{ fontSize: '13px', color: T.grassGreen, margin: '0 0 8px', fontWeight: 600 }}>
-            {advancedSaveMsg}
-          </p>
-        )}
-        <motion.button
-          whileTap={{ scale: 0.95 }}
-          onClick={saveAdvancedSettings}
-          disabled={!advancedDirty}
-          style={{
-            padding: '12px 48px', borderRadius: '20px',
-            border: 'none', cursor: advancedDirty ? 'pointer' : 'default',
-            background: advancedDirty
-              ? `linear-gradient(135deg, ${T.skyBlue}, ${T.grassGreen})`
-              : '#E0E0E0',
-            color: '#fff', fontSize: '15px', fontWeight: 'bold',
-            fontFamily: T.fontDisplay,
-            boxShadow: advancedDirty ? '0 4px 16px rgba(91,192,235,0.3)' : 'none',
-            transition: 'all 0.2s',
-            opacity: advancedDirty ? 1 : 0.6,
-          }}
-        >
-          💾 保存设置
-        </motion.button>
-        {!advancedDirty && !advancedSaveMsg && (
-          <p style={{ fontSize: '12px', color: T.textLight, margin: '8px 0 0' }}>
-            修改后点击保存按钮生效
-          </p>
-        )}
-      </div>
     </div>
   )
 }

@@ -6,6 +6,7 @@ export type SettingsSection =
   | 'agents'
   | 'tts'
   | 'asr'
+  | 'ise'
   | 'pdf'
   | 'image'
   | 'video'

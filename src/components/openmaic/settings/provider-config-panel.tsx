@@ -57,6 +57,9 @@ export function ProviderConfigPanel({
   initialBaseUrl,
   initialRequiresApiKey,
   providersConfig,
+  activeProviderId,
+  activeModelId,
+  onSetActiveModel,
   onConfigChange,
   onSave,
   onEditModel,
@@ -318,7 +321,14 @@ export function ProviderConfigPanel({
                 className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-card"
               >
                 <div className="flex-1">
-                  <div className="font-mono text-sm font-medium mb-1.5">{model.name}</div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <div className="font-mono text-sm font-medium">{model.name}</div>
+                    {activeProviderId === provider.id && activeModelId === model.id && (
+                      <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
+                        当前使用
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     {/* Capabilities */}
                     <div className="flex items-center gap-1">

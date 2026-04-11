@@ -533,6 +533,55 @@ export const BACKEND_IMAGE_PROVIDERS: BackendImageProviderDef[] = [
   },
 ]
 
+/** 后端视频生成提供商 */
+export interface BackendVideoProviderDef {
+  id: string
+  label: string
+  /** 传给 x-video-provider 的值 */
+  videoProviderId: string
+  /** 是否需要独立 API Key */
+  needsApiKey: boolean
+  /** 默认 Base URL */
+  defaultBaseUrl: string
+  /** 说明文字 */
+  description?: string
+}
+
+export const BACKEND_VIDEO_PROVIDERS: BackendVideoProviderDef[] = [
+  {
+    id: 'backend-vid-seedance',
+    label: 'Seedance（字节跳动）',
+    videoProviderId: 'seedance',
+    needsApiKey: true,
+    defaultBaseUrl: 'https://ark.cn-beijing.volces.com',
+    description: '字节跳动 Seedance 视频生成，支持 1.5 Pro / 1.0 Pro 等多模型',
+  },
+  {
+    id: 'backend-vid-kling',
+    label: 'Kling（快手）',
+    videoProviderId: 'kling',
+    needsApiKey: true,
+    defaultBaseUrl: 'https://api-beijing.klingai.com',
+    description: '快手可灵视频生成 API',
+  },
+  {
+    id: 'backend-vid-minimax',
+    label: 'MiniMax Video（海螺）',
+    videoProviderId: 'minimax-video',
+    needsApiKey: true,
+    defaultBaseUrl: '',
+    description: 'MiniMax 海螺视频生成 API',
+  },
+  {
+    id: 'backend-vid-default',
+    label: '使用后端默认',
+    videoProviderId: '',
+    needsApiKey: false,
+    defaultBaseUrl: '',
+    description: '不覆盖后端配置，使用 docker .env.local 中的默认值',
+  },
+]
+
 // ===== 旧数据迁移（首次运行时自动执行） =====
 
 /**

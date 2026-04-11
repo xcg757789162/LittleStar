@@ -169,6 +169,24 @@ export function syncSettingsToOpenMAIC(settings: ChildSettings): void {
 
   // === 视频生成配置 ===
   if (settings.enableVideoGeneration !== undefined) {
+    // 先设置 provider 和 apiKey，这样 setVideoGenerationEnabled(true) 的校验才能通过
+    if (settings.videoProviderId) {
+      try {
+        store.setVideoProvider(settings.videoProviderId as never)
+      } catch (err) {
+        log.warn('Video provider 设置失败:', settings.videoProviderId, err)
+      }
+    }
+    if (settings.videoProviderId && settings.videoApiKey) {
+      try {
+        store.setVideoProviderConfig(settings.videoProviderId as never, {
+          apiKey: settings.videoApiKey,
+          enabled: true,
+        })
+      } catch (err) {
+        log.warn('Video provider config 设置失败:', err)
+      }
+    }
     try {
       store.setVideoGenerationEnabled(settings.enableVideoGeneration)
     } catch (err) {
