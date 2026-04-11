@@ -12,14 +12,14 @@
  */
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
 import { usePlacementTests } from '@/hooks/queries'
 import { ClassroomCache } from '@/services/openmaic/cache'
 import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
 import { usePreGeneration } from '@/hooks/usePreGeneration'
-import type { Subject } from '@/types/models'
+import type { Subject, PlacementTest, PlacementResult } from '@/types/models'
 
 /* ═══════════════════════════════════════════
    设计 Token — Sunny Playground
@@ -219,6 +219,49 @@ function CheckCircleIcon() {
   )
 }
 
+function KeyIcon() {
+  return (
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={T.warningAmber} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+    </svg>
+  )
+}
+
+/* ═══════════════════════════════════════════
+   评测分数 → 星级映射 + 星星展示组件
+   ═══════════════════════════════════════════ */
+
+function getScoreStars(score: number): number {
+  if (score >= 90) return 5
+  if (score >= 70) return 4
+  if (score >= 50) return 3
+  if (score >= 30) return 2
+  return 1
+}
+
+function getScoreLabel(score: number): string {
+  if (score >= 90) return '太棒啦！'
+  if (score >= 70) return '很不错！'
+  if (score >= 50) return '继续加油'
+  if (score >= 30) return '慢慢来~'
+  return '加油哦~'
+}
+
+/** 小星星评级展示 */
+function MiniStarRating({ stars, size = 14, color = T.starGold }: {
+  stars: number; size?: number; color?: string
+}) {
+  return (
+    <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <svg key={i} width={size} height={size} viewBox="0 0 24 24" fill={i <= stars ? color : '#E2E8F0'}>
+          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+        </svg>
+      ))}
+    </div>
+  )
+}
+
 /* ═══════════════════════════════════════════
    科目配置
    ═══════════════════════════════════════════ */
@@ -230,7 +273,7 @@ interface SubjectConfig {
   color: string
   bg: string
   shadow: string
-  icon: () => JSX.Element
+  icon: () => React.JSX.Element
 }
 
 const ALL_SUBJECTS: SubjectConfig[] = [
@@ -272,7 +315,7 @@ const staggerItem = {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { type: 'spring', stiffness: 260, damping: 20 },
+    transition: { type: 'spring' as const, stiffness: 260, damping: 20 },
   },
 }
 
@@ -313,10 +356,24 @@ export function Home() {
   // 查询评测状态
   const { data: placementTests, isLoading: isLoadingTests, isError: isTestsError, refetch: refetchTests } = usePlacementTests(childId)
 
-  const completedSubjects = useMemo(() => {
-    if (!placementTests) return new Set<Subject>()
-    return new Set(placementTests.map((t) => t.subject as Subject))
+  // 保留评测结果数据的 Map：subject → PlacementTest（取最新一次）
+  const completedSubjectsMap = useMemo(() => {
+    if (!placementTests) return new Map<Subject, PlacementTest>()
+    const map = new Map<Subject, PlacementTest>()
+    for (const t of placementTests) {
+      const subj = t.subject as Subject
+      // 已按 startedAt desc 排序，第一个就是最新的
+      if (!map.has(subj)) {
+        map.set(subj, t)
+      }
+    }
+    return map
   }, [placementTests])
+
+  // 向后兼容：快捷判断某科是否已完成
+  const completedSubjects = useMemo(() => {
+    return new Set(completedSubjectsMap.keys())
+  }, [completedSubjectsMap])
 
   const pendingSubjects = useMemo(() => {
     return ALL_SUBJECTS.filter((s) => !completedSubjects.has(s.key))
@@ -801,79 +858,139 @@ export function Home() {
         )}
 
         {/* ═══════════════════════════════════
-           科目星球 — 大圆形卡片（已评测的科目）
+           科目进度卡片（已评测的科目 — 展示分数和星级）
            ═══════════════════════════════════ */}
         {completedSubjects.size > 0 && (
           <motion.div
             variants={staggerItem}
             style={{
               display: 'flex',
+              flexDirection: 'column',
               gap: '12px',
-              justifyContent: 'center',
               padding: '4px 0 16px',
-              flexWrap: 'wrap',
             }}
           >
-            {ALL_SUBJECTS.filter((s) => completedSubjects.has(s.key)).map((subject, index) => (
-              <motion.div
-                key={subject.key}
-                initial={{ scale: 0, rotate: -20 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ delay: 0.4 + index * 0.15, type: 'spring', stiffness: 200, damping: 15 }}
-                whileHover={{ scale: 1.08, y: -4 }}
-                whileTap={{ scale: 0.95 }}
-                style={{
-                  width: '100px',
-                  height: '120px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  cursor: 'default',
-                }}
-              >
-                {/* 圆形图标 */}
-                <div style={{
-                  width: '72px',
-                  height: '72px',
-                  borderRadius: '24px',
-                  background: subject.bg,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: `0 8px 24px ${subject.shadow}`,
-                  position: 'relative',
-                }}>
-                  <subject.icon />
-                  {/* 完成勾 */}
-                  <div style={{
-                    position: 'absolute',
-                    top: '-4px',
-                    right: '-4px',
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    backgroundColor: T.cardBg,
+            {ALL_SUBJECTS.filter((s) => completedSubjects.has(s.key)).map((subject, index) => {
+              const test = completedSubjectsMap.get(subject.key)
+              const result: PlacementResult | undefined = test?.result
+              const score = result?.overallScore ?? 0
+              const stars = result ? getScoreStars(result.overallScore) : 0
+              const masteredCount = result?.masteredNodes?.length ?? 0
+              const label = result ? getScoreLabel(result.overallScore) : '已完成'
+
+              return (
+                <motion.div
+                  key={subject.key}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.3 + index * 0.12, type: 'spring', stiffness: 200, damping: 18 }}
+                  whileHover={{ scale: 1.015, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => navigate(`/subject-mastery/${subject.key}`)}
+                  style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                  }}>
-                    <CheckCircleIcon />
+                    gap: '16px',
+                    padding: '16px 20px',
+                    borderRadius: '22px',
+                    background: subject.bg,
+                    boxShadow: `0 6px 20px ${subject.shadow}`,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {/* 左侧：科目图标 + 完成勾 */}
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    <div style={{
+                      width: '56px',
+                      height: '56px',
+                      borderRadius: '18px',
+                      backgroundColor: T.cardBg,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: `0 4px 12px ${subject.shadow}`,
+                    }}>
+                      <subject.icon />
+                    </div>
+                    <div style={{
+                      position: 'absolute',
+                      top: '-5px',
+                      right: '-5px',
+                      width: '22px',
+                      height: '22px',
+                      borderRadius: '50%',
+                      backgroundColor: T.cardBg,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                    }}>
+                      <CheckCircleIcon />
+                    </div>
                   </div>
-                </div>
-                {/* 标签 */}
-                <span style={{
-                  fontFamily: T.fontDisplay,
-                  fontSize: '14px',
-                  fontWeight: 700,
-                  color: subject.color,
-                }}>
-                  {subject.label}
-                </span>
-              </motion.div>
-            ))}
+
+                  {/* 中间：科目名称 + 星级 + 已掌握知识点 */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginBottom: '4px',
+                    }}>
+                      <span style={{
+                        fontFamily: T.fontDisplay,
+                        fontSize: '17px',
+                        fontWeight: 700,
+                        color: subject.color,
+                      }}>
+                        {subject.label}
+                      </span>
+                      <MiniStarRating stars={stars} size={13} color={subject.color} />
+                    </div>
+                    {masteredCount > 0 && (
+                      <span style={{
+                        fontFamily: T.fontBody,
+                        fontSize: '12px',
+                        color: T.textLight,
+                      }}>
+                        已掌握 {masteredCount} 个知识点
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 右侧：分数 + 评语 */}
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    flexShrink: 0,
+                  }}>
+                    <span style={{
+                      fontFamily: T.fontDisplay,
+                      fontSize: '28px',
+                      fontWeight: 800,
+                      color: subject.color,
+                      lineHeight: 1,
+                    }}>
+                      {score}
+                    </span>
+                    <span style={{
+                      fontFamily: T.fontBody,
+                      fontSize: '11px',
+                      color: T.textLight,
+                      marginTop: '2px',
+                    }}>
+                      {label}
+                    </span>
+                  </div>
+
+                  {/* 右箭头 — 提示可点击查看详情 */}
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={subject.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.5 }}>
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </motion.div>
+              )
+            })}
           </motion.div>
         )}
       </motion.div>
@@ -905,9 +1022,128 @@ export function Home() {
             flexDirection: 'column',
             gap: '12px',
           }}>
-            {/* 已就绪 */}
+            {/* 课程进度状态 — 优先显示生成进度，其次显示缓存就绪状态 */}
             <AnimatePresence mode="wait">
-              {cachedCount > 0 && (
+              {/* 生成中 — 无论 cachedCount 如何，只要在生成就显示进度 */}
+              {preGenStatus === 'generating' && (
+                <motion.div
+                  key="generating"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  style={{
+                    padding: '16px 18px',
+                    borderRadius: '18px',
+                    backgroundColor: T.warningBg,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+                      style={{ fontSize: '24px', lineHeight: 1 }}
+                    >
+                      🎨
+                    </motion.div>
+                    <span style={{
+                      fontFamily: T.fontDisplay,
+                      fontSize: '15px',
+                      color: '#92400E',
+                      fontWeight: 600,
+                    }}>
+                      {preGenStageText || 'AI 老师正在创作课堂内容...'}
+                    </span>
+                  </div>
+                  {preGenTotal > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {/* 进度条 */}
+                      <div style={{
+                        width: '100%',
+                        height: '8px',
+                        borderRadius: '4px',
+                        backgroundColor: 'rgba(255, 179, 71, 0.2)',
+                        overflow: 'hidden',
+                      }}>
+                        <motion.div
+                          initial={{ width: '3%' }}
+                          animate={{
+                            width: preGenCompleted > 0
+                              ? `${Math.max(3, (preGenCompleted / preGenTotal) * 100)}%`
+                              : undefined,
+                          }}
+                          transition={preGenCompleted > 0 ? { duration: 0.6, ease: 'easeOut' } : undefined}
+                          style={{
+                            height: '100%',
+                            borderRadius: '4px',
+                            background: `linear-gradient(90deg, ${T.warningAmber} 0%, ${T.sunOrange} 100%)`,
+                            ...(preGenCompleted === 0 ? {
+                              width: '30%',
+                              animation: 'slideProgress 2s ease-in-out infinite',
+                            } : {}),
+                          }}
+                        />
+                      </div>
+                      <span style={{
+                        fontFamily: T.fontBody,
+                        fontSize: '12px',
+                        color: T.textLight,
+                        textAlign: 'center',
+                      }}>
+                        {preGenCompleted > 0
+                          ? `${preGenCompleted} / ${preGenTotal} 节课堂${cachedCount > 0 ? `（已有 ${cachedCount} 节就绪）` : ''}`
+                          : `共 ${preGenTotal} 节课堂，正在生成中...`}
+                      </span>
+                    </div>
+                  )}
+                  <style>{`
+                    @keyframes slideProgress {
+                      0% { margin-left: 0; }
+                      50% { margin-left: 70%; }
+                      100% { margin-left: 0; }
+                    }
+                  `}</style>
+                </motion.div>
+              )}
+
+              {/* 检查中 — 无论 cachedCount 如何，只要在检查就显示 */}
+              {preGenStatus === 'checking' && (
+                <motion.div
+                  key="checking"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '14px 18px',
+                    borderRadius: '18px',
+                    backgroundColor: T.warningBg,
+                  }}
+                >
+                  <motion.div
+                    animate={{ scale: [1, 1.3, 1] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                    style={{ fontSize: '24px', lineHeight: 1 }}
+                  >
+                    🔍
+                  </motion.div>
+                  <span style={{
+                    fontFamily: T.fontDisplay,
+                    fontSize: '15px',
+                    color: '#92400E',
+                    fontWeight: 600,
+                  }}>
+                    {preGenStageText || '正在看看你学到哪了...'}
+                  </span>
+                </motion.div>
+              )}
+
+              {/* 已就绪 — 只在非生成/非检查状态且有缓存时显示 */}
+              {cachedCount > 0 && preGenStatus !== 'generating' && preGenStatus !== 'checking' && (
                 <motion.div
                   key="ready"
                   initial={{ opacity: 0, scale: 0.9 }}
@@ -950,111 +1186,13 @@ export function Home() {
                 </motion.div>
               )}
 
-              {/* 生成中 */}
-              {cachedCount === 0 && preGenStatus === 'generating' && (
-                <motion.div
-                  key="generating"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  style={{
-                    padding: '16px 18px',
-                    borderRadius: '18px',
-                    backgroundColor: T.warningBg,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
-                      style={{ fontSize: '24px', lineHeight: 1 }}
-                    >
-                      🎨
-                    </motion.div>
-                    <span style={{
-                      fontFamily: T.fontDisplay,
-                      fontSize: '15px',
-                      color: '#92400E',
-                      fontWeight: 600,
-                    }}>
-                      {preGenStageText || '小星老师正在备课...'}
-                    </span>
-                  </div>
-                  {preGenTotal > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {/* 进度条 */}
-                      <div style={{
-                        width: '100%',
-                        height: '8px',
-                        borderRadius: '4px',
-                        backgroundColor: 'rgba(255, 179, 71, 0.2)',
-                        overflow: 'hidden',
-                      }}>
-                        <motion.div
-                          initial={{ width: '3%' }}
-                          animate={{ width: `${Math.max(3, (preGenCompleted / preGenTotal) * 100)}%` }}
-                          transition={{ duration: 0.6, ease: 'easeOut' }}
-                          style={{
-                            height: '100%',
-                            borderRadius: '4px',
-                            background: `linear-gradient(90deg, ${T.warningAmber} 0%, ${T.sunOrange} 100%)`,
-                          }}
-                        />
-                      </div>
-                      <span style={{
-                        fontFamily: T.fontBody,
-                        fontSize: '12px',
-                        color: T.textLight,
-                        textAlign: 'center',
-                      }}>
-                        {preGenCompleted} / {preGenTotal} 节课堂
-                      </span>
-                    </div>
-                  )}
-                </motion.div>
-              )}
-
-              {/* 检查中 */}
-              {cachedCount === 0 && preGenStatus === 'checking' && (
-                <motion.div
-                  key="checking"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '14px 18px',
-                    borderRadius: '18px',
-                    backgroundColor: T.warningBg,
-                  }}
-                >
-                  <motion.div
-                    animate={{ scale: [1, 1.3, 1] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                    style={{ fontSize: '24px', lineHeight: 1 }}
-                  >
-                    🔍
-                  </motion.div>
-                  <span style={{
-                    fontFamily: T.fontDisplay,
-                    fontSize: '15px',
-                    color: '#92400E',
-                    fontWeight: 600,
-                  }}>
-                    {preGenStageText || '正在看看你学到哪了...'}
-                  </span>
-                </motion.div>
-              )}
-
-              {/* 失败 */}
-              {cachedCount === 0 && preGenStatus === 'failed' && (
+              {/* 失败 — 无论 cachedCount 如何 */}
+              {preGenStatus === 'failed' && (
                 <motion.button
                   key="failed"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={triggerGeneration}
                   style={{
@@ -1082,12 +1220,91 @@ export function Home() {
                 </motion.button>
               )}
 
-              {/* 空闲 */}
+              {/* API Key 未配置 */}
+              {preGenStatus === 'api-key-missing' && (
+                <motion.div
+                  key="api-key-missing"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  style={{
+                    padding: '20px 18px',
+                    borderRadius: '18px',
+                    backgroundColor: T.warningBg,
+                    border: `2px solid ${T.warningAmber}33`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{
+                      width: '52px',
+                      height: '52px',
+                      borderRadius: '16px',
+                      backgroundColor: '#FFF3E0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}>
+                      <KeyIcon />
+                    </div>
+                    <div>
+                      <p style={{
+                        fontFamily: T.fontDisplay,
+                        fontSize: '16px',
+                        color: '#92400E',
+                        fontWeight: 700,
+                        margin: '0 0 4px',
+                      }}>
+                        还需要配置 AI 服务
+                      </p>
+                      <p style={{
+                        fontFamily: T.fontBody,
+                        fontSize: '13px',
+                        color: T.textLight,
+                        margin: 0,
+                        lineHeight: 1.5,
+                      }}>
+                        请家长在高级设置中配置 LLM 模型和 API Key，小星老师才能备课哦
+                      </p>
+                    </div>
+                  </div>
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ scale: 1.02 }}
+                    onClick={() => navigate('/parent')}
+                    style={{
+                      width: '100%',
+                      padding: '14px',
+                      borderRadius: '16px',
+                      border: 'none',
+                      background: `linear-gradient(135deg, ${T.warningAmber} 0%, ${T.sunOrange} 100%)`,
+                      color: T.textWhite,
+                      fontFamily: T.fontDisplay,
+                      fontSize: '15px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: `0 6px 20px rgba(255, 179, 71, 0.35)`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    ⚙️ 前往高级设置
+                  </motion.button>
+                </motion.div>
+              )}
+
+              {/* 空闲 + 无缓存 — 等待触发 */}
               {cachedCount === 0 && preGenStatus === 'idle' && (
                 <motion.div
                   key="idle"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -1123,7 +1340,7 @@ export function Home() {
               scale: 1.03,
               boxShadow: `0 14px 40px rgba(91, 192, 235, 0.45)`,
             }}
-            onClick={() => navigate('/learn')}
+            onClick={() => navigate('/classroom')}
             style={{
               width: '100%',
               padding: '22px 32px',

@@ -7,7 +7,6 @@ import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { useChildStore } from '@/stores/childStore'
 import { Home } from '@/pages/Home'
-import { LearningSession } from '@/pages/LearningSession'
 import { LearningHistory } from '@/pages/LearningHistory'
 import { StarMap } from '@/pages/StarMap'
 import { ParentDashboard } from '@/pages/ParentDashboard'
@@ -19,6 +18,10 @@ import { ReportDetailPage } from '@/pages/ReportDetailPage'
 import { AuthPage } from '@/pages/AuthPage'
 import { CreateChildPage } from '@/pages/CreateChildPage'
 import { NotFound } from '@/pages/NotFound'
+import { NativeClassroom } from '@/pages/NativeClassroom'
+import { ClassroomSettings } from '@/pages/ClassroomSettings'
+import { GenerationPreview } from '@/pages/GenerationPreview'
+import { SubjectMasteryPage } from '@/pages/SubjectMasteryPage'
 import { AppLayout } from '@/components/layout/AppLayout'
 
 /** 认证守卫：未登录 → /auth */
@@ -68,7 +71,9 @@ export function AppRoutes() {
         {/* 需登录 + 有孩子的路由（包含 AppLayout） */}
         <Route element={<RequireChild />}>
           <Route path="/" element={<Home />} />
-          <Route path="/learn" element={<LearningSession />} />
+          <Route path="/preview" element={<GenerationPreview />} />
+          <Route path="/classroom" element={<NativeClassroom />} />
+          <Route path="/classroom-settings" element={<ClassroomSettings />} />
           <Route path="/history" element={<LearningHistory />} />
           <Route path="/starmap" element={<StarMap />} />
           <Route path="/parent" element={<ParentDashboard />} />
@@ -77,6 +82,7 @@ export function AppRoutes() {
           <Route path="/placement-test/:subject/:grade" element={<PlacementTestWrapper />} />
           <Route path="/reports" element={<LearningReportPage />} />
           <Route path="/reports/:reportId" element={<ReportDetailPage />} />
+          <Route path="/subject-mastery/:subject" element={<SubjectMasteryPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Route>
