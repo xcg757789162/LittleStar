@@ -21,7 +21,9 @@
  */
 
 import type { ChildSettings } from '@/types/models'
-import type { TTSProviderId } from '@/lib/openmaic/audio/types'
+import type { TTSProviderId, ASRProviderId } from '@/lib/openmaic/audio/types'
+import type { PDFProviderId } from '@/lib/openmaic/pdf/types'
+import type { WebSearchProviderId } from '@/lib/openmaic/web-search/types'
 import { useSettingsStore } from '@/lib/openmaic/store/settings'
 import { createLogger } from '@/lib/openmaic/logger'
 
@@ -45,6 +47,19 @@ function mapChildTTSProviderId(providerId: string): TTSProviderId | null {
     case 'browser-native':
     case 'browser-native-tts':
       return 'browser-native-tts'
+    default:
+      return null
+  }
+}
+
+function mapChildASRProviderId(providerId: string): ASRProviderId | null {
+  switch (providerId) {
+    case 'openai-whisper':
+      return 'openai-whisper'
+    case 'qwen-asr':
+      return 'qwen-asr'
+    case 'browser-native':
+      return 'browser-native'
     default:
       return null
   }
@@ -192,6 +207,84 @@ export function syncSettingsToOpenMAIC(settings: ChildSettings): void {
     } catch (err) {
       log.warn('视频生成启用设置失败:', err)
     }
+  }
+
+  // === ASR 配置 ===
+  if (settings.enableASR !== undefined) {
+    try {
+      store.setASREnabled(settings.enableASR)
+    } catch (err) {
+      log.warn('ASR 启用设置失败:', err)
+    }
+  }
+
+  const mappedASRProviderId = settings.asrProviderId
+    ? mapChildASRProviderId(settings.asrProviderId)
+    : null
+
+  if (mappedASRProviderId) {
+    try {
+      store.setASRProvider(mappedASRProviderId)
+    } catch (err) {
+      log.warn('ASR provider 设置失败:', settings.asrProviderId, err)
+    }
+  }
+
+  if (mappedASRProviderId) {
+    try {
+      store.setASRProviderConfig(mappedASRProviderId, {
+        ...(settings.asrApiKey ? { apiKey: settings.asrApiKey } : {}),
+        ...(settings.asrBaseUrl ? { baseUrl: settings.asrBaseUrl } : {}),
+        ...(settings.enableASR !== undefined ? { enabled: settings.enableASR } : {}),
+      })
+    } catch (err) {
+      log.warn('ASR provider config 设置失败:', err)
+    }
+  }
+
+  if (settings.asrLanguage) {
+    try {
+      store.setASRLanguage(settings.asrLanguage)
+    } catch (err) {
+      log.warn('ASR language 设置失败:', err)
+    }
+  }
+
+  // === WebSearch 配置 ===
+  const webSearchProviderId = (settings.webSearchProviderId || 'tavily') as WebSearchProviderId
+
+  try {
+    store.setWebSearchProvider(webSearchProviderId)
+  } catch (err) {
+    log.warn('WebSearch provider 设置失败:', webSearchProviderId, err)
+  }
+
+  try {
+    store.setWebSearchProviderConfig(webSearchProviderId, {
+      ...(settings.webSearchApiKey ? { apiKey: settings.webSearchApiKey } : {}),
+      ...(settings.enableWebSearch !== undefined ? { enabled: settings.enableWebSearch } : {}),
+    })
+  } catch (err) {
+    log.warn('WebSearch provider config 设置失败:', err)
+  }
+
+  // === PDF 配置 ===
+  const pdfProviderId = (settings.pdfProviderId || 'unpdf') as PDFProviderId
+
+  try {
+    store.setPDFProvider(pdfProviderId)
+  } catch (err) {
+    log.warn('PDF provider 设置失败:', pdfProviderId, err)
+  }
+
+  try {
+    store.setPDFProviderConfig(pdfProviderId, {
+      ...(settings.pdfApiKey ? { apiKey: settings.pdfApiKey } : {}),
+      ...(settings.pdfBaseUrl ? { baseUrl: settings.pdfBaseUrl } : {}),
+      ...(settings.enablePDF !== undefined ? { enabled: settings.enablePDF } : {}),
+    })
+  } catch (err) {
+    log.warn('PDF provider config 设置失败:', err)
   }
 
   log.info('设置同步完成')

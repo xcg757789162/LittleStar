@@ -3,6 +3,7 @@ import { act } from '@testing-library/react'
 import { useChildStore } from '../childStore'
 import { useLearningStore } from '../learningStore'
 import { useUIStore } from '../uiStore'
+import { DEFAULT_ADVANCED_SETTINGS } from '@/types/models'
 import type { Child, Question } from '@/types/models'
 
 describe('Zustand Stores', () => {
@@ -19,6 +20,7 @@ describe('Zustand Stores', () => {
   describe('childStore', () => {
     const mockChild: Child = {
       id: '1',
+      userId: 'user-1',
       name: '小明',
       avatar: '🧒',
       age: 5,
@@ -30,6 +32,7 @@ describe('Zustand Stores', () => {
         difficultyAdjustment: 0,
         voiceEnabled: true,
         soundEffectsEnabled: true,
+        ...DEFAULT_ADVANCED_SETTINGS,
       },
     }
 

@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/services/api'
 import { useChildStore } from '@/stores/childStore'
 import { useAuthStore } from '@/stores/authStore'
+import { DEFAULT_ADVANCED_SETTINGS } from '@/types/models'
 import type { Child, GradeLevel } from '@/types/models'
 
 /* ═══════════════════════════════════════════
@@ -96,6 +97,7 @@ export function CreateChildPage() {
           difficultyAdjustment: 0,
           voiceEnabled: true,
           soundEffectsEnabled: true,
+          ...DEFAULT_ADVANCED_SETTINGS,
         },
       }
       const created = await apiClient.post<Child>('/children', childData)
