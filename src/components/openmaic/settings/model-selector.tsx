@@ -6,7 +6,6 @@ import {
   Sparkles,
   Wrench,
   Zap,
-  Box,
   Loader2,
   CheckCircle,
   XCircle,
@@ -116,7 +115,7 @@ export function ModelSelector({
 
   // Auto scroll to selected model when opening
   useEffect(() => {
-    if (selectedModelRef.current) {
+    if (selectedModelRef.current && typeof selectedModelRef.current.scrollIntoView === 'function') {
       selectedModelRef.current.scrollIntoView({
         block: 'nearest',
         behavior: 'smooth',
@@ -205,42 +204,34 @@ export function ModelSelector({
                 key={provider.id}
                 onClick={() => setActiveProvider(provider.id)}
                 className={cn(
-                  'w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors border-b',
+                  'w-full border-b px-3 py-3 text-left transition-colors',
                   isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50',
                 )}
               >
-                {provider.icon ? (
-                  <img
-                    src={provider.icon}
-                    alt={getProviderDisplayName(provider.id, provider.name)}
-                    className="w-5 h-5 shrink-0"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                ) : (
-                  <Box className="w-5 h-5 shrink-0 text-muted-foreground" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm truncate flex items-center gap-1">
-                    {getProviderDisplayName(provider.id, provider.name)}
-                    {provider.isServerConfigured && (
-                      <span
-                        className={cn(
-                          'text-[10px] px-1 py-0 h-4 leading-4 rounded shrink-0 inline-block',
-                          isActive
-                            ? 'bg-white/20 text-primary-foreground'
-                            : 'bg-muted text-muted-foreground',
-                        )}
-                      >
-                        {t('settings.serverConfigured')}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1">
+                      <span className="truncate text-sm font-medium">
+                        {getProviderDisplayName(provider.id, provider.name)}
                       </span>
-                    )}
-                  </div>
-                  <div className={cn('text-xs', isActive ? 'opacity-90' : 'text-muted-foreground')}>
-                    {searchQuery && filteredCount !== totalCount
-                      ? getFilteredModelCountText(filteredCount, totalCount)
-                      : getModelCountText(totalCount)}
+                      {provider.isServerConfigured && (
+                        <span
+                          className={cn(
+                            'inline-block h-4 shrink-0 rounded px-1 py-0 text-[10px] leading-4',
+                            isActive
+                              ? 'bg-white/20 text-primary-foreground'
+                              : 'bg-muted text-muted-foreground',
+                          )}
+                        >
+                          {t('settings.serverConfigured')}
+                        </span>
+                      )}
+                    </div>
+                    <div className={cn('mt-1 text-xs', isActive ? 'opacity-90' : 'text-muted-foreground')}>
+                      {searchQuery && filteredCount !== totalCount
+                        ? getFilteredModelCountText(filteredCount, totalCount)
+                        : getModelCountText(totalCount)}
+                    </div>
                   </div>
                 </div>
               </button>

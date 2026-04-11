@@ -64,6 +64,16 @@ describe('AppLayout', () => {
     expect(screen.queryByTestId('bottom-nav')).not.toBeInTheDocument()
   })
 
+  it('家长设置页面（/parent/settings）不应渲染底部导航栏', () => {
+    renderWithRouter(
+      <AppLayout>
+        <div>Parent settings</div>
+      </AppLayout>,
+      ['/parent/settings'],
+    )
+    expect(screen.queryByTestId('bottom-nav')).not.toBeInTheDocument()
+  })
+
   it('当前页面对应的导航项应高亮', () => {
     renderWithRouter(
       <AppLayout>

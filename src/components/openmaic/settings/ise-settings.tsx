@@ -42,6 +42,52 @@ export function ISESettings({ selectedProviderId }: ISESettingsProps) {
     setTestMessage('');
   }
 
+  /**
+   * 通过 Web Crypto API 生成 HMAC-SHA256 签名
+   */
+  const hmacSha256Base64 = async (secret: string, message: string): Promise<string> => {
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(secret);
+    const msgData = encoder.encode(message);
+
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+    const signature = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
+    // Convert ArrayBuffer to base64
+    const bytes = new Uint8Array(signature);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  };
+
+  /**
+   * 生成讯飞 ISE 鉴权 WebSocket URL
+   */
+  const generateIflytekAuthUrl = async (
+    apiKey: string,
+    apiSecret: string,
+  ): Promise<string> => {
+    const host = 'ise-api.xfyun.cn';
+    const path = '/v2/open-ise';
+    const wsUrl = 'wss://ise-api.xfyun.cn/v2/open-ise';
+    const date = new Date().toUTCString();
+    const signatureOrigin = `host: ${host}\ndate: ${date}\nGET ${path} HTTP/1.1`;
+
+    const signature = await hmacSha256Base64(apiSecret, signatureOrigin);
+
+    const authorizationOrigin = `api_key="${apiKey}", algorithm="hmac-sha256", headers="host date request-line", signature="${signature}"`;
+    const authorization = btoa(authorizationOrigin);
+
+    return `${wsUrl}?authorization=${encodeURIComponent(authorization)}&date=${encodeURIComponent(date)}&host=${encodeURIComponent(host)}`;
+  };
+
   const handleTestConnection = async () => {
     if (selectedProviderId === 'text-match-fallback') {
       setTestStatus('success');
@@ -62,26 +108,89 @@ export function ISESettings({ selectedProviderId }: ISESettingsProps) {
       setTestMessage('');
 
       try {
-        // TODO: Implement actual ISE connection test API
-        const response = await fetch('/api/ise/test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            providerId: selectedProviderId,
-            appId,
-            apiKey,
-            apiSecret,
-          }),
-        });
+        // 直接在前端通过 WebSocket 连接讯飞 ISE 来验证凭证
+        const authUrl = await generateIflytekAuthUrl(apiKey, apiSecret);
+        let resolved = false; // 标记测试是否已有结果
 
-        if (response.ok) {
-          setTestStatus('success');
-          setTestMessage('连接测试成功，发音评测服务可用');
-        } else {
-          const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        const ws = new WebSocket(authUrl);
+        const timeout = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            ws.close();
+            setTestStatus('error');
+            setTestMessage('连接超时（5秒），请检查网络环境');
+          }
+        }, 5000);
+
+        ws.onopen = () => {
+          // 连接成功，发送一个最小的 SSB 参数帧来验证 AppID
+          const ssbFrame = {
+            common: { app_id: appId },
+            business: {
+              sub: 'ise',
+              ent: 'en_vip',
+              category: 'read_word',
+              cmd: 'ssb',
+              text: '\uFEFFhello',
+              tte: 'utf-8',
+              aue: 'raw',
+            },
+            data: { status: 0, data: '' },
+          };
+          ws.send(JSON.stringify(ssbFrame));
+
+          // 发送一个结束帧，告知服务端传输完毕
+          const endFrame = {
+            business: { cmd: 'auw', aus: 4, aue: 'raw' },
+            data: { status: 2, data: '' },
+          };
+          ws.send(JSON.stringify(endFrame));
+        };
+
+        ws.onmessage = (event) => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timeout);
+          try {
+            const response = JSON.parse(event.data as string);
+            ws.close();
+
+            if (response.code === 0) {
+              setTestStatus('success');
+              setTestMessage('连接测试成功！讯飞 ISE 发音评测服务可用');
+            } else {
+              // 讯飞 API 返回了错误码
+              const errMsg =
+                response.message || response.desc || `错误码: ${response.code}`;
+              setTestStatus('error');
+              setTestMessage(`讯飞 API 返回错误: ${errMsg}`);
+            }
+          } catch {
+            ws.close();
+            setTestStatus('error');
+            setTestMessage('解析响应失败，请检查配置');
+          }
+        };
+
+        ws.onerror = () => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timeout);
           setTestStatus('error');
-          setTestMessage(errorData.details || errorData.error || '连接测试失败');
-        }
+          setTestMessage('WebSocket 连接失败，请检查 API Key 和 API Secret 是否正确');
+        };
+
+        ws.onclose = (event) => {
+          clearTimeout(timeout);
+          // 如果还没有通过其他回调设置结果，且非正常关闭
+          if (!resolved && event.code !== 1000) {
+            resolved = true;
+            setTestStatus('error');
+            setTestMessage(
+              `连接被关闭 (code: ${event.code})，请检查 API Key 和 API Secret 是否正确`,
+            );
+          }
+        };
       } catch (error) {
         log.error('ISE connection test failed:', error);
         setTestStatus('error');

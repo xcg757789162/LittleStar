@@ -1,0 +1,1 @@
+# planner\n\n- [x] 审计设置页现状与用户诉求差距\n- [x] 给出模型选择与信息架构方案\n- [x] 标出需要改动的文件与风险\n\n## 工作内容\n- 确认实际运行模型来自 `useSettingsStore.providerId + modelId`\n- 确认 `setModel()` 才是切换当前模型的关键动作\n- 确定将 general 重做为“使用模型”入口，并保留 provider 管理与手动新增模型流程\n- 确定需要同步修复 `Dialog`/`AlertDialog` 层级与 `/parent/settings` 底部导航遮挡\n\n## 环境信息\n- 工作区: /Users/chenguoxie/CodeBuddy/OpenMAIC\n- 状态: 已完成\n

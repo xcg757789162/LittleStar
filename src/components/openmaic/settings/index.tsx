@@ -100,31 +100,15 @@ function ProviderListColumn<T extends string>({
                 : 'border-transparent bg-white/80 hover:border-orange-100 hover:bg-white',
             )}
           >
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-50 ring-1 ring-slate-200/70">
-                {provider.icon ? (
-                  <img
-                    src={provider.icon}
-                    alt={provider.name}
-                    className="h-5 w-5 rounded"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                ) : (
-                  <Box className="h-4 w-4 text-slate-400" />
-                )}
-              </div>
+            <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-semibold text-slate-800">{provider.name}</span>
-                  {configs[provider.id]?.isServerConfigured && (
-                    <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-600 ring-1 ring-emerald-100">
-                      {t('settings.serverConfigured')}
-                    </span>
-                  )}
-                </div>
+                <span className="truncate text-sm font-semibold text-slate-800">{provider.name}</span>
               </div>
+              {configs[provider.id]?.isServerConfigured && (
+                <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-600 ring-1 ring-emerald-100">
+                  {t('settings.serverConfigured')}
+                </span>
+              )}
             </div>
           </button>
         ))}
@@ -153,12 +137,19 @@ function getASRProviderName(providerId: ASRProviderId, t: (key: string) => strin
     'openai-whisper': t('settings.providerOpenAIWhisper'),
     'browser-native': t('settings.providerBrowserNative'),
     'qwen-asr': t('settings.providerQwenASR'),
+    'minimax-asr': t('settings.providerMiniMaxASR'),
   };
   return names[providerId];
 }
 
 function getISEProviderName(providerId: ISEProviderId): string {
   return ISE_PROVIDERS[providerId]?.name || providerId;
+}
+
+function getProviderDisplayName(providerId: string, fallbackName: string, t: (key: string) => string) {
+  const translationKey = `settings.providerNames.${providerId}`;
+  const translated = t(translationKey);
+  return translated !== translationKey ? translated : fallbackName;
 }
 
 function getSectionSummary(section: SettingsSection): string {
@@ -180,7 +171,7 @@ function getSectionSummary(section: SettingsSection): string {
     case 'web-search':
       return '为 AI 提供联网搜索能力，补充实时信息。';
     case 'general':
-      return '通用偏好、系统行为和体验设置。';
+      return '先确认课堂当前真正使用的模型，也可以在这里直接切换或手动添加模型 ID。';
     default:
       return '';
   }
@@ -259,7 +250,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
 
   // Navigation
   const [activeSection, setActiveSection] = useState<SettingsSection>('providers');
-  const [selectedProviderId, setSelectedProviderId] = useState<ProviderId>(providerId);
+  const [selectedProviderId, setSelectedProviderId] = useState<ProviderId>(activeProviderId);
   const [selectedPdfProviderId, setSelectedPdfProviderId] = useState<PDFProviderId>(pdfProviderId);
   const [selectedWebSearchProviderId, setSelectedWebSearchProviderId] =
     useState<WebSearchProviderId>(webSearchProviderId);
@@ -289,8 +280,8 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
 
   // Resizable column widths
-  const [sidebarWidth, setSidebarWidth] = useState(192);
-  const [providerListWidth, setProviderListWidth] = useState(192);
+  const [sidebarWidth, setSidebarWidth] = useState(224);
+  const [providerListWidth, setProviderListWidth] = useState(240);
   const [isResizing, setIsResizing] = useState(false);
   const resizeRef = useRef<{
     target: 'sidebar' | 'providerList';
@@ -379,20 +370,17 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
       }
     : undefined;
 
-  // Handle model editing
-  const handleEditModel = (pid: ProviderId, modelIndex: number) => {
-    const allModels = providersConfig[pid]?.models || [];
-    setEditingModel({
-      providerId: pid,
-      modelIndex,
-      model: { ...allModels[modelIndex] },
-    });
-    setShowModelDialog(true);
-  };
+  const activeProviderConfig = providersConfig[activeProviderId];
+  const activeModelInfo = activeProviderConfig?.models?.find((model) => model.id === activeModelId);
+  const currentProviderName = activeProviderConfig
+    ? getProviderDisplayName(activeProviderId, activeProviderConfig.name, t)
+    : activeProviderId;
+  const currentModelName = activeModelInfo?.name || activeModelId || t('settings.selectModel');
 
-  const handleAddModel = () => {
+  const openAddModelDialog = (providerId: ProviderId) => {
+    setSelectedProviderId(providerId);
     setEditingModel({
-      providerId: selectedProviderId,
+      providerId,
       modelIndex: null,
       model: {
         id: '',
@@ -405,6 +393,21 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
       },
     });
     setShowModelDialog(true);
+  };
+
+  // Handle model editing
+  const handleEditModel = (pid: ProviderId, modelIndex: number) => {
+    const allModels = providersConfig[pid]?.models || [];
+    setEditingModel({
+      providerId: pid,
+      modelIndex,
+      model: { ...allModels[modelIndex] },
+    });
+    setShowModelDialog(true);
+  };
+
+  const handleAddModel = () => {
+    openAddModelDialog(selectedProviderId);
   };
 
   const handleDeleteModel = (pid: ProviderId, modelIndex: number) => {
@@ -589,8 +592,8 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
     },
     {
       id: 'general' as SettingsSection,
-      label: t('settings.systemSettings'),
-      subtitle: '通用系统偏好',
+      label: t('settings.activeModel'),
+      subtitle: '查看并切换当前模型',
       icon: Settings,
     },
   ];
@@ -602,186 +605,53 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
   const getHeaderContent = () => {
     switch (activeSection) {
       case 'general':
-        return <h2 className="text-lg font-semibold">{t('settings.systemSettings')}</h2>;
+        return <h2 className="text-lg font-semibold">{t('settings.activeModel')}</h2>;
       case 'providers':
         if (selectedProvider) {
           return (
-            <>
-              {selectedProvider.icon ? (
-                <img
-                  src={selectedProvider.icon}
-                  alt={selectedProvider.name}
-                  className="w-8 h-8 rounded"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              ) : (
-                <Box className="h-8 w-8 text-muted-foreground" />
-              )}
-              <div>
-                <h2 className="text-lg font-semibold">
-                  {t(`settings.providerNames.${selectedProvider.id}`) !==
-                  `settings.providerNames.${selectedProvider.id}`
-                    ? t(`settings.providerNames.${selectedProvider.id}`)
-                    : selectedProvider.name}
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  {getProviderTypeLabel(selectedProvider.type, t)}
-                </p>
-              </div>
-            </>
+            <div>
+              <h2 className="text-lg font-semibold">
+                {getProviderDisplayName(selectedProvider.id, selectedProvider.name, t)}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {getProviderTypeLabel(selectedProvider.type, t)}
+              </p>
+            </div>
           );
         }
         return null;
       case 'pdf': {
         const pdfProvider = PDF_PROVIDERS[selectedPdfProviderId];
         if (!pdfProvider) return null;
-        return (
-          <>
-            {pdfProvider.icon ? (
-              <img
-                src={pdfProvider.icon}
-                alt={pdfProvider.name}
-                className="w-8 h-8 rounded"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              <Box className="h-8 w-8 text-muted-foreground" />
-            )}
-            <h2 className="text-lg font-semibold">{pdfProvider.name}</h2>
-          </>
-        );
+        return <h2 className="text-lg font-semibold">{pdfProvider.name}</h2>;
       }
       case 'web-search': {
         const wsProvider = WEB_SEARCH_PROVIDERS[selectedWebSearchProviderId];
         if (!wsProvider) return null;
-        return (
-          <>
-            {wsProvider.icon ? (
-              <img
-                src={wsProvider.icon}
-                alt={wsProvider.name}
-                className="w-8 h-8 rounded"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              <Box className="h-8 w-8 text-muted-foreground" />
-            )}
-            <h2 className="text-lg font-semibold">{wsProvider.name}</h2>
-          </>
-        );
+        return <h2 className="text-lg font-semibold">{wsProvider.name}</h2>;
       }
       case 'image': {
         const imgProvider = IMAGE_PROVIDERS[selectedImageProviderId];
-        const imgIcon = IMAGE_PROVIDER_ICONS[selectedImageProviderId];
         return (
-          <>
-            {imgIcon ? (
-              <img
-                src={imgIcon}
-                alt={imgProvider?.name}
-                className="w-8 h-8 rounded"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              <Box className="h-8 w-8 text-muted-foreground" />
-            )}
-            <h2 className="text-lg font-semibold">
-              {t(`settings.${IMAGE_PROVIDER_NAMES[selectedImageProviderId]}`) || imgProvider?.name}
-            </h2>
-          </>
+          <h2 className="text-lg font-semibold">
+            {t(`settings.${IMAGE_PROVIDER_NAMES[selectedImageProviderId]}`) || imgProvider?.name}
+          </h2>
         );
       }
       case 'video': {
         const vidProvider = VIDEO_PROVIDERS[selectedVideoProviderId];
-        const vidIcon = VIDEO_PROVIDER_ICONS[selectedVideoProviderId];
         return (
-          <>
-            {vidIcon ? (
-              <img
-                src={vidIcon}
-                alt={vidProvider?.name}
-                className="w-8 h-8 rounded"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              <Box className="h-8 w-8 text-muted-foreground" />
-            )}
-            <h2 className="text-lg font-semibold">
-              {t(`settings.${VIDEO_PROVIDER_NAMES[selectedVideoProviderId]}`) || vidProvider?.name}
-            </h2>
-          </>
+          <h2 className="text-lg font-semibold">
+            {t(`settings.${VIDEO_PROVIDER_NAMES[selectedVideoProviderId]}`) || vidProvider?.name}
+          </h2>
         );
       }
-      case 'tts': {
-        const ttsIcon = TTS_PROVIDERS[ttsProviderId]?.icon;
-        return (
-          <>
-            {ttsIcon ? (
-              <img
-                src={ttsIcon}
-                alt=""
-                className="w-8 h-8 rounded"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              <Volume2 className="h-6 w-6 text-muted-foreground" />
-            )}
-            <h2 className="text-lg font-semibold">{getTTSProviderName(ttsProviderId, t)}</h2>
-          </>
-        );
-      }
-      case 'asr': {
-        const asrIcon = ASR_PROVIDERS[asrProviderId]?.icon;
-        return (
-          <>
-            {asrIcon ? (
-              <img
-                src={asrIcon}
-                alt=""
-                className="w-8 h-8 rounded"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              <Mic className="h-6 w-6 text-muted-foreground" />
-            )}
-            <h2 className="text-lg font-semibold">{getASRProviderName(asrProviderId, t)}</h2>
-          </>
-        );
-      }
-      case 'ise': {
-        const iseIcon = ISE_PROVIDERS[iseProviderId]?.icon;
-        return (
-          <>
-            {iseIcon ? (
-              <img
-                src={iseIcon}
-                alt=""
-                className="w-8 h-8 rounded"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              <Mic className="h-6 w-6 text-muted-foreground" />
-            )}
-            <h2 className="text-lg font-semibold">{getISEProviderName(iseProviderId)}</h2>
-          </>
-        );
-      }
+      case 'tts':
+        return <h2 className="text-lg font-semibold">{getTTSProviderName(ttsProviderId, t)}</h2>;
+      case 'asr':
+        return <h2 className="text-lg font-semibold">{getASRProviderName(asrProviderId, t)}</h2>;
+      case 'ise':
+        return <h2 className="text-lg font-semibold">{getISEProviderName(iseProviderId)}</h2>;
       default:
         return null;
     }
@@ -790,7 +660,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="block h-[88vh] w-[min(1280px,96vw)] max-w-[96vw] gap-0 overflow-hidden rounded-[28px] border border-white/70 bg-[#fffaf6] p-0 shadow-[0_30px_120px_rgba(15,23,42,0.18)]"
+        className="z-[1101] block h-[90vh] w-[min(1400px,98vw)] max-w-[98vw] gap-0 overflow-hidden rounded-[32px] border border-white/70 bg-[#fffaf6] p-0 shadow-[0_30px_120px_rgba(15,23,42,0.18)]"
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">{t('settings.title')}</DialogTitle>
@@ -1074,7 +944,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6">
-              {activeSection !== 'asr' && (
+              {activeSection !== 'asr' && activeSection !== 'general' && (
                 <div className="mb-5 rounded-[24px] border border-orange-100 bg-white/85 p-4 shadow-sm">
                   <div className="text-sm font-semibold text-slate-800">
                     {`当前分区：${activeSectionItem.label}`}
@@ -1085,7 +955,24 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                 </div>
               )}
 
-              {activeSection === 'general' && <GeneralSettings />}
+              {activeSection === 'general' && (
+                <GeneralSettings
+                  activeProviderId={activeProviderId}
+                  activeModelId={activeModelId}
+                  currentProviderName={currentProviderName}
+                  currentModelName={currentModelName}
+                  providersConfig={providersConfig}
+                  onModelChange={setModel}
+                  onManualAddModel={() => {
+                    setActiveSection('providers');
+                    openAddModelDialog(activeProviderId);
+                  }}
+                  onOpenProviderManager={() => {
+                    setActiveSection('providers');
+                    setSelectedProviderId(activeProviderId);
+                  }}
+                />
+              )}
 
               {activeSection === 'providers' && selectedProvider && (
                 <ProviderConfigPanel

@@ -99,7 +99,7 @@ export function ModelEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="max-h-[90vh] overflow-hidden p-0 sm:max-w-[560px]">
         <DialogTitle className="sr-only">
           {editingModel.modelIndex === null ? t('settings.addNewModel') : t('settings.editModel')}
         </DialogTitle>
@@ -108,7 +108,7 @@ export function ModelEditDialog({
             ? t('settings.addNewModelDescription')
             : t('settings.editModelDescription')}
         </DialogDescription>
-        <div className="space-y-5">
+        <div className="max-h-[90vh] space-y-5 overflow-y-auto p-6">
           <div className="pb-4 border-b border-slate-100">
             <h2 className="text-lg font-semibold text-slate-800">
               {editingModel.modelIndex === null

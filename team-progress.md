@@ -1,0 +1,1 @@
+# settings-redesign-team\n\n- 状态: 已完成验收\n- 当前任务: 家长 AI 设置页整改\n- 流程: Plan -> Review -> Execute -> Accept\n\n## 本次结果\n- 已重做“使用模型”入口，明确展示当前运行中的 provider/model\n- 已支持在设置页中直接切换当前模型，并保留手动添加模型入口\n- 已移除可选服务列表图标，放宽布局间距\n- 已修复 `/parent/settings` 底部导航遮挡和弹窗层级问题\n- 已通过 3 组回归测试（9 个断言）\n

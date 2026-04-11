@@ -42,6 +42,9 @@ interface ProviderConfigPanelProps {
   initialBaseUrl: string;
   initialRequiresApiKey: boolean;
   providersConfig: ProvidersConfig;
+  activeProviderId: string;
+  activeModelId: string;
+  onSetActiveModel: (modelId: string) => void;
   onConfigChange: (apiKey: string, baseUrl: string, requiresApiKey: boolean) => void;
   onSave: () => void; // Auto-save on blur
   onEditModel: (index: number) => void;
@@ -325,7 +328,7 @@ export function ProviderConfigPanel({
                     <div className="font-mono text-sm font-medium">{model.name}</div>
                     {activeProviderId === provider.id && activeModelId === model.id && (
                       <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
-                        当前使用
+                        {t('settings.currentlyUsing')}
                       </span>
                     )}
                   </div>
@@ -369,8 +372,18 @@ export function ProviderConfigPanel({
                   </div>
                 </div>
 
-                {/* Edit/Delete Buttons */}
-                <div className="flex items-center gap-1">
+                {/* Actions */}
+                <div className="flex items-center gap-2">
+                  {!(activeProviderId === provider.id && activeModelId === model.id) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-full border-orange-200 bg-orange-50 px-3 text-orange-600 hover:bg-orange-100 hover:text-orange-700"
+                      onClick={() => onSetActiveModel(model.id)}
+                    >
+                      {t('settings.setAsActiveModel')}
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"

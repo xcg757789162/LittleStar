@@ -515,7 +515,7 @@ export function ParentSettings() {
           }}>
             <b style={{ color: T.violet }}>💡 关于语音识别 (ASR)</b>
             <br />
-            默认使用浏览器原生语音识别（免费，无需配置）。如需更高质量，可在面板中切换到 OpenAI Whisper 或通义听悟，需要独立 API Key。
+            默认使用浏览器原生语音识别（免费，无需配置）。如需更高质量，可在面板中切换到 OpenAI Whisper、MiniMax 或 Qwen ASR，并分别填写对应的 API Key。
           </div>
         </motion.section>
 
