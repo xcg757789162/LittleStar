@@ -18,6 +18,7 @@ import { useSettingsStore } from '@/stores/openmaic/settings'
 import { useAgentRegistry } from '@/lib/openmaic/orchestration/registry/store'
 import { useUserProfileStore, AVATAR_OPTIONS } from '@/stores/openmaic/user-profile'
 import { useChildStore } from '@/stores/childStore'
+import { useUpdateChildSettings } from '@/hooks/queries/useChildren'
 import { resolveAgentVoice, getAvailableProvidersWithVoices } from '@/lib/openmaic/audio/voice-resolver'
 import { playBrowserTTSPreview } from '@/lib/openmaic/audio/browser-tts-preview'
 import { DEFAULT_ADVANCED_SETTINGS, MINIMAX_VOICES, OPENAI_VOICES } from '@/types/models'
@@ -338,6 +339,9 @@ export function ClassroomSettings() {
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false)
   const nameInputRef = useRef<HTMLInputElement>(null)
 
+  // === 数据库持久化 Mutation ===
+  const updateChildSettingsDb = useUpdateChildSettings()
+
   // === 高级课堂设置 ===
   const [classroomSettingsOpen, setClassroomSettingsOpen] = useState(false)
   const currentChild = useChildStore((s) => s.currentChild)
@@ -372,14 +376,29 @@ export function ClassroomSettings() {
   // 高级设置 dirty 状态 & 手动保存
   const [advancedDirty, setAdvancedDirty] = useState(false)
   const [advancedSaveMsg, setAdvancedSaveMsg] = useState('')
-  const saveAdvancedSettings = useCallback(() => {
+  const saveAdvancedSettings = useCallback(async () => {
     const child = useChildStore.getState().currentChild
     if (!child) return
+
+    // 1. 立即更新内存（UI 即时响应）
     useChildStore.getState().updateChildSettings(child.id, advancedSettings)
     setAdvancedDirty(false)
-    setAdvancedSaveMsg('✅ 设置已保存')
-    setTimeout(() => setAdvancedSaveMsg(''), 2000)
-  }, [advancedSettings])
+    setAdvancedSaveMsg('⏳ 正在保存到数据库…')
+
+    // 2. 同时持久化到 PostgreSQL 数据库
+    try {
+      await updateChildSettingsDb.mutateAsync({
+        id: child.id,
+        settings: advancedSettings,
+      })
+      setAdvancedSaveMsg('✅ 设置已保存到数据库')
+    } catch (err) {
+      console.error('[ClassroomSettings] 保存到数据库失败:', err)
+      setAdvancedSaveMsg('❌ 保存失败，请重试')
+      setAdvancedDirty(true) // 标记为未保存，允许重试
+    }
+    setTimeout(() => setAdvancedSaveMsg(''), 3000)
+  }, [advancedSettings, updateChildSettingsDb])
 
   const advInputStyle: React.CSSProperties = {
     width: '100%', padding: '12px 14px', borderRadius: '14px',
