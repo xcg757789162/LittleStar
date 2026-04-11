@@ -8,7 +8,7 @@ import type { ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { BottomNav } from './BottomNav'
 
-/** 需要隐藏底部导航的路径前缀 */
+/** 需要隐藏底部导航的路径（精确匹配或路径段前缀匹配） */
 const HIDDEN_NAV_PATHS = ['/classroom', '/preview']
 
 interface AppLayoutProps {
@@ -17,7 +17,10 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation()
-  const hideNav = HIDDEN_NAV_PATHS.some((p) => location.pathname.startsWith(p))
+  // 使用精确匹配或路径段前缀匹配（/classroom 匹配 /classroom 和 /classroom/xxx，但不匹配 /classroom-settings）
+  const hideNav = HIDDEN_NAV_PATHS.some((p) =>
+    location.pathname === p || location.pathname.startsWith(p + '/')
+  )
 
   return (
     <div style={{ minHeight: '100vh', paddingBottom: hideNav ? 0 : '64px' }}>
