@@ -98,6 +98,9 @@ services:
       - openmaic-logs:/app/openmaic/logs
       # 媒体文件静态服务
       - media-data:/data/media
+      # ⚡ 前端热更新：本地 dist/ 直接映射到容器，无需重建镜像
+      # 用法：npm run build && docker compose restart app (或刷新浏览器)
+      - ../../dist:/app/frontend
     depends_on:
       db:
         condition: service_healthy

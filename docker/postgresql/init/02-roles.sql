@@ -56,6 +56,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON api.mastery_snapshots TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.classroom_history TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.classroom_snapshots TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.classroom_cache TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON api.generation_tasks TO authenticated;
 
 -- 公共只读表：亲子活动、TPR 指令、课程大纲、媒体文件
 GRANT SELECT ON api.parent_activities TO anon;

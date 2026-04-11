@@ -287,6 +287,26 @@ CREATE POLICY classroom_cache_delete ON api.classroom_cache
   FOR DELETE TO authenticated
   USING (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()));
 
+-- generation_tasks
+ALTER TABLE api.generation_tasks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY generation_tasks_select ON api.generation_tasks
+  FOR SELECT TO authenticated
+  USING (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()));
+
+CREATE POLICY generation_tasks_insert ON api.generation_tasks
+  FOR INSERT TO authenticated
+  WITH CHECK (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()));
+
+CREATE POLICY generation_tasks_update ON api.generation_tasks
+  FOR UPDATE TO authenticated
+  USING (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()))
+  WITH CHECK (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()));
+
+CREATE POLICY generation_tasks_delete ON api.generation_tasks
+  FOR DELETE TO authenticated
+  USING (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()));
+
 -- ============================================================
 -- 公共表不启用 RLS — anon 角色通过 GRANT 控制访问
 -- knowledge_nodes, questions, question_templates,

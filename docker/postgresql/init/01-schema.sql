@@ -307,7 +307,36 @@ CREATE INDEX idx_classroom_cache_child_date ON api.classroom_cache(child_id, dat
 CREATE INDEX idx_classroom_cache_expires ON api.classroom_cache(expires_at);
 
 -- ============================================================
--- 17. parent_activities — 亲子互动活动表（公共只读）
+-- 17. generation_tasks — 课堂预生成任务队列表
+-- ============================================================
+CREATE TABLE api.generation_tasks (
+  id SERIAL PRIMARY KEY,
+  child_id INTEGER NOT NULL REFERENCES api.children(id) ON DELETE CASCADE,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  knowledge_node_id VARCHAR(100) NOT NULL,
+  date VARCHAR(10) NOT NULL,
+  requirement TEXT NOT NULL,
+  language VARCHAR(10) NOT NULL DEFAULT 'zh-CN',
+  settings JSONB NOT NULL DEFAULT '{}',
+  progress INTEGER NOT NULL DEFAULT 0,
+  current_step VARCHAR(30),
+  checkpoint JSONB,
+  result_cache_key VARCHAR(220),
+  error TEXT,
+  retry_count INTEGER NOT NULL DEFAULT 0,
+  max_retries INTEGER NOT NULL DEFAULT 2,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_generation_tasks_child ON api.generation_tasks(child_id);
+CREATE INDEX idx_generation_tasks_status ON api.generation_tasks(status);
+CREATE INDEX idx_generation_tasks_child_status ON api.generation_tasks(child_id, status);
+
+-- ============================================================
+-- 18. parent_activities — 亲子互动活动表（公共只读）
 -- ============================================================
 CREATE TABLE api.parent_activities (
   id VARCHAR(100) PRIMARY KEY,

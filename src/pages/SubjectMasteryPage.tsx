@@ -479,6 +479,7 @@ export function SubjectMasteryPage() {
           </motion.div>
         ) : (
           <motion.div
+            key={`nodes-${totalCount}`}
             variants={staggerContainer}
             initial="hidden"
             animate="show"
