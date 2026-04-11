@@ -19,13 +19,13 @@
   },
   "include": [
     "src/server/**/*.ts",
-    "src/services/openmaic/pipeline-types.ts",
-    "src/services/lesson-planner/**/*.ts",
-    "src/types/**/*.ts"
+    "src/services/openmaic/pipeline-types.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "dist-server"
+    "dist-server",
+    "**/__tests__/**",
+    "**/*.test.ts"
   ]
 }

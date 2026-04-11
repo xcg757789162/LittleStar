@@ -26,6 +26,31 @@ RUN mkdir -p /build/auth-prod \
     && npm ci --omit=dev --ignore-scripts
 
 # ============================================================
+# Stage 1.5: 编译 Pre-Generation 后端服务 (TypeScript → JavaScript)
+# ============================================================
+FROM node:22-alpine AS pregen-builder
+
+WORKDIR /build/pregen
+
+# 复制依赖文件并安装（复用前端 package.json，只需 pg + tsc-alias）
+COPY package.json package-lock.json* ./
+RUN npm ci --ignore-scripts
+
+# 复制 TypeScript 配置和源码
+COPY tsconfig.server.json ./
+COPY src/server/ ./src/server/
+COPY src/services/openmaic/pipeline-types.ts ./src/services/openmaic/pipeline-types.ts
+
+# 编译 + 路径别名解析
+RUN npx tsc -p tsconfig.server.json && npx tsc-alias -p tsconfig.server.json
+
+# 单独准备 production 依赖（只需 pg + express + cors）
+RUN mkdir -p /build/pregen-prod \
+    && cp package.json /build/pregen-prod/ \
+    && cd /build/pregen-prod \
+    && npm install --omit=dev --ignore-scripts pg express cors
+
+# ============================================================
 # Stage 2: 构建 LittleStar 前端 (Vite → 静态文件)
 # ============================================================
 FROM node:22-alpine AS frontend-builder
@@ -135,6 +160,7 @@ RUN tar -xJf /tmp/postgrest.tar.xz -C /usr/local/bin/ \
 RUN mkdir -p \
     /app/auth-service \
     /app/frontend \
+    /app/pregeneration \
     /app/openmaic \
     /app/openmaic/data \
     /app/openmaic/logs \
@@ -153,6 +179,10 @@ COPY docker/auth-service/package.json /app/auth-service/
 
 # --- 复制 Auth Service 编译产物 ---
 COPY --from=auth-builder /build/auth-service/dist /app/auth-service/dist
+
+# --- Pre-Generation 后端服务运行时依赖 + 编译产物 ---
+COPY --from=pregen-builder /build/pregen-prod/node_modules /app/pregeneration/node_modules
+COPY --from=pregen-builder /build/pregen/dist-server /app/pregeneration/dist
 
 # --- 复制 OpenMAIC 构建产物（standalone 模式） ---
 # standalone 目录包含 server.js + 精简的 node_modules
@@ -176,7 +206,7 @@ RUN chmod +x /entrypoint.sh
 
 # --- 暴露端口 ---
 # 80: Nginx 网关 (唯一对外端口)
-# 内部端口不暴露: 3000 (PostgREST), 3001 (Auth), 3002 (OpenMAIC)
+# 内部端口不暴露: 3000 (PostgREST), 3001 (Auth), 3002 (OpenMAIC), 3003 (Pre-Generation)
 EXPOSE 80
 
 # --- 健康检查 ---

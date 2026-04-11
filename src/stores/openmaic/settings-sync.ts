@@ -21,8 +21,34 @@
  */
 
 import type { ChildSettings } from '@/types/models'
+import type { TTSProviderId } from '@/lib/openmaic/audio/types'
 import { useSettingsStore } from '@/lib/openmaic/store/settings'
 import { createLogger } from '@/lib/openmaic/logger'
+
+function mapChildTTSProviderId(providerId: string): TTSProviderId | null {
+  switch (providerId) {
+    case 'openai':
+      return 'openai-tts'
+    case 'minimax':
+      return 'minimax-tts'
+    case 'doubao':
+    case 'volcengine':
+      return 'doubao-tts'
+    case 'azure':
+      return 'azure-tts'
+    case 'qwen':
+      return 'qwen-tts'
+    case 'glm':
+      return 'glm-tts'
+    case 'elevenlabs':
+      return 'elevenlabs-tts'
+    case 'browser-native':
+    case 'browser-native-tts':
+      return 'browser-native-tts'
+    default:
+      return null
+  }
+}
 
 const log = createLogger('SettingsSync')
 
@@ -58,7 +84,6 @@ export function syncSettingsToOpenMAIC(settings: ChildSettings): void {
         store.setProviderConfig(provider as never, {
           apiKey: settings.llmApiKey,
           ...(settings.llmBaseUrl ? { baseUrl: settings.llmBaseUrl } : {}),
-          enabled: true,
         })
         log.debug('Provider config 设置成功:', provider)
       } catch (err) {
@@ -75,10 +100,14 @@ export function syncSettingsToOpenMAIC(settings: ChildSettings): void {
       log.warn('TTS 启用设置失败:', err)
     }
   }
-  if (settings.ttsProviderId) {
+  const mappedTTSProviderId = settings.ttsProviderId
+    ? mapChildTTSProviderId(settings.ttsProviderId)
+    : null
+
+  if (mappedTTSProviderId) {
     try {
       // setTTSProvider — 不是 setTTSProviderId
-      store.setTTSProvider(settings.ttsProviderId as never)
+      store.setTTSProvider(mappedTTSProviderId)
     } catch (err) {
       log.warn('TTS provider 设置失败:', settings.ttsProviderId, err)
     }
@@ -99,9 +128,9 @@ export function syncSettingsToOpenMAIC(settings: ChildSettings): void {
   }
 
   // === TTS Provider API Key 同步 ===
-  if (settings.ttsProviderId && settings.ttsApiKey) {
+  if (mappedTTSProviderId && settings.ttsApiKey) {
     try {
-      store.setTTSProviderConfig(settings.ttsProviderId as never, {
+      store.setTTSProviderConfig(mappedTTSProviderId, {
         apiKey: settings.ttsApiKey,
         enabled: true,
       })

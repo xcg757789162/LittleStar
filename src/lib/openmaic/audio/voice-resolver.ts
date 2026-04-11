@@ -150,9 +150,15 @@ const MAX_REPRESENTATIVE_VOICES = 10;
  */
 export function getCurrentProviderVoices(
   ttsProviderId: TTSProviderId,
+  fallbackProviderId?: TTSProviderId,
 ): ProviderWithVoices | null {
-  if (ttsProviderId === 'browser-native-tts') return null;
-  const config = TTS_PROVIDERS[ttsProviderId];
+  const effectiveProviderId =
+    ttsProviderId === 'browser-native-tts' && fallbackProviderId
+      ? fallbackProviderId
+      : ttsProviderId;
+
+  if (effectiveProviderId === 'browser-native-tts') return null;
+  const config = TTS_PROVIDERS[effectiveProviderId];
   if (!config || config.voices.length === 0) return null;
 
   // Pick the default model (or first model) to filter compatible voices
@@ -181,7 +187,7 @@ export function getCurrentProviderVoices(
   }];
 
   return {
-    providerId: ttsProviderId,
+    providerId: effectiveProviderId,
     providerName: config.name,
     voices,
     modelGroups,

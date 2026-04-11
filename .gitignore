@@ -58,3 +58,28 @@ PreCI/
 # Playwright binaries
 .playwright-cli/
 playwright-*.tar.gz
+
+# Test screenshots & temp files
+test-screenshots/
+*.png
+*.yml
+*.yaml
+!docker/**/*.yml
+!docker/**/*.yaml
+!openspec/**/*.yaml
+
+# Temp test/debug scripts
+e2e-*.ts
+debug-*.ts
+--full-page
+hooks/
+
+# Build artifacts (server)
+dist-server/
+
+# Temp reports
+architecture-audit-report.md
+current.yml
+current.yaml
+login-snap.yml
+build.yml

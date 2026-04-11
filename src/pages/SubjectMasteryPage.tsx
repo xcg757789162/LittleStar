@@ -11,7 +11,7 @@
  */
 
 import { useMemo } from 'react'
-import { motion } from 'motion/react'
+import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
 import { useKnowledgeNodesBySubject } from '@/hooks/queries/useKnowledgeNodes'
@@ -425,134 +425,141 @@ export function SubjectMasteryPage() {
         {/* ═══════════════════════════════════
            知识点列表
            ═══════════════════════════════════ */}
-        {isLoadingNodes ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '48px 0',
-            }}
-          >
+        <AnimatePresence mode="wait">
+          {isLoadingNodes ? (
             <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               style={{
-                width: '36px',
-                height: '36px',
-                border: `3px solid ${theme.color}30`,
-                borderTopColor: theme.color,
-                borderRadius: '50%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '48px 0',
               }}
-            />
-            <span style={{
-              fontFamily: T.fontBody,
-              fontSize: '14px',
-              color: T.textLight,
-            }}>
-              加载知识点中...
-            </span>
-          </motion.div>
-        ) : nodesWithStatus.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '48px 0',
-            }}
-          >
-            <span style={{ fontSize: '48px' }}>📚</span>
-            <span style={{
-              fontFamily: T.fontBody,
-              fontSize: '15px',
-              color: T.textLight,
-            }}>
-              暂无知识点数据
-            </span>
-          </motion.div>
-        ) : (
-          <motion.div
-            key={`nodes-${totalCount}`}
-            variants={staggerContainer}
-            initial="hidden"
-            animate="show"
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-              padding: '16px 0',
-            }}
-          >
-            {/* 分组标题：已掌握 */}
-            {masteredCount > 0 && (
-              <>
-                <SectionHeader
-                  icon="⭐"
-                  title={`已掌握 · ${masteredCount}`}
-                  color={T.successGreen}
-                />
-                {nodesWithStatus
-                  .filter((n) => n.status === 'mastered')
-                  .map((item) => (
-                    <KnowledgeNodeCard
-                      key={item.node.id}
-                      item={item}
-                      themeColor={theme.color}
-                    />
-                  ))}
-              </>
-            )}
+            >
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  border: `3px solid ${theme.color}30`,
+                  borderTopColor: theme.color,
+                  borderRadius: '50%',
+                }}
+              />
+              <span style={{
+                fontFamily: T.fontBody,
+                fontSize: '14px',
+                color: T.textLight,
+              }}>
+                加载知识点中...
+              </span>
+            </motion.div>
+          ) : nodesWithStatus.length === 0 ? (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '48px 0',
+              }}
+            >
+              <span style={{ fontSize: '48px' }}>📚</span>
+              <span style={{
+                fontFamily: T.fontBody,
+                fontSize: '15px',
+                color: T.textLight,
+              }}>
+                暂无知识点数据
+              </span>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="nodes-list"
+              variants={staggerContainer}
+              initial="hidden"
+              animate="show"
+              exit={{ opacity: 0 }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                padding: '16px 0',
+              }}
+            >
+              {/* 分组标题：已掌握 */}
+              {masteredCount > 0 && (
+                <>
+                  <SectionHeader
+                    icon="⭐"
+                    title={`已掌握 · ${masteredCount}`}
+                    color={T.successGreen}
+                  />
+                  {nodesWithStatus
+                    .filter((n) => n.status === 'mastered')
+                    .map((item) => (
+                      <KnowledgeNodeCard
+                        key={item.node.id}
+                        item={item}
+                        themeColor={theme.color}
+                      />
+                    ))}
+                </>
+              )}
 
-            {/* 分组标题：学习中 */}
-            {learningCount > 0 && (
-              <>
-                <SectionHeader
-                  icon="📖"
-                  title={`学习中 · ${learningCount}`}
-                  color={T.warningAmber}
-                  marginTop={masteredCount > 0}
-                />
-                {nodesWithStatus
-                  .filter((n) => n.status === 'learning')
-                  .map((item) => (
-                    <KnowledgeNodeCard
-                      key={item.node.id}
-                      item={item}
-                      themeColor={theme.color}
-                    />
-                  ))}
-              </>
-            )}
+              {/* 分组标题：学习中 */}
+              {learningCount > 0 && (
+                <>
+                  <SectionHeader
+                    icon="📖"
+                    title={`学习中 · ${learningCount}`}
+                    color={T.warningAmber}
+                    marginTop={masteredCount > 0}
+                  />
+                  {nodesWithStatus
+                    .filter((n) => n.status === 'learning')
+                    .map((item) => (
+                      <KnowledgeNodeCard
+                        key={item.node.id}
+                        item={item}
+                        themeColor={theme.color}
+                      />
+                    ))}
+                </>
+              )}
 
-            {/* 分组标题：未学习 */}
-            {notStartedCount > 0 && (
-              <>
-                <SectionHeader
-                  icon="💤"
-                  title={`未学习 · ${notStartedCount}`}
-                  color={T.textLight}
-                  marginTop={masteredCount > 0 || learningCount > 0}
-                />
-                {nodesWithStatus
-                  .filter((n) => n.status === 'not_started')
-                  .map((item) => (
-                    <KnowledgeNodeCard
-                      key={item.node.id}
-                      item={item}
-                      themeColor={theme.color}
-                    />
-                  ))}
-              </>
-            )}
-          </motion.div>
-        )}
+              {/* 分组标题：未学习 */}
+              {notStartedCount > 0 && (
+                <>
+                  <SectionHeader
+                    icon="💤"
+                    title={`未学习 · ${notStartedCount}`}
+                    color={T.textLight}
+                    marginTop={masteredCount > 0 || learningCount > 0}
+                  />
+                  {nodesWithStatus
+                    .filter((n) => n.status === 'not_started')
+                    .map((item) => (
+                      <KnowledgeNodeCard
+                        key={item.node.id}
+                        item={item}
+                        themeColor={theme.color}
+                      />
+                    ))}
+                </>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )

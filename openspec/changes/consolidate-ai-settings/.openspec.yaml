@@ -1,0 +1,6 @@
+version: "1.0"
+change:
+  id: consolidate-ai-settings
+  name: 整合 AI 设置到家长面板
+  status: draft
+  created: 2026-04-11

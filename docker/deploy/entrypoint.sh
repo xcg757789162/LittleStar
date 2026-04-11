@@ -63,6 +63,13 @@ else
   echo "[entrypoint] ⚠️  警告: /app/frontend/index.html 不存在，前端页面将不可用"
 fi
 
+# --- 验证 Pre-Generation 后端服务 ---
+if [ -f /app/pregeneration/dist/server/index.js ]; then
+  echo "[entrypoint] ✅ Pre-Generation 后端服务已就绪"
+else
+  echo "[entrypoint] ⚠️  警告: /app/pregeneration/dist/server/index.js 不存在，预生成服务将不可用"
+fi
+
 # --- 验证 PostgREST ---
 if command -v postgrest &> /dev/null; then
   echo "[entrypoint] ✅ PostgREST $(postgrest --version 2>/dev/null || echo 'installed')"
@@ -78,10 +85,11 @@ chown -R root:root /app/openmaic/logs 2>/dev/null || true
 # --- 打印启动信息 ---
 echo "============================================"
 echo "[entrypoint] 启动 supervisord..."
-echo "  - PostgREST   → :3000"
-echo "  - Auth Service → :3001"
-echo "  - OpenMAIC    → :${OPENMAIC_PORT:-3002}"
-echo "  - Nginx       → :80 (前端 + API 网关)"
+echo "  - PostgREST       → :3000"
+echo "  - Auth Service    → :3001"
+echo "  - OpenMAIC        → :${OPENMAIC_PORT:-3002}"
+echo "  - Pre-Generation  → :${PREGEN_PORT:-3003}"
+echo "  - Nginx           → :80 (前端 + API 网关)"
 echo "============================================"
 
 # --- 启动 supervisord (前台运行) ---
