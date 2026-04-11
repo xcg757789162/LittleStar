@@ -21,6 +21,28 @@
       ],
       "correctIndex": 1,
       "difficulty": 2
+    },
+    {
+      "stem": "《三只小猪》中，大灰狼吹不倒哪种房子？",
+      "options": [
+        { "text": "草房子", "emoji": "🌿" },
+        { "text": "木房子", "emoji": "🪵" },
+        { "text": "砖房子", "emoji": "🧱" },
+        { "text": "纸房子", "emoji": "📄" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 3
+    },
+    {
+      "stem": "《乌鸦喝水》中，乌鸦是怎么喝到水的？",
+      "options": [
+        { "text": "用嘴巴直接喝", "emoji": "😮" },
+        { "text": "把瓶子打翻", "emoji": "🫗" },
+        { "text": "往瓶子里放石子", "emoji": "🪨" },
+        { "text": "找别人帮忙", "emoji": "🤝" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 4
     }
   ],
   "cn-kg-daily-dialogue": [
@@ -45,6 +67,17 @@
       ],
       "correctIndex": 2,
       "difficulty": 1
+    },
+    {
+      "stem": "不小心踩到别人的脚，应该先说什么？",
+      "options": [
+        { "text": "谢谢", "emoji": "🙏" },
+        { "text": "再见", "emoji": "👋" },
+        { "text": "没关系", "emoji": "😄" },
+        { "text": "对不起", "emoji": "😢" }
+      ],
+      "correctIndex": 3,
+      "difficulty": 3
     }
   ],
   "cn-kg-picture-book": [
@@ -69,6 +102,17 @@
       ],
       "correctIndex": 1,
       "difficulty": 2
+    },
+    {
+      "stem": "图中下雨了☔，小朋友出门应该带什么？",
+      "options": [
+        { "text": "太阳镜", "emoji": "🕶️" },
+        { "text": "雨伞", "emoji": "☂️" },
+        { "text": "风筝", "emoji": "🪁" },
+        { "text": "冰淇淋", "emoji": "🍦" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
     }
   ],
   "cn-kg-pencil-grip": [
@@ -93,6 +137,17 @@
       ],
       "correctIndex": 1,
       "difficulty": 1
+    },
+    {
+      "stem": "写字时眼睛离书本应该大约多远？",
+      "options": [
+        { "text": "贴着看", "emoji": "👃" },
+        { "text": "一拳远", "emoji": "✊" },
+        { "text": "一臂远", "emoji": "💪" },
+        { "text": "越远越好", "emoji": "🔭" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
     }
   ],
   "cn-kg-name-recognition": [
@@ -117,6 +172,17 @@
       ],
       "correctIndex": 2,
       "difficulty": 2
+    },
+    {
+      "stem": "「上」和「下」是一对什么词？",
+      "options": [
+        { "text": "近义词", "emoji": "🤝" },
+        { "text": "反义词", "emoji": "↕️" },
+        { "text": "同义词", "emoji": "🟰" },
+        { "text": "量词", "emoji": "🔢" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 4
     }
   ],
   "cn-kg-common-signs": [
@@ -141,6 +207,63 @@
       ],
       "correctIndex": 1,
       "difficulty": 1
+    },
+    {
+      "stem": "🚫 这个标志是什么意思？",
+      "options": [
+        { "text": "可以通行", "emoji": "✅" },
+        { "text": "禁止/不可以", "emoji": "🚫" },
+        { "text": "小心路滑", "emoji": "⚠️" },
+        { "text": "请排队", "emoji": "🧑‍🤝‍🧑" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    }
+  ],
+  "cn-kg-pinyin-basic": [
+    {
+      "stem": "\"ā\"、\"ō\"、\"ē\" 这些是什么？",
+      "options": [
+        { "text": "数字", "emoji": "🔢" },
+        { "text": "拼音", "emoji": "📖" },
+        { "text": "英文字母", "emoji": "🔤" },
+        { "text": "符号", "emoji": "❓" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "\"bà bà\" 拼出来是哪个词？",
+      "options": [
+        { "text": "妈妈", "emoji": "👩" },
+        { "text": "爸爸", "emoji": "👨" },
+        { "text": "哥哥", "emoji": "👦" },
+        { "text": "姐姐", "emoji": "👧" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    },
+    {
+      "stem": "\"māo\" 是哪个小动物的拼音？",
+      "options": [
+        { "text": "小狗", "emoji": "🐶" },
+        { "text": "小猫", "emoji": "🐱" },
+        { "text": "小鸟", "emoji": "🐦" },
+        { "text": "小鱼", "emoji": "🐟" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    },
+    {
+      "stem": "声母 b、p、m 后面应该接哪个声母？",
+      "options": [
+        { "text": "d", "emoji": "🔤" },
+        { "text": "f", "emoji": "📝" },
+        { "text": "g", "emoji": "✍️" },
+        { "text": "h", "emoji": "📖" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 4
     }
   ]
 }

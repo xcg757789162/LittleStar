@@ -5,9 +5,12 @@
  *
  * 状态机流程（两阶段模式）：
  * intro → welcome → phase1_testing → phase1_analyzing →
- *   (如需阶段二) → phase2_loading → phase2_testing →
- *   completing → result
- *   (全部正确) → completing → result
+ *   phase2_loading → phase2_testing → completing → result
+ *
+ * 核心原则：阶段二永远触发！评测的目的是精准定位孩子的真实水平。
+ * - 阶段一表现差（<60%）→ verify 验证模式（确认薄弱点）
+ * - 阶段一表现一般（60-80%）→ mixed 混合模式（验证+挑战）
+ * - 阶段一表现好（>=80%）→ challenge 挑战模式（出更难的题找上限）
  *
  * 旧版兼容：仍支持 'testing' 阶段（单阶段模式，由路由参数控制）
  */
@@ -30,6 +33,7 @@ import type {
   Subject,
   PlacementResult,
   Phase1Analysis,
+  Phase2Mode,
 } from '@/types/models'
 import { createLogger } from '@/lib/openmaic/logger'
 
@@ -93,6 +97,8 @@ export interface PlacementTestState {
   countdown: number
   /** 当前测评阶段标识 ('phase1' | 'phase2') */
   currentPhaseLabel: 'phase1' | 'phase2' | null
+  /** 阶段二模式：verify=验证薄弱 / challenge=挑战上限 / mixed=混合 */
+  phase2Mode: Phase2Mode | null
 
   // 操作方法
   /** 开始引导 */
@@ -135,6 +141,7 @@ export function usePlacementTest(
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS)
   const [currentPhaseLabel, setCurrentPhaseLabel] = useState<'phase1' | 'phase2' | null>(null)
+  const [phase2Mode, setPhase2Mode] = useState<Phase2Mode | null>(null)
 
   // Refs
   const engine = useMemo(() => new PlacementTestEngine(), [])
@@ -374,16 +381,13 @@ export function usePlacementTest(
 
       const analysis = engine.analyzePhase1(session, curriculum.modules)
       setPhase1Analysis(analysis)
-      log.info('阶段一分析完成:', analysis)
+      setPhase2Mode(analysis.phase2Mode)
+      log.info('阶段一分析完成:', analysis, '阶段二模式:', analysis.phase2Mode)
 
-      if (!analysis.needsPhase2) {
-        // 全部正确或无薄弱点 → 跳过阶段二
-        log.info('阶段一成绩优秀，跳过阶段二')
-        handleTestComplete()
-        return
-      }
-
-      // 需要阶段二 → 加载验证题
+      // 阶段二永远触发！评测的目的是精准定位孩子的真实水平
+      // - challenge: 阶段一表现优秀，出更难的题找到真实上限
+      // - mixed: 阶段一表现一般，验证薄弱+适当挑战
+      // - verify: 阶段一表现差，确认具体薄弱环节
       setPhase('phase2_loading')
 
       const child = useChildStore.getState().currentChild
@@ -398,7 +402,7 @@ export function usePlacementTest(
       )
 
       if (phase2Plan.length === 0) {
-        // 没有验证题 → 直接完成
+        // 没有可用题目 → 直接完成（极端情况兜底）
         log.warn('阶段二无可用题目，直接完成')
         handleTestComplete()
         return
@@ -559,8 +563,9 @@ export function usePlacementTest(
         triggerPreGeneration(childId, subject, testResult).catch(() => {
           log.warn('预生成触发失败，Home 页 Hook 将作为兜底')
         })
-      } catch {
-        console.warn('测评结果写入数据库失败，将在下次连接时重试')
+      } catch (dbErr) {
+        log.error('测评结果写入数据库失败:', dbErr)
+        console.error('测评结果写入数据库失败，详情:', dbErr)
       }
 
       setPhase('result')
@@ -591,6 +596,7 @@ export function usePlacementTest(
     errorMessage,
     countdown,
     currentPhaseLabel,
+    phase2Mode,
     startIntro,
     startTest,
     submitAnswer,

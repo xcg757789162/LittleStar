@@ -1,0 +1,260 @@
+{
+  "math-sk-num-11-20": [
+    {
+      "stem": "数一数：⭐⭐⭐⭐⭐ ⭐⭐⭐⭐⭐ ⭐⭐ 一共几颗？",
+      "options": [
+        { "text": "10", "emoji": "🔟" },
+        { "text": "11", "emoji": "1️⃣" },
+        { "text": "12", "emoji": "🌟" },
+        { "text": "13", "emoji": "🔢" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 1
+    },
+    {
+      "stem": "15 后面是哪个数字？",
+      "options": [
+        { "text": "14", "emoji": "🔢" },
+        { "text": "15", "emoji": "🔟" },
+        { "text": "16", "emoji": "🌟" },
+        { "text": "17", "emoji": "⭐" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 1
+    },
+    {
+      "stem": "11、13、15、？，下一个数是几？",
+      "options": [
+        { "text": "16", "emoji": "🔟" },
+        { "text": "17", "emoji": "🌟" },
+        { "text": "18", "emoji": "⭐" },
+        { "text": "19", "emoji": "🔢" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    }
+  ],
+  "math-sk-add-within-10": [
+    {
+      "stem": "4 + 5 = ？",
+      "options": [
+        { "text": "8", "emoji": "🎱" },
+        { "text": "9", "emoji": "🔢" },
+        { "text": "10", "emoji": "🔟" },
+        { "text": "7", "emoji": "🌈" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "6 + 4 = ？",
+      "options": [
+        { "text": "9", "emoji": "🔢" },
+        { "text": "10", "emoji": "🔟" },
+        { "text": "11", "emoji": "1️⃣" },
+        { "text": "8", "emoji": "🎱" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    },
+    {
+      "stem": "？+ 3 = 10，问号是几？",
+      "options": [
+        { "text": "6", "emoji": "🎲" },
+        { "text": "7", "emoji": "🌈" },
+        { "text": "8", "emoji": "🎱" },
+        { "text": "5", "emoji": "🖐️" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    }
+  ],
+  "math-sk-sub-within-10": [
+    {
+      "stem": "小红有 8 颗糖，分给弟弟 3 颗，还剩几颗？",
+      "options": [
+        { "text": "4", "emoji": "🍀" },
+        { "text": "5", "emoji": "🖐️" },
+        { "text": "6", "emoji": "🎲" },
+        { "text": "3", "emoji": "🎯" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "10 - 6 = ？",
+      "options": [
+        { "text": "3", "emoji": "🎯" },
+        { "text": "4", "emoji": "🍀" },
+        { "text": "5", "emoji": "🖐️" },
+        { "text": "6", "emoji": "🎲" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    },
+    {
+      "stem": "9 - ？ = 3，问号是几？",
+      "options": [
+        { "text": "5", "emoji": "🖐️" },
+        { "text": "6", "emoji": "🎲" },
+        { "text": "7", "emoji": "🌈" },
+        { "text": "4", "emoji": "🍀" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    }
+  ],
+  "math-sk-add-within-20": [
+    {
+      "stem": "8 + 5 = ？",
+      "options": [
+        { "text": "12", "emoji": "🌟" },
+        { "text": "13", "emoji": "🔢" },
+        { "text": "14", "emoji": "⭐" },
+        { "text": "11", "emoji": "1️⃣" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    },
+    {
+      "stem": "9 + 7 = ？",
+      "options": [
+        { "text": "15", "emoji": "🔟" },
+        { "text": "16", "emoji": "🌟" },
+        { "text": "17", "emoji": "⭐" },
+        { "text": "14", "emoji": "🔢" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    },
+    {
+      "stem": "？+ 8 = 17，问号是几？",
+      "options": [
+        { "text": "8", "emoji": "🎱" },
+        { "text": "9", "emoji": "🔢" },
+        { "text": "10", "emoji": "🔟" },
+        { "text": "7", "emoji": "🌈" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 4
+    }
+  ],
+  "math-sk-sub-within-20": [
+    {
+      "stem": "15 - 7 = ？",
+      "options": [
+        { "text": "7", "emoji": "🌈" },
+        { "text": "8", "emoji": "🎱" },
+        { "text": "9", "emoji": "🔢" },
+        { "text": "6", "emoji": "🎲" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    },
+    {
+      "stem": "20 - 8 = ？",
+      "options": [
+        { "text": "11", "emoji": "1️⃣" },
+        { "text": "12", "emoji": "🌟" },
+        { "text": "13", "emoji": "🔢" },
+        { "text": "10", "emoji": "🔟" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    }
+  ],
+  "math-sk-patterns": [
+    {
+      "stem": "🔴🔵🔴🔵🔴？下一个是什么颜色？",
+      "options": [
+        { "text": "红色", "emoji": "🔴" },
+        { "text": "蓝色", "emoji": "🔵" },
+        { "text": "绿色", "emoji": "🟢" },
+        { "text": "黄色", "emoji": "🟡" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "1、3、5、7、？下一个数是？",
+      "options": [
+        { "text": "8", "emoji": "🎱" },
+        { "text": "9", "emoji": "🔢" },
+        { "text": "10", "emoji": "🔟" },
+        { "text": "11", "emoji": "1️⃣" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    },
+    {
+      "stem": "🔺🔺⭕🔺🔺⭕🔺🔺？",
+      "options": [
+        { "text": "🔺", "emoji": "🔺" },
+        { "text": "⭕", "emoji": "⭕" },
+        { "text": "⬜", "emoji": "⬜" },
+        { "text": "🔷", "emoji": "🔷" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 4
+    }
+  ],
+  "math-sk-time-basic": [
+    {
+      "stem": "一天有白天和黑夜，白天太阳☀️出来，黑夜——",
+      "options": [
+        { "text": "太阳出来", "emoji": "☀️" },
+        { "text": "月亮出来", "emoji": "🌙" },
+        { "text": "下雨", "emoji": "🌧️" },
+        { "text": "刮风", "emoji": "🌬️" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "钟表上短针指向 3，是几点？",
+      "options": [
+        { "text": "1 点", "emoji": "🕐" },
+        { "text": "2 点", "emoji": "🕑" },
+        { "text": "3 点", "emoji": "🕒" },
+        { "text": "12 点", "emoji": "🕛" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 3
+    }
+  ],
+  "math-sk-spatial": [
+    {
+      "stem": "小鸟在树的上面，蚂蚁在树的——",
+      "options": [
+        { "text": "上面", "emoji": "⬆️" },
+        { "text": "下面", "emoji": "⬇️" },
+        { "text": "里面", "emoji": "📦" },
+        { "text": "旁边", "emoji": "➡️" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "面对黑板，右手边是哪个方向？",
+      "options": [
+        { "text": "左边", "emoji": "⬅️" },
+        { "text": "右边", "emoji": "➡️" },
+        { "text": "上面", "emoji": "⬆️" },
+        { "text": "下面", "emoji": "⬇️" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    },
+    {
+      "stem": "小明站在队伍的前面第3个，后面还有4个人，队伍一共几人？",
+      "options": [
+        { "text": "6 人", "emoji": "6️⃣" },
+        { "text": "7 人", "emoji": "7️⃣" },
+        { "text": "8 人", "emoji": "8️⃣" },
+        { "text": "5 人", "emoji": "5️⃣" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 4
+    }
+  ]
+}

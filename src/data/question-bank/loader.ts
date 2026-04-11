@@ -11,18 +11,36 @@
 import type { Subject, GradeLevel, QuestionBankItem } from '@/types/models'
 
 // === 静态 import 所有题库 JSON ===
+// 中班（4-5岁）
 import mathMiddleKindergarten from './math-middle-kindergarten.json'
 import chineseMiddleKindergarten from './chinese-middle-kindergarten.json'
 import englishMiddleKindergarten from './english-middle-kindergarten.json'
+// 大班（5-6岁）
+import mathSeniorKindergarten from './math-senior-kindergarten.json'
+import chineseSeniorKindergarten from './chinese-senior-kindergarten.json'
+import englishSeniorKindergarten from './english-senior-kindergarten.json'
+// 一年级（6-7岁）
+import mathGrade1 from './math-grade-1.json'
+import chineseGrade1 from './chinese-grade-1.json'
+import englishGrade1 from './english-grade-1.json'
 
 /** 题库 JSON 文件格式：知识点 ID → 题目数组 */
 export type QuestionBankData = Record<string, QuestionBankItem[]>
 
 /** 静态题库映射表（确保 Vite 打包时正确包含） */
 const questionBankRegistry: Record<string, QuestionBankData> = {
+  // 中班
   'math:middle-kindergarten': mathMiddleKindergarten as unknown as QuestionBankData,
   'chinese:middle-kindergarten': chineseMiddleKindergarten as unknown as QuestionBankData,
   'english:middle-kindergarten': englishMiddleKindergarten as unknown as QuestionBankData,
+  // 大班
+  'math:senior-kindergarten': mathSeniorKindergarten as unknown as QuestionBankData,
+  'chinese:senior-kindergarten': chineseSeniorKindergarten as unknown as QuestionBankData,
+  'english:senior-kindergarten': englishSeniorKindergarten as unknown as QuestionBankData,
+  // 一年级
+  'math:grade-1': mathGrade1 as unknown as QuestionBankData,
+  'chinese:grade-1': chineseGrade1 as unknown as QuestionBankData,
+  'english:grade-1': englishGrade1 as unknown as QuestionBankData,
 }
 
 /** 内存缓存 */

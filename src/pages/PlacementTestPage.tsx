@@ -268,8 +268,22 @@ function ChoiceGrid({
 }
 
 /** 阶段过渡 UI */
-function PhaseTransition({ type }: { type: 'analyzing' | 'loading_phase2' }) {
+function PhaseTransition({ type, phase2Mode }: { type: 'analyzing' | 'loading_phase2'; phase2Mode?: 'verify' | 'challenge' | 'mixed' | null }) {
   const isAnalyzing = type === 'analyzing'
+
+  // 根据阶段二模式显示不同的过渡文案
+  const getPhase2Text = () => {
+    if (isAnalyzing) return '让我想想更好的题目...'
+    switch (phase2Mode) {
+      case 'challenge':
+        return '你好厉害！来挑战更难的题目吧 🚀'
+      case 'mixed':
+        return '再试几道题，看看你有多厉害 💪'
+      case 'verify':
+      default:
+        return '验证环节！再答几道就好了 💪'
+    }
+  }
 
   return (
     <div style={{
@@ -314,10 +328,7 @@ function PhaseTransition({ type }: { type: 'analyzing' | 'loading_phase2' }) {
           fontSize: '18px', fontWeight: 'bold', fontFamily: T.font,
           color: T.textDark, margin: 0,
         }}>
-          {isAnalyzing
-            ? '让我想想更好的题目...'
-            : '验证环节！再答几道就好了 💪'
-          }
+          {getPhase2Text()}
         </p>
       </motion.div>
 
@@ -467,6 +478,7 @@ export function PlacementTestPage({
     errorMessage,
     countdown,
     currentPhaseLabel,
+    phase2Mode,
     startTest,
     submitAnswer,
     dismissFeedback,
@@ -682,13 +694,19 @@ export function PlacementTestPage({
             }}>
               <span style={{
                 fontSize: '12px', fontWeight: 'bold',
-                color: currentPhaseLabel === 'phase2' ? T.candyPink : T.skyBlue,
+                color: currentPhaseLabel === 'phase2'
+                  ? (phase2Mode === 'challenge' ? T.sunOrange : T.candyPink)
+                  : T.skyBlue,
                 fontFamily: T.fontBody,
                 padding: '4px 12px',
-                backgroundColor: currentPhaseLabel === 'phase2' ? `${T.candyPink}15` : `${T.skyBlue}15`,
+                backgroundColor: currentPhaseLabel === 'phase2'
+                  ? (phase2Mode === 'challenge' ? `${T.sunOrange}15` : `${T.candyPink}15`)
+                  : `${T.skyBlue}15`,
                 borderRadius: '12px',
               }}>
-                {currentPhaseLabel === 'phase2' ? '✨ 验证环节' : '📝 摸底环节'}
+                {currentPhaseLabel === 'phase2'
+                  ? (phase2Mode === 'challenge' ? '🚀 挑战环节' : phase2Mode === 'mixed' ? '🔍 进阶环节' : '✨ 验证环节')
+                  : '📝 摸底环节'}
               </span>
               <span style={{
                 fontSize: '13px', color: T.textMid, fontFamily: T.fontBody,
@@ -758,11 +776,11 @@ export function PlacementTestPage({
 
       {/* ========== 阶段过渡 ========== */}
       {phase === 'phase1_analyzing' && (
-        <PhaseTransition type="analyzing" />
+        <PhaseTransition type="analyzing" phase2Mode={phase2Mode} />
       )}
 
       {phase === 'phase2_loading' && (
-        <PhaseTransition type="loading_phase2" />
+        <PhaseTransition type="loading_phase2" phase2Mode={phase2Mode} />
       )}
 
       {/* ========== 完成处理中 ========== */}

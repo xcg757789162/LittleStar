@@ -32,6 +32,8 @@ GRANT USAGE ON SCHEMA api TO authenticated;
 GRANT SELECT ON api.knowledge_nodes TO anon;
 GRANT SELECT ON api.questions TO anon;
 GRANT SELECT ON api.question_templates TO anon;
+GRANT SELECT ON api.placement_tests TO anon;
+GRANT SELECT ON api.placement_questions TO anon;
 
 -- ============================================================
 -- authenticated 角色权限
@@ -48,6 +50,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON api.achievements TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.daily_sessions TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.grade_unlocks TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.placement_tests TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON api.placement_questions TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.report_data TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.mastery_snapshots TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.classroom_history TO authenticated;
@@ -73,3 +76,16 @@ GRANT SELECT ON api.classroom_history_list TO authenticated;
 
 -- SERIAL 序列的 USAGE 权限（authenticated 需要插入自增主键行）
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA api TO authenticated;
+
+-- ============================================================
+-- openmaic 角色：只读访问（供外部工具/监控使用）
+-- ============================================================
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'openmaic') THEN
+    CREATE ROLE openmaic LOGIN PASSWORD 'openmaic_readonly';
+  END IF;
+END
+$$;
+GRANT USAGE ON SCHEMA api TO openmaic;
+GRANT SELECT ON ALL TABLES IN SCHEMA api TO openmaic;

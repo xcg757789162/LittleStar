@@ -21,6 +21,28 @@
       ],
       "correctIndex": 2,
       "difficulty": 1
+    },
+    {
+      "stem": "晚上睡觉前跟妈妈说什么？",
+      "options": [
+        { "text": "Good morning", "emoji": "🌅" },
+        { "text": "Good night", "emoji": "🌙" },
+        { "text": "Good afternoon", "emoji": "☀️" },
+        { "text": "Goodbye", "emoji": "👋" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    },
+    {
+      "stem": "别人说 \"How are you?\" 你很好，应该回答？",
+      "options": [
+        { "text": "I'm fine", "emoji": "😊" },
+        { "text": "Goodbye", "emoji": "👋" },
+        { "text": "Thank you", "emoji": "🙏" },
+        { "text": "Sorry", "emoji": "😢" }
+      ],
+      "correctIndex": 0,
+      "difficulty": 4
     }
   ],
   "en-kg-colors": [
@@ -45,6 +67,17 @@
       ],
       "correctIndex": 2,
       "difficulty": 2
+    },
+    {
+      "stem": "Red + Yellow 混在一起是什么颜色？",
+      "options": [
+        { "text": "Green 绿色", "emoji": "🟢" },
+        { "text": "Orange 橙色", "emoji": "🟠" },
+        { "text": "Purple 紫色", "emoji": "🟣" },
+        { "text": "Blue 蓝色", "emoji": "🔵" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 4
     }
   ],
   "en-kg-numbers-1-5": [
@@ -69,6 +102,17 @@
       ],
       "correctIndex": 2,
       "difficulty": 1
+    },
+    {
+      "stem": "One, Two, Three, ？下一个是？",
+      "options": [
+        { "text": "Five", "emoji": "5️⃣" },
+        { "text": "Four", "emoji": "4️⃣" },
+        { "text": "Six", "emoji": "6️⃣" },
+        { "text": "Three", "emoji": "3️⃣" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
     }
   ],
   "en-kg-animals": [
@@ -93,6 +137,28 @@
       ],
       "correctIndex": 2,
       "difficulty": 2
+    },
+    {
+      "stem": "\"Elephant\" 是什么动物？它特别——",
+      "options": [
+        { "text": "小蚂蚁-很小", "emoji": "🐜" },
+        { "text": "大象-很大", "emoji": "🐘" },
+        { "text": "小鸟-会飞", "emoji": "🐦" },
+        { "text": "小鱼-会游", "emoji": "🐟" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    },
+    {
+      "stem": "\"I have a pet dog.\" 意思是我有一只宠物——",
+      "options": [
+        { "text": "小猫", "emoji": "🐱" },
+        { "text": "小狗", "emoji": "🐶" },
+        { "text": "小兔", "emoji": "🐰" },
+        { "text": "小鸟", "emoji": "🐦" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 4
     }
   ],
   "en-kg-fruits": [
@@ -117,6 +183,17 @@
       ],
       "correctIndex": 1,
       "difficulty": 1
+    },
+    {
+      "stem": "\"I like watermelon.\" 我喜欢什么水果？",
+      "options": [
+        { "text": "苹果", "emoji": "🍎" },
+        { "text": "香蕉", "emoji": "🍌" },
+        { "text": "西瓜", "emoji": "🍉" },
+        { "text": "葡萄", "emoji": "🍇" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 3
     }
   ],
   "en-kg-letters-phase1": [
@@ -141,6 +218,28 @@
       ],
       "correctIndex": 2,
       "difficulty": 2
+    },
+    {
+      "stem": "A、B、C、D、E 一共有几个字母？",
+      "options": [
+        { "text": "3 个", "emoji": "3️⃣" },
+        { "text": "4 个", "emoji": "4️⃣" },
+        { "text": "5 个", "emoji": "5️⃣" },
+        { "text": "6 个", "emoji": "6️⃣" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 3
+    },
+    {
+      "stem": "哪个字母是 \"Dog\" 的开头？",
+      "options": [
+        { "text": "B", "emoji": "🅱️" },
+        { "text": "C", "emoji": "©️" },
+        { "text": "D", "emoji": "🇩" },
+        { "text": "G", "emoji": "🔤" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 4
     }
   ],
   "en-kg-tpr": [
@@ -165,6 +264,17 @@
       ],
       "correctIndex": 1,
       "difficulty": 1
+    },
+    {
+      "stem": "老师说 \"Touch your nose\"，应该摸哪里？",
+      "options": [
+        { "text": "眼睛", "emoji": "👁️" },
+        { "text": "嘴巴", "emoji": "👄" },
+        { "text": "鼻子", "emoji": "👃" },
+        { "text": "耳朵", "emoji": "👂" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 3
     }
   ],
   "en-kg-simple-response": [
@@ -189,6 +299,17 @@
       ],
       "correctIndex": 1,
       "difficulty": 2
+    },
+    {
+      "stem": "\"What's your name?\" 应该怎么回答？",
+      "options": [
+        { "text": "I'm fine", "emoji": "😊" },
+        { "text": "My name is...", "emoji": "📛" },
+        { "text": "Thank you", "emoji": "🙏" },
+        { "text": "Yes, I do", "emoji": "✅" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 4
     }
   ]
 }

@@ -3,7 +3,12 @@
  *
  * 支持两种模式：
  * - 旧版单阶段（'single'）：兼容旧记录
- * - 新版两阶段（'phase1' + 'phase2'）：摸底 → 分析 → 验证
+ * - 新版两阶段（'phase1' + 'phase2'）：摸底 → 分析 → 挑战/验证
+ *
+ * 核心原则：阶段二永远触发！
+ * - 阶段一表现好 → 阶段二出更难的题，找到真实上限
+ * - 阶段一表现差 → 阶段二验证薄弱点
+ * - 阶段一表现一般 → 阶段二混合模式（验证+挑战）
  *
  * 生成自适应测评题目、提交答案、完成测评、应用结果
  */
@@ -13,6 +18,7 @@ import type {
   PlacementResult,
   QuestionBankItem,
   Phase1Analysis,
+  Phase2Mode,
   ChildSettings,
 } from '@/types/models'
 import { loadQuestionBank, getQuestionFromBank } from '@/data/question-bank/loader'
@@ -103,7 +109,9 @@ const PHASE2_MAX_QUESTIONS = 5
 /** 阶段一分析阈值 */
 const WEAK_MODULE_THRESHOLD = 0.5     // 正确率 < 50% 视为薄弱
 const UNCERTAIN_TIME_FACTOR = 1.5     // 答题时间 > 平均 * 1.5 视为不确定
-const SKIP_PHASE2_THRESHOLD = 1.0     // 全部正确时跳过阶段二
+const CHALLENGE_THRESHOLD = 0.8       // 正确率 >= 80% 进入挑战模式（找真实上限）
+const MIXED_THRESHOLD = 0.6           // 正确率 >= 60% 进入混合模式（验证+挑战）
+// 注意：阶段二永不跳过！评测的目的是精准定位孩子的真实水平
 
 /** 超时时间（毫秒） */
 const QUESTION_TIMEOUT_MS = 30_000
@@ -404,7 +412,12 @@ export class PlacementTestEngine {
    * 分析阶段一结果
    *
    * 根据答题记录计算各模块得分，找出薄弱模块和不确定知识点。
-   * 输出 Phase1Analysis，用于决定是否需要阶段二以及生成验证题。
+   * 输出 Phase1Analysis，用于决定阶段二的模式。
+   *
+   * 核心原则：阶段二永远触发！评测的目的是精准定位孩子的真实水平。
+   * - 表现差（<60%）→ 验证模式（确认薄弱点）
+   * - 表现一般（60-80%）→ 混合模式（验证薄弱+挑战上限）
+   * - 表现优秀（>=80%）→ 挑战模式（出更难的题，找到真实上限）
    */
   analyzePhase1(session: TwoPhaseTestSession, _modules: CurriculumModule[]): Phase1Analysis {
     // 统计各模块的答题情况
@@ -455,23 +468,42 @@ export class PlacementTestEngine {
       ? Math.round((totalCorrect / session.answers.length) * 100)
       : 0
 
-    // 是否需要阶段二
-    const needsPhase2 = overallPhase1Score < SKIP_PHASE2_THRESHOLD * 100
-      && (weakModules.length > 0 || uncertainNodes.length > 0)
+    // 根据表现决定阶段二模式（阶段二永远触发！）
+    const scoreRatio = session.answers.length > 0
+      ? totalCorrect / session.answers.length
+      : 0
+
+    let phase2Mode: Phase2Mode
+    if (scoreRatio >= CHALLENGE_THRESHOLD) {
+      // 表现优秀 → 挑战模式：出更难的题找到真实上限
+      phase2Mode = 'challenge'
+    } else if (scoreRatio >= MIXED_THRESHOLD) {
+      // 表现一般 → 混合模式：验证薄弱点 + 适当挑战
+      phase2Mode = 'mixed'
+    } else {
+      // 表现差 → 验证模式：确认具体薄弱环节
+      phase2Mode = 'verify'
+    }
 
     return {
       weakModules,
       uncertainNodes,
       overallPhase1Score,
       moduleScores,
-      needsPhase2,
+      needsPhase2: true, // 永远需要阶段二！
+      phase2Mode,
     }
   }
 
   /**
-   * 生成阶段二验证计划
+   * 生成阶段二计划
    *
-   * 根据阶段一分析结果，为薄弱/不确定区域生成 3-5 道验证题。
+   * 根据阶段一分析结果和 phase2Mode，生成 3-5 道不同目的的题目：
+   *
+   * - **verify（验证模式）**：针对薄弱/不确定区域出同难度或更简单的题，确认真实薄弱点
+   * - **challenge（挑战模式）**：全模块出更难的题，找到孩子的真实能力上限
+   * - **mixed（混合模式）**：薄弱模块出验证题 + 强项模块出挑战题
+   *
    * AI 优先生成，降级到预设题库。
    *
    * @param phase1Analysis 阶段一分析结果
@@ -489,6 +521,7 @@ export class PlacementTestEngine {
     settings?: ChildSettings,
   ): Promise<ChoiceQuestion[]> {
     const plan: ChoiceQuestion[] = []
+    const mode = phase1Analysis.phase2Mode || 'verify'
 
     // 加载预设题库
     const questionBank = await loadQuestionBank(
@@ -496,76 +529,169 @@ export class PlacementTestEngine {
       gradeLevel as Parameters<typeof loadQuestionBank>[1],
     )
 
-    // 收集需要验证的知识点
-    const targetNodes: Array<{ node: CurriculumKnowledgeNode; mod: CurriculumModule }> = []
+    if (mode === 'challenge') {
+      // ========== 挑战模式 ==========
+      // 阶段一表现优秀，需要出更难的题来找到真实上限
+      // 策略：从所有模块中选更高难度的知识点，优先选阶段一未覆盖的高难度节点
+      const phase1NodeIds = new Set(phase1Analysis.uncertainNodes)
+      // 也收集阶段一已答过的所有 nodeId（避免出同一个知识点的题）
+      // uncertainNodes 只是其中一部分，我们需要从 moduleScores 推断覆盖的模块
 
-    // 优先：薄弱模块中的知识点
-    for (const weakModId of phase1Analysis.weakModules) {
-      const mod = modules.find(m => m.id === weakModId)
-      if (!mod) continue
-      for (const node of mod.knowledgeNodes) {
-        if (plan.length + targetNodes.length >= PHASE2_MAX_QUESTIONS) break
-        targetNodes.push({ node, mod })
+      const allCandidates: Array<{ node: CurriculumKnowledgeNode; mod: CurriculumModule; difficulty: number }> = []
+      const sortedModules = [...modules].sort((a, b) => a.order - b.order)
+
+      for (const mod of sortedModules) {
+        // 按难度从高到低排序知识点
+        const nodesByDifficulty = [...mod.knowledgeNodes].sort((a, b) => b.difficulty - a.difficulty)
+        for (const node of nodesByDifficulty) {
+          allCandidates.push({ node, mod, difficulty: node.difficulty })
+        }
       }
-    }
 
-    // 补充：不确定的知识点
-    for (const nodeId of phase1Analysis.uncertainNodes) {
-      if (plan.length + targetNodes.length >= PHASE2_MAX_QUESTIONS) break
-      if (targetNodes.some(t => t.node.id === nodeId)) continue // 避免重复
+      // 优先选高难度节点，但避免和阶段一重复
+      const sortedCandidates = allCandidates.sort((a, b) => b.difficulty - a.difficulty)
 
-      for (const mod of modules) {
-        const node = mod.knowledgeNodes.find(n => n.id === nodeId)
-        if (node) {
+      for (const { node, mod } of sortedCandidates) {
+        if (plan.length >= PHASE2_MAX_QUESTIONS) break
+
+        let question: ChoiceQuestion | null = null
+
+        // AI 优先生成高难度题
+        if (settings?.llmApiKey && settings?.llmModel) {
+          const aiResult = await generateQuestion(
+            { id: node.id, name: node.name, description: node.description },
+            gradeLevel,
+            subject,
+            settings,
+          )
+          if (aiResult) {
+            question = this.bankItemToChoiceQuestion(aiResult, node, mod, 'ai')
+          }
+        }
+
+        // 降级到预设题库最难的题
+        if (!question) {
+          const bankItem = getQuestionFromBank(questionBank, node.id, 'hard')
+          if (bankItem) {
+            question = this.bankItemToChoiceQuestion(bankItem, node, mod, 'preset')
+          }
+        }
+
+        if (question) {
+          plan.push(question)
+        }
+      }
+    } else if (mode === 'mixed') {
+      // ========== 混合模式 ==========
+      // 先给薄弱模块出验证题，再给强项模块出挑战题
+      const weakNodeIds = new Set<string>()
+
+      // 1) 薄弱模块验证题（1-2题）
+      for (const weakModId of phase1Analysis.weakModules) {
+        if (plan.length >= Math.min(2, PHASE2_MAX_QUESTIONS)) break
+        const mod = modules.find(m => m.id === weakModId)
+        if (!mod) continue
+        for (const node of mod.knowledgeNodes) {
+          if (plan.length >= 2) break
+          weakNodeIds.add(node.id)
+          const question = await this.generateSingleQuestion(
+            node, mod, questionBank, 'hard', gradeLevel, subject, settings,
+          )
+          if (question) plan.push(question)
+        }
+      }
+
+      // 2) 不确定知识点验证题
+      for (const nodeId of phase1Analysis.uncertainNodes) {
+        if (plan.length >= PHASE2_MAX_QUESTIONS - 1) break // 至少留1题给挑战
+        if (weakNodeIds.has(nodeId)) continue
+        for (const mod of modules) {
+          const node = mod.knowledgeNodes.find(n => n.id === nodeId)
+          if (node) {
+            const question = await this.generateSingleQuestion(
+              node, mod, questionBank, 'hard', gradeLevel, subject, settings,
+            )
+            if (question) plan.push(question)
+            break
+          }
+        }
+      }
+
+      // 3) 强项模块挑战题（填满剩余名额）
+      const usedNodeIds = new Set(plan.map(q => q.nodeId))
+      const strongModules = modules.filter(
+        m => !phase1Analysis.weakModules.includes(m.id)
+          && (phase1Analysis.moduleScores[m.id] ?? 0) >= 80,
+      )
+      for (const mod of strongModules) {
+        if (plan.length >= PHASE2_MAX_QUESTIONS) break
+        const hardNodes = [...mod.knowledgeNodes].sort((a, b) => b.difficulty - a.difficulty)
+        for (const node of hardNodes) {
+          if (plan.length >= PHASE2_MAX_QUESTIONS) break
+          if (usedNodeIds.has(node.id)) continue
+          const question = await this.generateSingleQuestion(
+            node, mod, questionBank, 'hard', gradeLevel, subject, settings,
+          )
+          if (question) {
+            plan.push(question)
+            usedNodeIds.add(node.id)
+          }
+        }
+      }
+    } else {
+      // ========== 验证模式（原逻辑） ==========
+      // 收集需要验证的知识点
+      const targetNodes: Array<{ node: CurriculumKnowledgeNode; mod: CurriculumModule }> = []
+
+      // 优先：薄弱模块中的知识点
+      for (const weakModId of phase1Analysis.weakModules) {
+        const mod = modules.find(m => m.id === weakModId)
+        if (!mod) continue
+        for (const node of mod.knowledgeNodes) {
+          if (plan.length + targetNodes.length >= PHASE2_MAX_QUESTIONS) break
           targetNodes.push({ node, mod })
-          break
         }
       }
-    }
 
-    // 为每个目标知识点生成验证题
-    for (const { node, mod } of targetNodes) {
-      if (plan.length >= PHASE2_MAX_QUESTIONS) break
+      // 补充：不确定的知识点
+      for (const nodeId of phase1Analysis.uncertainNodes) {
+        if (plan.length + targetNodes.length >= PHASE2_MAX_QUESTIONS) break
+        if (targetNodes.some(t => t.node.id === nodeId)) continue
 
-      let question: ChoiceQuestion | null = null
+        for (const mod of modules) {
+          const node = mod.knowledgeNodes.find(n => n.id === nodeId)
+          if (node) {
+            targetNodes.push({ node, mod })
+            break
+          }
+        }
+      }
 
-      // AI 优先（如果配置了 LLM）
-      if (settings?.llmApiKey && settings?.llmModel) {
-        const aiResult = await generateQuestion(
-          { id: node.id, name: node.name, description: node.description },
-          gradeLevel,
-          subject,
-          settings,
+      // 为每个目标知识点生成验证题
+      for (const { node, mod } of targetNodes) {
+        if (plan.length >= PHASE2_MAX_QUESTIONS) break
+        const question = await this.generateSingleQuestion(
+          node, mod, questionBank, 'hard', gradeLevel, subject, settings,
         )
-        if (aiResult) {
-          question = this.bankItemToChoiceQuestion(aiResult, node, mod, 'ai')
-        }
-      }
-
-      // 降级到预设题库（选不同难度的题，避免和阶段一重复）
-      if (!question) {
-        const bankItem = getQuestionFromBank(questionBank, node.id, 'hard')
-        if (bankItem) {
-          question = this.bankItemToChoiceQuestion(bankItem, node, mod, 'preset')
-        }
-      }
-
-      if (question) {
-        plan.push(question)
+        if (question) plan.push(question)
       }
     }
 
     // 确保至少 PHASE2_MIN_QUESTIONS 道题
     if (plan.length < PHASE2_MIN_QUESTIONS) {
-      // 从其他模块补充
       const usedNodeIds = new Set(plan.map(q => q.nodeId))
+      // 挑战模式下补充高难度题，其他模式补充任意题
+      const difficultyPref = mode === 'challenge' ? 'hard' : undefined
       for (const mod of modules) {
         if (plan.length >= PHASE2_MIN_QUESTIONS) break
-        for (const node of mod.knowledgeNodes) {
+        const nodes = mode === 'challenge'
+          ? [...mod.knowledgeNodes].sort((a, b) => b.difficulty - a.difficulty)
+          : mod.knowledgeNodes
+        for (const node of nodes) {
           if (plan.length >= PHASE2_MIN_QUESTIONS) break
           if (usedNodeIds.has(node.id)) continue
 
-          const bankItem = getQuestionFromBank(questionBank, node.id)
+          const bankItem = getQuestionFromBank(questionBank, node.id, difficultyPref)
           if (bankItem) {
             plan.push(this.bankItemToChoiceQuestion(bankItem, node, mod, 'preset'))
             usedNodeIds.add(node.id)
@@ -751,6 +877,40 @@ export class PlacementTestEngine {
       correctIndex: item.correctIndex,
       source,
     }
+  }
+
+  /**
+   * 为单个知识点生成一道题（AI 优先，题库降级）
+   */
+  private async generateSingleQuestion(
+    node: CurriculumKnowledgeNode,
+    mod: CurriculumModule,
+    questionBank: Map<string, QuestionBankItem[]>,
+    difficulty: 'easy' | 'hard',
+    gradeLevel: string,
+    subject: string,
+    settings?: ChildSettings,
+  ): Promise<ChoiceQuestion | null> {
+    // AI 优先
+    if (settings?.llmApiKey && settings?.llmModel) {
+      const aiResult = await generateQuestion(
+        { id: node.id, name: node.name, description: node.description },
+        gradeLevel,
+        subject,
+        settings,
+      )
+      if (aiResult) {
+        return this.bankItemToChoiceQuestion(aiResult, node, mod, 'ai')
+      }
+    }
+
+    // 降级到预设题库
+    const bankItem = getQuestionFromBank(questionBank, node.id, difficulty)
+    if (bankItem) {
+      return this.bankItemToChoiceQuestion(bankItem, node, mod, 'preset')
+    }
+
+    return null
   }
 
   /** 获取按模块顺序排列的全部知识点 */

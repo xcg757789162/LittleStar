@@ -1,0 +1,236 @@
+{
+  "cn-g1-pinyin-comprehensive": [
+    {
+      "stem": "\"xuéxiào\" 拼出来是哪个词？",
+      "options": [
+        { "text": "雪花", "emoji": "❄️" },
+        { "text": "学校", "emoji": "🏫" },
+        { "text": "学习", "emoji": "📖" },
+        { "text": "血液", "emoji": "🩸" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "\"zh、ch、sh、r\" 属于什么声母？",
+      "options": [
+        { "text": "平舌音", "emoji": "📢" },
+        { "text": "翘舌音", "emoji": "✅" },
+        { "text": "鼻音", "emoji": "👃" },
+        { "text": "韵母", "emoji": "🎵" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    },
+    {
+      "stem": "\"zhi、chi、shi\" 是什么？",
+      "options": [
+        { "text": "声母", "emoji": "📢" },
+        { "text": "韵母", "emoji": "🎵" },
+        { "text": "整体认读音节", "emoji": "✅" },
+        { "text": "复韵母", "emoji": "🔤" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 3
+    }
+  ],
+  "cn-g1-character-reading": [
+    {
+      "stem": "\"花\" 的拼音是？",
+      "options": [
+        { "text": "huā", "emoji": "🌸" },
+        { "text": "huá", "emoji": "🔤" },
+        { "text": "hā", "emoji": "😄" },
+        { "text": "fā", "emoji": "📢" }
+      ],
+      "correctIndex": 0,
+      "difficulty": 1
+    },
+    {
+      "stem": "下面哪个字读 \"yú\"？",
+      "options": [
+        { "text": "于", "emoji": "✅" },
+        { "text": "干", "emoji": "❌" },
+        { "text": "千", "emoji": "❌" },
+        { "text": "下", "emoji": "❌" }
+      ],
+      "correctIndex": 0,
+      "difficulty": 2
+    },
+    {
+      "stem": "\"春\" 字一共几画？",
+      "options": [
+        { "text": "7 画", "emoji": "🔢" },
+        { "text": "8 画", "emoji": "🔢" },
+        { "text": "9 画", "emoji": "✅" },
+        { "text": "10 画", "emoji": "🔢" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 3
+    }
+  ],
+  "cn-g1-word-formation": [
+    {
+      "stem": "\"美\" 可以组成哪个词？",
+      "options": [
+        { "text": "美丽", "emoji": "🌹" },
+        { "text": "困难", "emoji": "😰" },
+        { "text": "快乐", "emoji": "😊" },
+        { "text": "认真", "emoji": "📝" }
+      ],
+      "correctIndex": 0,
+      "difficulty": 1
+    },
+    {
+      "stem": "\"学\" 能组成下面哪些词？",
+      "options": [
+        { "text": "学习、学生", "emoji": "✅" },
+        { "text": "开心、快乐", "emoji": "😊" },
+        { "text": "花草、树木", "emoji": "🌿" },
+        { "text": "吃饭、睡觉", "emoji": "🍚" }
+      ],
+      "correctIndex": 0,
+      "difficulty": 2
+    },
+    {
+      "stem": "\"高\" 的反义词是什么？",
+      "options": [
+        { "text": "大", "emoji": "🔝" },
+        { "text": "矮", "emoji": "✅" },
+        { "text": "远", "emoji": "🔭" },
+        { "text": "快", "emoji": "🏃" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    }
+  ],
+  "cn-g1-sentence-understanding": [
+    {
+      "stem": "\"小鸟在天上飞。\" 小鸟在做什么？",
+      "options": [
+        { "text": "在游泳", "emoji": "🏊" },
+        { "text": "在飞", "emoji": "✅" },
+        { "text": "在跑", "emoji": "🏃" },
+        { "text": "在睡觉", "emoji": "😴" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "\"春天来了，花儿开了。\" 这句话描写的是什么季节？",
+      "options": [
+        { "text": "夏天", "emoji": "☀️" },
+        { "text": "秋天", "emoji": "🍂" },
+        { "text": "春天", "emoji": "🌸" },
+        { "text": "冬天", "emoji": "❄️" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 1
+    },
+    {
+      "stem": "\"弯弯的月亮像小船。\" 这里把月亮比作了——",
+      "options": [
+        { "text": "太阳", "emoji": "☀️" },
+        { "text": "小船", "emoji": "⛵" },
+        { "text": "星星", "emoji": "⭐" },
+        { "text": "镜子", "emoji": "🪞" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    }
+  ],
+  "cn-g1-radicals": [
+    {
+      "stem": "\"妈\" 字的偏旁是？",
+      "options": [
+        { "text": "口", "emoji": "👄" },
+        { "text": "女", "emoji": "✅" },
+        { "text": "马", "emoji": "🐴" },
+        { "text": "人", "emoji": "👤" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "三点水（氵）的字通常和什么有关？",
+      "options": [
+        { "text": "火", "emoji": "🔥" },
+        { "text": "水", "emoji": "💧" },
+        { "text": "木", "emoji": "🌲" },
+        { "text": "土", "emoji": "🏔️" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    },
+    {
+      "stem": "下面哪个字带有 \"木\" 旁？",
+      "options": [
+        { "text": "河", "emoji": "🌊" },
+        { "text": "村", "emoji": "✅" },
+        { "text": "灯", "emoji": "💡" },
+        { "text": "坏", "emoji": "❌" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    }
+  ],
+  "cn-g1-ancient-poems": [
+    {
+      "stem": "\"床前明月光\" 的下一句是？",
+      "options": [
+        { "text": "低头思故乡", "emoji": "🏠" },
+        { "text": "疑是地上霜", "emoji": "✅" },
+        { "text": "春眠不觉晓", "emoji": "😴" },
+        { "text": "处处闻啼鸟", "emoji": "🐦" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "《静夜思》是谁写的？",
+      "options": [
+        { "text": "杜甫", "emoji": "📜" },
+        { "text": "李白", "emoji": "✅" },
+        { "text": "白居易", "emoji": "📝" },
+        { "text": "王维", "emoji": "🎨" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    },
+    {
+      "stem": "\"春眠不觉晓\" 说的是哪个季节的景色？",
+      "options": [
+        { "text": "春天", "emoji": "🌸" },
+        { "text": "夏天", "emoji": "☀️" },
+        { "text": "秋天", "emoji": "🍂" },
+        { "text": "冬天", "emoji": "❄️" }
+      ],
+      "correctIndex": 0,
+      "difficulty": 3
+    }
+  ],
+  "cn-g1-punctuation": [
+    {
+      "stem": "一句话说完了，后面用什么标点？",
+      "options": [
+        { "text": "逗号 ，", "emoji": "，" },
+        { "text": "句号 。", "emoji": "✅" },
+        { "text": "问号 ？", "emoji": "❓" },
+        { "text": "感叹号 ！", "emoji": "❗" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "提问的句子后面用什么标点？",
+      "options": [
+        { "text": "句号 。", "emoji": "。" },
+        { "text": "逗号 ，", "emoji": "，" },
+        { "text": "问号 ？", "emoji": "✅" },
+        { "text": "感叹号 ！", "emoji": "❗" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 2
+    }
+  ]
+}

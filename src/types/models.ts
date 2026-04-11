@@ -383,6 +383,9 @@ export interface QuestionBankItem {
   difficulty: number
 }
 
+/** 阶段二模式 */
+export type Phase2Mode = 'verify' | 'challenge' | 'mixed'
+
 /** 阶段一分析结果 */
 export interface Phase1Analysis {
   /** 薄弱模块 ID 列表 */
@@ -393,8 +396,15 @@ export interface Phase1Analysis {
   overallPhase1Score: number
   /** 各模块得分 */
   moduleScores: Record<string, number>
-  /** 是否需要阶段二验证 */
+  /** 是否需要阶段二（始终为 true，评测的目的是精准定位水平） */
   needsPhase2: boolean
+  /**
+   * 阶段二模式：
+   * - 'verify'：阶段一表现差（<60%），用简单题验证薄弱点
+   * - 'challenge'：阶段一表现优秀（>=80%），用更难的题找到真实上限
+   * - 'mixed'：阶段一表现一般（60-80%），验证+挑战混合
+   */
+  phase2Mode: Phase2Mode
 }
 
 /** 测评结果 */

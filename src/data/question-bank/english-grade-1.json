@@ -1,0 +1,247 @@
+{
+  "en-g1-phonics-basic": [
+    {
+      "stem": "\"Cat\" 里的 \"a\" 发什么音？",
+      "options": [
+        { "text": "/æ/ 短a音", "emoji": "✅" },
+        { "text": "/eɪ/ 长a音", "emoji": "🔤" },
+        { "text": "/ɔ:/ o音", "emoji": "❌" },
+        { "text": "/i:/ 长i音", "emoji": "❌" }
+      ],
+      "correctIndex": 0,
+      "difficulty": 2
+    },
+    {
+      "stem": "\"Big\" 的第一个字母发什么音？",
+      "options": [
+        { "text": "/b/", "emoji": "✅" },
+        { "text": "/d/", "emoji": "❌" },
+        { "text": "/p/", "emoji": "❌" },
+        { "text": "/g/", "emoji": "❌" }
+      ],
+      "correctIndex": 0,
+      "difficulty": 1
+    },
+    {
+      "stem": "哪两个单词押韵（结尾发音相同）？",
+      "options": [
+        { "text": "cat - dog", "emoji": "🐱🐶" },
+        { "text": "cat - hat", "emoji": "✅" },
+        { "text": "cat - cup", "emoji": "🐱☕" },
+        { "text": "cat - car", "emoji": "🐱🚗" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    }
+  ],
+  "en-g1-classroom-language": [
+    {
+      "stem": "老师说 \"Sit down, please.\" 你应该？",
+      "options": [
+        { "text": "站起来", "emoji": "🧍" },
+        { "text": "坐下", "emoji": "✅" },
+        { "text": "跑出去", "emoji": "🏃" },
+        { "text": "举手", "emoji": "✋" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "想上厕所，用英语怎么说？",
+      "options": [
+        { "text": "May I go to the bathroom?", "emoji": "✅" },
+        { "text": "May I have some water?", "emoji": "💧" },
+        { "text": "May I go home?", "emoji": "🏠" },
+        { "text": "May I eat?", "emoji": "🍔" }
+      ],
+      "correctIndex": 0,
+      "difficulty": 2
+    },
+    {
+      "stem": "\"Raise your hand\" 是什么意思？",
+      "options": [
+        { "text": "放下手", "emoji": "👇" },
+        { "text": "举手", "emoji": "✅" },
+        { "text": "拍手", "emoji": "👏" },
+        { "text": "洗手", "emoji": "🧼" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    }
+  ],
+  "en-g1-colors-shapes": [
+    {
+      "stem": "\"Circle\" 是什么形状？",
+      "options": [
+        { "text": "三角形", "emoji": "🔺" },
+        { "text": "正方形", "emoji": "⬜" },
+        { "text": "圆形", "emoji": "✅" },
+        { "text": "长方形", "emoji": "▬" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 1
+    },
+    {
+      "stem": "\"A white rabbit\" 是什么颜色的兔子？",
+      "options": [
+        { "text": "黑色的", "emoji": "⬛" },
+        { "text": "白色的", "emoji": "✅" },
+        { "text": "红色的", "emoji": "🔴" },
+        { "text": "棕色的", "emoji": "🟤" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    },
+    {
+      "stem": "\"Triangle\" 有几条边？",
+      "options": [
+        { "text": "2", "emoji": "✌️" },
+        { "text": "3", "emoji": "✅" },
+        { "text": "4", "emoji": "🍀" },
+        { "text": "5", "emoji": "🖐️" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    }
+  ],
+  "en-g1-daily-routines": [
+    {
+      "stem": "\"Breakfast\" 是哪一餐？",
+      "options": [
+        { "text": "午餐", "emoji": "🍱" },
+        { "text": "早餐", "emoji": "✅" },
+        { "text": "晚餐", "emoji": "🍽️" },
+        { "text": "零食", "emoji": "🍪" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "\"I go to school at 8.\" 我几点上学？",
+      "options": [
+        { "text": "7 点", "emoji": "🕖" },
+        { "text": "8 点", "emoji": "✅" },
+        { "text": "9 点", "emoji": "🕘" },
+        { "text": "10 点", "emoji": "🕙" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    },
+    {
+      "stem": "\"I brush my teeth every morning.\" 我每天早上做什么？",
+      "options": [
+        { "text": "洗脸", "emoji": "🧴" },
+        { "text": "刷牙", "emoji": "✅" },
+        { "text": "梳头", "emoji": "💇" },
+        { "text": "穿衣服", "emoji": "👕" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    }
+  ],
+  "en-g1-numbers-11-20": [
+    {
+      "stem": "\"Twelve\" 是数字几？",
+      "options": [
+        { "text": "11", "emoji": "1️⃣" },
+        { "text": "12", "emoji": "✅" },
+        { "text": "13", "emoji": "🔢" },
+        { "text": "20", "emoji": "🔟" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "\"Twenty\" 是数字几？",
+      "options": [
+        { "text": "12", "emoji": "🔢" },
+        { "text": "15", "emoji": "🔢" },
+        { "text": "20", "emoji": "✅" },
+        { "text": "22", "emoji": "🔢" }
+      ],
+      "correctIndex": 2,
+      "difficulty": 1
+    },
+    {
+      "stem": "Eleven, Twelve, ?, Fourteen — 问号是？",
+      "options": [
+        { "text": "Ten", "emoji": "🔟" },
+        { "text": "Thirteen", "emoji": "✅" },
+        { "text": "Fifteen", "emoji": "🔢" },
+        { "text": "Sixteen", "emoji": "🔢" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    }
+  ],
+  "en-g1-adjectives": [
+    {
+      "stem": "\"The elephant is big.\" 大象是什么样的？",
+      "options": [
+        { "text": "小的", "emoji": "🤏" },
+        { "text": "大的", "emoji": "✅" },
+        { "text": "快的", "emoji": "🏃" },
+        { "text": "慢的", "emoji": "🐌" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "\"Big\" 的反义词是？",
+      "options": [
+        { "text": "Tall", "emoji": "📏" },
+        { "text": "Small", "emoji": "✅" },
+        { "text": "Long", "emoji": "➡️" },
+        { "text": "Fast", "emoji": "🏃" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    },
+    {
+      "stem": "\"The ice cream is cold and sweet.\" 冰淇淋是？",
+      "options": [
+        { "text": "热的甜的", "emoji": "🔥" },
+        { "text": "冷的甜的", "emoji": "✅" },
+        { "text": "冷的辣的", "emoji": "🌶️" },
+        { "text": "热的酸的", "emoji": "🍋" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    }
+  ],
+  "en-g1-can-do": [
+    {
+      "stem": "\"I can swim.\" 我会什么？",
+      "options": [
+        { "text": "跑步", "emoji": "🏃" },
+        { "text": "游泳", "emoji": "✅" },
+        { "text": "飞", "emoji": "🦅" },
+        { "text": "画画", "emoji": "🎨" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 1
+    },
+    {
+      "stem": "\"Can you dance?\" 在问你——",
+      "options": [
+        { "text": "会不会唱歌", "emoji": "🎤" },
+        { "text": "会不会跳舞", "emoji": "✅" },
+        { "text": "会不会画画", "emoji": "🎨" },
+        { "text": "会不会做饭", "emoji": "🍳" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 2
+    },
+    {
+      "stem": "\"Birds can fly, but fish can't.\" 鱼不会？",
+      "options": [
+        { "text": "游泳", "emoji": "🏊" },
+        { "text": "飞", "emoji": "✅" },
+        { "text": "吃东西", "emoji": "🍴" },
+        { "text": "呼吸", "emoji": "💨" }
+      ],
+      "correctIndex": 1,
+      "difficulty": 3
+    }
+  ]
+}
