@@ -137,7 +137,6 @@ function getASRProviderName(providerId: ASRProviderId, t: (key: string) => strin
     'openai-whisper': t('settings.providerOpenAIWhisper'),
     'browser-native': t('settings.providerBrowserNative'),
     'qwen-asr': t('settings.providerQwenASR'),
-    'minimax-asr': t('settings.providerMiniMaxASR'),
   };
   return names[providerId];
 }

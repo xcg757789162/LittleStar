@@ -1031,33 +1031,6 @@ export const ASR_PROVIDERS: Record<ASRProviderId, ASRProviderConfig> = {
     supportedFormats: ['mp3', 'wav', 'webm', 'm4a', 'flac'],
   },
 
-  'minimax-asr': {
-    id: 'minimax-asr',
-    name: 'MiniMax ASR',
-    requiresApiKey: true,
-    defaultBaseUrl: 'https://api.minimaxi.com',
-    icon: '/logos/minimax.svg',
-    models: [],
-    defaultModelId: '',
-    supportedLanguages: [
-      'auto',
-      'zh',
-      'yue',
-      'en',
-      'ja',
-      'ko',
-      'de',
-      'fr',
-      'ru',
-      'es',
-      'pt',
-      'ar',
-      'it',
-      'hi',
-    ],
-    supportedFormats: ['mp3', 'wav', 'webm', 'm4a', 'flac'],
-  },
-
   'browser-native': {
     id: 'browser-native',
     name: '浏览器原生 ASR (Web Speech API)',
