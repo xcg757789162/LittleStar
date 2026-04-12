@@ -85,7 +85,9 @@ interface BackendStatusResponse {
 /** 获取后端 API 基础路径 */
 function getApiBase(): string {
   // 开发环境通过 Vite proxy，生产环境通过 Nginx proxy
-  return '/api/pre-generate'
+  // 注意：必须带末尾斜杠，否则 Nginx location 的 trailing-slash 301 重定向
+  // 会丢失宿主机端口号（容器内部 listen 80，宿主机映射 8080）
+  return '/api/pre-generate/'
 }
 
 async function submitTasks(
@@ -93,7 +95,7 @@ async function submitTasks(
   childSettings: Record<string, unknown>,
   tasks: BackendTask[],
 ): Promise<BackendSubmitResponse> {
-  const res = await fetch(`${getApiBase()}`, {
+  const res = await fetch(getApiBase(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ childId, childSettings, tasks }),

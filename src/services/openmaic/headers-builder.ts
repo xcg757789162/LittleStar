@@ -95,8 +95,12 @@ export function buildHeadersFromSettings(
   // === 角色配置 Headers（新增） ===
 
   // x-agent-profiles：仅 preset 模式下发送
+  // 注意：HTTP header 不能包含非 ASCII 字符（浏览器/Node.js fetch 会抛出 ByteString 错误）
+  // 因此将 JSON 进行 Base64 编码后传递
   if (settings.classroomAgentMode === 'preset') {
-    headers['x-agent-profiles'] = buildAgentProfilesHeader(settings)
+    const profilesJson = buildAgentProfilesHeader(settings)
+    headers['x-agent-profiles'] = btoa(unescape(encodeURIComponent(profilesJson)))
+    headers['x-agent-profiles-encoding'] = 'base64'
   }
 
   // x-teacher-voice：始终发送（fallback 到 teacher 默认音色）

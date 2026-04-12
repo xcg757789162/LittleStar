@@ -45,9 +45,9 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
-      // Pre-Generation Backend API（直连后端服务 3003 端口）
+      // Pre-Generation Backend API（通过 Nginx 代理，Nginx 内部转发到 3003）
       '/api/pre-generate': {
-        target: 'http://localhost:3003',
+        target: 'http://localhost:8080',
         changeOrigin: true,
       },
       // OpenMAIC 内部 API 通配符代理（SSE 支持）

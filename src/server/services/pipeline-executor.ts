@@ -109,17 +109,34 @@ export class PipelineExecutor {
 
     const cp: PipelineCheckpoint = checkpoint ? { ...checkpoint } : {}
 
-    // Step 0: auto 模式下获取 AI 角色
+    // Step 0: 解析/生成 Agent profiles
+    // 注意：x-agent-profiles header 包含中文会导致 Node.js fetch ByteString 错误
+    // 因此 agentProfiles 从 header 解码后删除 header，改为通过 body 传递给 OpenMAIC
+    let agentProfiles: AgentInfo[] | undefined
+
     if (headers['x-agent-mode'] === 'auto' && !cp.agentProfiles) {
       onProgress?.('agent-profiles', 2, '正在生成课堂角色...')
-      const agentProfiles = await this.generateAgentProfiles(requirements, headers)
+      agentProfiles = await this.generateAgentProfiles(requirements, headers)
       cp.agentProfiles = agentProfiles
-      headers['x-agent-profiles'] = JSON.stringify(agentProfiles)
       await onCheckpoint?.(cp, 'agent-profiles', 5)
       onProgress?.('agent-profiles', 5, `角色生成完成，共 ${agentProfiles.length} 个角色`)
     } else if (cp.agentProfiles) {
-      headers['x-agent-profiles'] = JSON.stringify(cp.agentProfiles)
+      agentProfiles = cp.agentProfiles
+    } else if (headers['x-agent-profiles']) {
+      // 从 header 解码 agent profiles（可能是 Base64 编码）
+      try {
+        const raw = headers['x-agent-profiles-encoding'] === 'base64'
+          ? Buffer.from(headers['x-agent-profiles'], 'base64').toString('utf-8')
+          : headers['x-agent-profiles']
+        agentProfiles = JSON.parse(raw) as AgentInfo[]
+      } catch {
+        console.warn('[PipelineExecutor] 无法解析 x-agent-profiles header，跳过')
+      }
     }
+
+    // 删除包含中文的 header，避免 ByteString 错误
+    delete headers['x-agent-profiles']
+    delete headers['x-agent-profiles-encoding']
 
     // Step 1: 生成大纲（如果 checkpoint 没有）
     let outlines: SceneOutline[]
@@ -128,7 +145,7 @@ export class PipelineExecutor {
       onProgress?.('outlines', 20, `大纲已恢复，共 ${outlines.length} 个场景`)
     } else {
       onProgress?.('outlines', 5, '正在生成场景大纲...')
-      outlines = await this.generateOutlines(requirements, headers)
+      outlines = await this.generateOutlines(requirements, headers, agentProfiles)
       cp.outlines = outlines
       await onCheckpoint?.(cp, 'outlines', 20)
       onProgress?.('outlines', 20, `大纲生成完成，共 ${outlines.length} 个场景`)
@@ -152,7 +169,7 @@ export class PipelineExecutor {
       } else {
         const contentPercent = 20 + (i / totalScenes) * 30
         onProgress?.('scene-content', contentPercent, `正在生成场景 ${i + 1}/${totalScenes} 的内容...`)
-        content = await this.generateSceneContent(outline, headers)
+        content = await this.generateSceneContent(outline, headers, agentProfiles)
         cp.sceneContents[i] = content
         await onCheckpoint?.(cp, 'scene-content', Math.round(contentPercent))
       }
@@ -164,7 +181,7 @@ export class PipelineExecutor {
       } else {
         const actionsPercent = 50 + (i / totalScenes) * 20
         onProgress?.('scene-actions', actionsPercent, `正在生成场景 ${i + 1}/${totalScenes} 的动作...`)
-        actions = await this.generateSceneActions(outline, content, headers)
+        actions = await this.generateSceneActions(outline, content, headers, agentProfiles)
         cp.sceneActions[i] = actions
         await onCheckpoint?.(cp, 'scene-actions', Math.round(actionsPercent))
       }
@@ -242,13 +259,14 @@ export class PipelineExecutor {
   private async generateOutlines(
     requirements: UserRequirements,
     headers: Record<string, string>,
+    agents?: AgentInfo[],
   ): Promise<SceneOutline[]> {
     const response = await this.fetchWithTimeout(
       `${OPENMAIC_BASE_URL}/api/generate/scene-outlines-stream`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify(requirements),
+        body: JSON.stringify({ ...requirements, agents }),
       },
     )
 
@@ -262,13 +280,14 @@ export class PipelineExecutor {
   private async generateSceneContent(
     outline: SceneOutline,
     headers: Record<string, string>,
+    agents?: AgentInfo[],
   ): Promise<GeneratedContent> {
     return this.fetchWithRetry<GeneratedContent>(
       `${OPENMAIC_BASE_URL}/api/generate/scene-content`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({ outline }),
+        body: JSON.stringify({ outline, agents }),
       },
     )
   }
@@ -277,13 +296,14 @@ export class PipelineExecutor {
     outline: SceneOutline,
     content: GeneratedContent,
     headers: Record<string, string>,
+    agents?: AgentInfo[],
   ): Promise<SceneAction[]> {
     const data = await this.fetchWithRetry<{ actions: SceneAction[] }>(
       `${OPENMAIC_BASE_URL}/api/generate/scene-actions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({ outline, content }),
+        body: JSON.stringify({ outline, content, agents }),
       },
     )
     return data.actions ?? []

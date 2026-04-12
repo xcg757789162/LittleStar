@@ -87,8 +87,12 @@ export function buildHeadersFromSettingsServer(
   headers['x-agent-mode'] = agentMode
 
   // Preset 模式下构建 agent-profiles
+  // 注意：HTTP header 不能包含非 ASCII 字符（Node.js fetch 会抛出 ByteString 错误）
+  // 因此将 JSON 进行 Base64 编码后传递
   if (agentMode === 'preset') {
-    headers['x-agent-profiles'] = buildAgentProfilesHeader(settings)
+    const profilesJson = buildAgentProfilesHeader(settings)
+    headers['x-agent-profiles'] = Buffer.from(profilesJson, 'utf-8').toString('base64')
+    headers['x-agent-profiles-encoding'] = 'base64'
   }
 
   // Teacher voice

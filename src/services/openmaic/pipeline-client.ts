@@ -251,7 +251,9 @@ export class OpenMAICPipelineClient {
     if (headers['x-agent-mode'] === 'auto') {
       this.reportProgress(callbacks, 'agent-profiles', 2, '正在生成课堂角色...')
       const agentProfiles = await this.generateAgentProfiles(requirements, headers)
-      headers['x-agent-profiles'] = JSON.stringify(agentProfiles)
+      // 注意：HTTP header 不能包含非 ASCII 字符，用 Base64 编码
+      headers['x-agent-profiles'] = btoa(unescape(encodeURIComponent(JSON.stringify(agentProfiles))))
+      headers['x-agent-profiles-encoding'] = 'base64'
       this.reportProgress(callbacks, 'agent-profiles', 5, `角色生成完成，共 ${agentProfiles.length} 个角色`)
     }
 
