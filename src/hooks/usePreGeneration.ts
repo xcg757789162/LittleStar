@@ -138,6 +138,11 @@ export function usePreGeneration(
   const hasTriggeredRef = useRef(false)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // 监听 child settings 变化（API Key 配置后自动刷新）
+  const currentChild = useChildStore((s) => s.currentChild)
+  const llmModel = currentChild?.settings?.llmModel ?? ''
+  const llmApiKey = currentChild?.settings?.llmApiKey ?? ''
+
   /**
    * 停止轮询
    */
@@ -482,6 +487,20 @@ export function usePreGeneration(
     window.addEventListener('placement-test-completed', handlePlacementTestCompleted)
     return () => window.removeEventListener('placement-test-completed', handlePlacementTestCompleted)
   }, [runPreGeneration])
+
+  /**
+   * 监听 API Key 配置变化：当状态为 api-key-missing 且 key 已填写时自动重试
+   */
+  useEffect(() => {
+    if (status === 'api-key-missing' && llmModel && llmApiKey) {
+      log.info('🔑 检测到 API Key 已配置，自动重新触发预生成')
+      hasTriggeredRef.current = false
+      isRunningRef.current = false
+      // 延迟 500ms，等 childStore 完全写入
+      const timer = setTimeout(() => void runPreGeneration(), 500)
+      return () => clearTimeout(timer)
+    }
+  }, [status, llmModel, llmApiKey, runPreGeneration])
 
   /**
    * 清理：组件卸载时停止轮询

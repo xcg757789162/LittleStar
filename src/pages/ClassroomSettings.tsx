@@ -2,14 +2,17 @@
  * 课堂设置页面 — Sunny Playground 风格
  *
  * 直接复用 OpenMAIC 原生组件和 Store，配置即时生效：
- * - UserProfileCard → 头像 / 昵称 / 自我介绍
- * - AgentBar → 老师音色 / 预设&自动模式 / 角色音色 / 讨论轮数 / 同学选择
+ * - UserProfileCard → 头像 / 昵称 / 自我介绍（写入数据库）
+ * - AgentBar → 老师音色 / 预设&自动模式 / 角色音色 / 讨论轮数 / 同学选择（localStorage）
  *
  * 所有操作直接写入 OpenMAIC 的三个 Store：
  *   useSettingsStore（Agent 设置、TTS 配置）
  *   useAgentRegistry（角色注册表）
  *   useUserProfileStore（用户头像/昵称/简介）
- * 无需经过 settings-sync 桥接，配置在 localStorage 中持久化。
+ *
+ * 高级 AI 设置（API Key、Provider 等）已迁移到：
+ *   家长模块 → ParentSettings → SettingsDialog
+ *   关闭 SettingsDialog 时通过 syncOpenMAICToChild() 反向同步到数据库
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -20,10 +23,7 @@ import { useAgentRegistry } from '@/lib/openmaic/orchestration/registry/store'
 import { useUserProfileStore, AVATAR_OPTIONS } from '@/stores/openmaic/user-profile'
 import { useChildStore } from '@/stores/childStore'
 import { syncSettingsToOpenMAIC } from '@/stores/openmaic/settings-sync'
-import { useUpdateChildSettings } from '@/hooks/queries/useChildren'
 import { resolveAgentVoice, getAvailableProvidersWithVoices, getCurrentProviderVoices } from '@/lib/openmaic/audio/voice-resolver'
-import { DEFAULT_ADVANCED_SETTINGS, MINIMAX_VOICES, OPENAI_VOICES } from '@/types/models'
-import type { ChildSettings } from '@/types/models'
 
 import type { TTSProviderId } from '@/lib/openmaic/audio/types'
 import type { ProviderWithVoices } from '@/lib/openmaic/audio/voice-resolver'
@@ -116,115 +116,23 @@ export function ClassroomSettings() {
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false)
   const nameInputRef = useRef<HTMLInputElement>(null)
 
-  // === 数据库持久化 Mutation ===
-  const updateChildSettingsDb = useUpdateChildSettings()
+  // === 数据库持久化 Mutation（已迁移到 SettingsDialog 反向同步） ===
 
-  // === 高级课堂设置 ===
-  const [classroomSettingsOpen, setClassroomSettingsOpen] = useState(false)
+  // === 当前孩子数据（用于正向同步 DB → OpenMAIC Store）===
   const currentChild = useChildStore((s) => s.currentChild)
   const childSettings = currentChild?.settings
-  const [advancedSettings, setAdvancedSettings] = useState(() => {
-    if (!childSettings) return { ...DEFAULT_ADVANCED_SETTINGS }
-    return {
-      llmProviderId: childSettings.llmProviderId ?? DEFAULT_ADVANCED_SETTINGS.llmProviderId,
-      llmModel: childSettings.llmModel ?? DEFAULT_ADVANCED_SETTINGS.llmModel,
-      llmApiKey: childSettings.llmApiKey ?? DEFAULT_ADVANCED_SETTINGS.llmApiKey,
-      llmBaseUrl: childSettings.llmBaseUrl ?? DEFAULT_ADVANCED_SETTINGS.llmBaseUrl,
-      enableTTS: childSettings.enableTTS ?? DEFAULT_ADVANCED_SETTINGS.enableTTS,
-      ttsProviderId: childSettings.ttsProviderId ?? DEFAULT_ADVANCED_SETTINGS.ttsProviderId,
-      ttsApiKey: childSettings.ttsApiKey ?? DEFAULT_ADVANCED_SETTINGS.ttsApiKey,
-      ttsVoice: childSettings.ttsVoice ?? DEFAULT_ADVANCED_SETTINGS.ttsVoice,
-      ttsSpeed: childSettings.ttsSpeed ?? DEFAULT_ADVANCED_SETTINGS.ttsSpeed,
-      enableImageGeneration: childSettings.enableImageGeneration ?? DEFAULT_ADVANCED_SETTINGS.enableImageGeneration,
-      imageProviderId: childSettings.imageProviderId ?? DEFAULT_ADVANCED_SETTINGS.imageProviderId,
-      imageApiKey: childSettings.imageApiKey ?? DEFAULT_ADVANCED_SETTINGS.imageApiKey,
-      imageBaseUrl: childSettings.imageBaseUrl ?? DEFAULT_ADVANCED_SETTINGS.imageBaseUrl,
-      enableVideoGeneration: childSettings.enableVideoGeneration ?? DEFAULT_ADVANCED_SETTINGS.enableVideoGeneration,
-      videoProviderId: childSettings.videoProviderId ?? DEFAULT_ADVANCED_SETTINGS.videoProviderId,
-      videoApiKey: childSettings.videoApiKey ?? DEFAULT_ADVANCED_SETTINGS.videoApiKey,
-      videoBaseUrl: childSettings.videoBaseUrl ?? DEFAULT_ADVANCED_SETTINGS.videoBaseUrl,
-    }
-  })
 
+  // 当孩子的数据库设置变化时，正向同步到 OpenMAIC Store
   useEffect(() => {
-    if (!childSettings) {
-      setAdvancedSettings({ ...DEFAULT_ADVANCED_SETTINGS })
-      return
-    }
-
-    setAdvancedSettings({
-      llmProviderId: childSettings.llmProviderId ?? DEFAULT_ADVANCED_SETTINGS.llmProviderId,
-      llmModel: childSettings.llmModel ?? DEFAULT_ADVANCED_SETTINGS.llmModel,
-      llmApiKey: childSettings.llmApiKey ?? DEFAULT_ADVANCED_SETTINGS.llmApiKey,
-      llmBaseUrl: childSettings.llmBaseUrl ?? DEFAULT_ADVANCED_SETTINGS.llmBaseUrl,
-      enableTTS: childSettings.enableTTS ?? DEFAULT_ADVANCED_SETTINGS.enableTTS,
-      ttsProviderId: childSettings.ttsProviderId ?? DEFAULT_ADVANCED_SETTINGS.ttsProviderId,
-      ttsApiKey: childSettings.ttsApiKey ?? DEFAULT_ADVANCED_SETTINGS.ttsApiKey,
-      ttsVoice: childSettings.ttsVoice ?? DEFAULT_ADVANCED_SETTINGS.ttsVoice,
-      ttsSpeed: childSettings.ttsSpeed ?? DEFAULT_ADVANCED_SETTINGS.ttsSpeed,
-      enableImageGeneration: childSettings.enableImageGeneration ?? DEFAULT_ADVANCED_SETTINGS.enableImageGeneration,
-      imageProviderId: childSettings.imageProviderId ?? DEFAULT_ADVANCED_SETTINGS.imageProviderId,
-      imageApiKey: childSettings.imageApiKey ?? DEFAULT_ADVANCED_SETTINGS.imageApiKey,
-      imageBaseUrl: childSettings.imageBaseUrl ?? DEFAULT_ADVANCED_SETTINGS.imageBaseUrl,
-      enableVideoGeneration: childSettings.enableVideoGeneration ?? DEFAULT_ADVANCED_SETTINGS.enableVideoGeneration,
-      videoProviderId: childSettings.videoProviderId ?? DEFAULT_ADVANCED_SETTINGS.videoProviderId,
-      videoApiKey: childSettings.videoApiKey ?? DEFAULT_ADVANCED_SETTINGS.videoApiKey,
-      videoBaseUrl: childSettings.videoBaseUrl ?? DEFAULT_ADVANCED_SETTINGS.videoBaseUrl,
-    })
-
+    if (!childSettings) return
     syncSettingsToOpenMAIC(childSettings)
   }, [childSettings, currentChild?.id])
-
-  const updateAdvanced = useCallback(<K extends keyof typeof advancedSettings>(
-    key: K, value: (typeof advancedSettings)[K],
-  ) => {
-    setAdvancedSettings((prev) => ({ ...prev, [key]: value }))
-    setAdvancedDirty(true)
-  }, [])
-
-  // 高级设置 dirty 状态 & 手动保存
-  const [advancedDirty, setAdvancedDirty] = useState(false)
-  const [advancedSaveMsg, setAdvancedSaveMsg] = useState('')
-  const saveAdvancedSettings = useCallback(async () => {
-    const child = useChildStore.getState().currentChild
-    if (!child?.id) return
-
-    // 1. 立即更新内存（UI 即时响应）
-    useChildStore.getState().updateChildSettings(child.id, advancedSettings)
-    syncSettingsToOpenMAIC({
-      ...(child.settings as Partial<ChildSettings>),
-      ...advancedSettings,
-    } as ChildSettings)
-    setAdvancedDirty(false)
-    setAdvancedSaveMsg('⏳ 正在保存到数据库…')
-
-    // 2. 同时持久化到 PostgreSQL 数据库
-    try {
-      await updateChildSettingsDb.mutateAsync({
-        id: Number(child.id),
-        settings: advancedSettings,
-      })
-      setAdvancedSaveMsg('✅ 设置已保存到数据库')
-    } catch (err) {
-      console.error('[ClassroomSettings] 保存到数据库失败:', err)
-      setAdvancedSaveMsg('❌ 保存失败，请重试')
-      setAdvancedDirty(true) // 标记为未保存，允许重试
-    }
-    setTimeout(() => setAdvancedSaveMsg(''), 3000)
-  }, [advancedSettings, updateChildSettingsDb])
-
-  const advInputStyle: React.CSSProperties = {
-    width: '100%', padding: '12px 14px', borderRadius: '14px',
-    border: '1.5px solid #FFE8D6', backgroundColor: '#FFFCF8',
-    fontSize: '14px', color: T.textDark, outline: 'none',
-    transition: 'border-color 0.2s', boxSizing: 'border-box',
-  }
 
   // 构建可用的 TTS 音色列表
   // 优先使用当前已同步到 OpenMAIC store 的 provider；如果还停留在 browser-native，
   // 就回退到孩子已配置的 TTS provider，再不行回退到第一个可用服务商，避免列表为空。
   const serverProviders = getAvailableProvidersWithVoices(ttsProvidersConfig)
-  const mappedAdvancedTTSProviderId = mapBackendTTSProviderId(advancedSettings.ttsProviderId)
+  const mappedAdvancedTTSProviderId = mapBackendTTSProviderId(childSettings?.ttsProviderId || '')
   const fallbackTTSProviderId =
     mappedAdvancedTTSProviderId || serverProviders[0]?.providerId || 'openai-tts'
   const currentProviderVoices = getCurrentProviderVoices(ttsProviderId, fallbackTTSProviderId)

@@ -241,13 +241,6 @@ function getScoreStars(score: number): number {
   return 1
 }
 
-function getScoreLabel(score: number): string {
-  if (score >= 90) return '太棒啦！'
-  if (score >= 70) return '很不错！'
-  if (score >= 50) return '继续加油'
-  if (score >= 30) return '慢慢来~'
-  return '加油哦~'
-}
 
 /** 小星星评级展示 */
 function MiniStarRating({ stars, size = 14, color = T.starGold }: {
@@ -917,11 +910,14 @@ export function Home() {
             {ALL_SUBJECTS.filter((s) => completedSubjects.has(s.key)).map((subject, index) => {
               const test = completedSubjectsMap.get(subject.key)
               const result: PlacementResult | undefined = test?.result
-              const score = result?.overallScore ?? 0
+              const masteryStats = subjectMasteryStats.get(subject.key)
+              const masteredCount = masteryStats?.mastered ?? 0
+              const learningCount = masteryStats?.learning ?? 0
+              const totalCount = masteryStats?.total ?? 0
+              // 使用知识点掌握百分比（已掌握/总数），与 SubjectMasteryPage 一致
+              const progressPercent = totalCount > 0 ? Math.round((masteredCount / totalCount) * 100) : 0
               const stars = result ? getScoreStars(result.overallScore) : 0
-              const masteredCount = subjectMasteryStats.get(subject.key)?.mastered ?? 0
-              const learningCount = subjectMasteryStats.get(subject.key)?.learning ?? 0
-              const label = result ? getScoreLabel(result.overallScore) : '已完成'
+              const label = progressPercent >= 80 ? '太棒啦！' : progressPercent >= 50 ? '很不错！' : progressPercent > 0 ? '继续加油' : '开始学习'
 
               return (
                 <motion.div
@@ -1005,7 +1001,7 @@ export function Home() {
                     )}
                   </div>
 
-                  {/* 右侧：分数 + 评语 */}
+                  {/* 右侧：掌握百分比 + 评语 */}
                   <div style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -1019,8 +1015,7 @@ export function Home() {
                       color: subject.color,
                       lineHeight: 1,
                     }}>
-                      {score}
-                    </span>
+                      {progressPercent}%</span>
                     <span style={{
                       fontFamily: T.fontBody,
                       fontSize: '11px',

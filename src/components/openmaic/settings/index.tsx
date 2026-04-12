@@ -60,6 +60,7 @@ import { GeneralSettings } from './general-settings';
 import { ModelEditDialog } from './model-edit-dialog';
 import { AddProviderDialog, type NewProviderData } from './add-provider-dialog';
 import type { SettingsSection, EditingModel } from '@/lib/openmaic/types/settings';
+import { syncOpenMAICToChild } from '@/stores/openmaic/settings-reverse-sync';
 
 // ─── Provider List Column (reusable) ───
 function ProviderListColumn<T extends string>({
@@ -220,6 +221,21 @@ interface SettingsDialogProps {
 export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsDialogProps) {
   const { t } = useI18n();
 
+  // 包装 onOpenChange，在关闭时自动反向同步到数据库
+  const handleOpenChange = useCallback((newOpen: boolean) => {
+    onOpenChange(newOpen);
+    if (!newOpen) {
+      // 关闭弹窗时，将 OpenMAIC Settings Store 反向同步到数据库
+      syncOpenMAICToChild().then((ok) => {
+        if (ok) {
+          console.log('[SettingsDialog] ✅ 设置已反向同步到数据库')
+        }
+      }).catch((err) => {
+        console.error('[SettingsDialog] ❌ 反向同步失败:', err)
+      })
+    }
+  }, [onOpenChange]);
+
   // Get settings from store
   const activeProviderId = useSettingsStore((state) => state.providerId);
   const activeModelId = useSettingsStore((state) => state.modelId);
@@ -336,7 +352,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
   }, [isResizing]);
 
   const handleSave = () => {
-    onOpenChange(false);
+    handleOpenChange(false);
   };
 
   const handleProviderSelect = (pid: ProviderId) => {
@@ -725,7 +741,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         className="z-[1101] block h-[90vh] w-[min(1400px,98vw)] max-w-[98vw] gap-0 overflow-hidden rounded-[32px] border border-white/70 bg-[#fffaf6] p-0 shadow-[0_30px_120px_rgba(15,23,42,0.18)]"
         showCloseButton={false}
@@ -1016,7 +1032,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                     variant="ghost"
                     size="icon"
                     className="h-9 w-9 rounded-2xl hover:bg-slate-100"
-                    onClick={() => onOpenChange(false)}
+                    onClick={() => handleOpenChange(false)}
                   >
                     <X className="h-4 w-4" />
                   </Button>
