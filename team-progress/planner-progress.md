@@ -1,33 +1,25 @@
-- [x] 梳理家长 AI 设置相关组件与入口
-- [x] 复核最近变更与重置流程代码
-- [x] 判断可能的状态/遮罩来源并给出结论
+# planner progress
+
+- 状态: 已完成
+- 负责任务: Task 3 前置梳理 - Playwright E2E full 闭环现状与最小方案
+- 工作区: `/Users/chenguoxie/CodeBuddy/OpenMAIC/.worktrees/playwright-e2e-runner-20260412`
+
+## TODO
+- [x] 盘点 `e2e/tests/full`、`e2e/helpers`、`playwright.config.ts` 现状
+- [x] 确认真实 UI 选择器（课堂答题 / 完成课堂 / session summary / history）
+- [x] 判断 TDD 下首个 failing test
+- [x] 输出最小实现方案与风险清单
 
 ## 工作内容
-- 入口在 `src/pages/ParentSettings.tsx`，点击“打开 AI 设置面板”后渲染 `src/components/openmaic/settings/index.tsx` 的 `SettingsDialog`。
-- 真正的“重置”逻辑在 `src/components/openmaic/settings/provider-config-panel.tsx`：点击“重置”只会把 `showResetDialog` 设为 `true`，随后弹出嵌套的 `AlertDialog`；确认后调用父层 `onResetToDefault()`，而父层 `handleResetProvider()` 仅重置内置 provider 的 `models` 列表并弹 toast，不会设置任何全页 loading、disabled 或业务锁定状态。
-- 最近改动主要集中在 `settings/index.tsx` 与 `provider-config-panel.tsx` 的 UI 重构（侧栏头图、footer、模型卡片按钮样式、重置按钮区域样式），没有给 reset 新增异步请求或新的全页禁用状态。
-- 之前“`AlertDialogContent` 仍停留默认 `z-50`”这一判断已过期。当前代码里 `provider-config-panel.tsx` 和 `settings/index.tsx` 的确认框都明确写成了 `<AlertDialogContent overlayClassName="z-[1200]" className="z-[1201]">`，所以旧结论确实是基于早期版本观察，不适用于当前代码。
-- 已在真实浏览器完成一轮注册 → 创建孩子 → 打开家长 AI 设置 → 点击 `Reset` → 点击 `Confirm Reset` 的复现。运行态证据如下：1) 外层 `SettingsDialog` 打开时，`body` 会被 Radix 设成 `pointer-events: none` 且带 `data-scroll-locked`，此时仅存在一层 `dialog-overlay(z=1100)` 与一层 `dialog-content(z=1101)`；2) 打开重置确认框后，会新增 `alert-dialog-overlay(z=1200)` 与 `alert-dialog-content(z=1201)`，同时外层 `dialog-content` 的 `pointer-events` 变成 `none`，这是嵌套模态的正常表现；3) 点击 `Confirm Reset` 后，`alert-dialog-*` 会正确移除，页面回到只有外层 `dialog-overlay/dialog-content` 的状态，外层 `dialog-content` 的 `pointer-events` 恢复为 `auto`，没有残留第二层遮罩；4) 此时继续点击弹层内部 `Image Generation` 与 `Close` 都成功，说明“确认重置后设置弹层内部整页不可点击”在当前代码下**未复现**。
-- 当前更准确的结论是：`body` 上的 `pointer-events: none` 是 Radix modal 的正常机制，用来禁止点击底页；如果用户感觉“整页都点不动”，更像是**底层家长设置页在 AI 设置弹层未关闭时本来就不可点**，而不是 reset 后遗留了一层没释放的遮罩。按我这轮复现，重置确认框关闭后没有发现 overlay 残留、`body` 锁定泄漏或外层 dialog 假死。若线上仍有问题，更像是特定浏览器/交互路径的瞬时状态问题，下一步应直接抓用户复现场景的录屏或 DevTools Elements/Computed 截图，而不是继续沿用旧的 z-index 推断。
-
-## Task 3 现状补充（课堂路径）
-- 已与 `executor` 对齐最新运行态证据：当前真实业务阻塞是课堂路径布局塌高，不是 `ThemeProvider`，也不是简单点击伪失败。
-- 具体链路为 `Stage -> CanvasArea -> SceneRenderer -> QuizView` 挂在 `ClassroomBridge` 容器下时，多层祖先宽高为 `0`，导致 `quiz-start-button` 命中区域异常，无法顺利切到 answering。
-- 在页面里临时注入 `height: 100%` / `width: 100%` 后，`option-0` 立即可见，说明 quiz 内容本身可渲染，真正缺的是容器尺寸沿祖先链正确传递。
-- 因此 Task 3 现阶段应优先排查 `ClassroomBridge` 及其下游容器的高度继承与布局撑满，再继续验证答题、`onAnswer` 回传和 history 落库链路。
-- 此前关于 `ThemeProvider` 的判断应降级为历史噪音，更可能与旧服务 / `reuseExistingServer` 复用旧 bundle 有关，不再作为当前主结论。
-
-## 待执行验收清单（收到布局修复后立即复核）
-- 课堂入口：从 lesson picker 进入 `/classroom` 后，不允许再出现 `quiz-start-button` 可见但实际无法命中的情况；需确认课堂主容器与 `Stage -> CanvasArea -> SceneRenderer -> QuizView` 祖先链已经拿到非 0 宽高。
-- Quiz 交互：按真实点击路径完成 `quiz-start-button -> option-0 -> submit`，不能使用 `force: true` 掩盖命中问题；需要看到明确的 answering / submit / review 阶段切换信号。
-- 课堂完成：review 后可继续推进到 `✅ 完成课堂` 或等价完成态，证明最小学习闭环恢复。
-- 统计回传：确认 `QuizView` 结果能沿 `SceneRenderer -> CanvasArea -> Stage -> ClassroomBridge` 上行，最终触发外层 `onAnswer(...)`，并使 `learningStore.sessionStats.questionsCompleted` 实际增长。
-- 历史落库：完成课堂后检查 `/classroom_history` 新记录满足 `questionsCompleted > 0` 且 `correctCount === 1`，避免只修复前台交互、未修复 persistence。
-- 索引补充：仅在以上链路稳定通过后，才更新 `.codebuddy/project-index.md` 与必要的已知问题记录，避免把中间态或错误 root cause 写入索引。
+- 当前 `e2e/tests/` 已有 3 条 Playwright 用例：`smoke/app-smoke.spec.ts`、`feature/lesson-picker.spec.ts`、`full/core-learning-loop.spec.ts`。其中 `full/core-learning-loop.spec.ts` 已开始覆盖 Task 3 最小闭环：seed `/classroom_cache` → 登录 → 进入 `/classroom` → 打开第一节课 → 做题 → `✅ 完成课堂` → 断言 `session-summary` 与学习历史增长。
+- `playwright.config.ts` 仍是单项目 chromium 配置：`testDir=./e2e/tests`、`outputDir=test-results`、`baseURL`/`workers` 走 `e2e/config/env.ts`，并通过 `npm run dev -- --host --port --strictPort` 自动起 Vite dev server。
+- `e2e/helpers/` 当前已具备 full 最小闭环所需基础：`api.ts`（auth/PostgREST 请求）、`auth.ts`（清 token / UI 登录）、`learning.ts`（创建 E2E 用户、placement test 种子、seed `classroom_cache`、打开首个 lesson）、`assertions.ts`、`reporting.ts`、`screenshots.ts`、`tags.ts`。其中 `ensureCoreLoopClassroomCache()` 会写入一个仅含单选 quiz scene 的最小课堂，真实可配合 `quiz-start-button` + `option-0` 驱动。
+- 真实课堂 DOM 走 `NativeClassroom -> ClassroomBridge -> Stage -> SceneRenderer -> openmaic/scene-renderers/quiz-view.tsx`。这里 `quiz-start-button` 是真实按钮；点击后只会在 `QuizView` 内部把 phase 从 `not_started` 切到 `answering`，随后可见单选题按钮 `data-testid="option-0"` 与文案按钮 `提交答案`。当前 answering 容器本身没有页面级 testid，因此应把 `option-0` 视为最稳的“已进入答题态”锚点。
+- 稳定锚点：课堂完成 `✅ 完成课堂`；总结页 `session-summary`；历史页 `learning-history-page`；历史操作按钮文案 `快速复习` / `智能重学`。需要注意：`QuizView` 只有单选题选项带 `data-testid`，多选题/简答题没有等价 testid，因此 Task 3 的 seed 数据应继续锁定为单选 quiz。
+- 关键断链已再次确认：1) `NativeClassroom` 虽传入 `onAnswer={handleAnswer}`，但 `ClassroomBridge` 将其命名为 `_onAnswer` 后未使用，只渲染裸 `Stage`；2) `QuizView` 全部答题、判分、review 状态都只存在组件内部，未调用 `useLearningStore.recordAnswer()`，`openmaic` 目录下也搜不到任何 `recordAnswer`/`sessionStats` 连接；3) `learningStore.recordAnswer()` 本身可正常累加 `questionsCompleted` / `correctCount`，但当前真实课堂没人触发它；4) `LearningHistory` 与 `ReviewLearningService` 都过滤 `questionsCompleted > 0`，所以即使完成课堂并写库，只要统计为 0，历史页也会把记录隐藏。
+- 结论：当前更准确的 first failing test 已经落在 `full/core-learning-loop.spec.ts` 这条线上，但它的真正红点不该理解为“找不到选择器”，而是“真实 quiz 交互没有回流学习统计”。最小修复路径应先让真实 quiz 作答至少触发一次 `recordAnswer()`（或等价统计写入），再继续看 history 增长与页面展示；`reviewMode/historyId` 仍不应纳入本轮最小验收范围。
 
 ## 环境信息
-- workspace: `/Users/chenguoxie/CodeBuddy/OpenMAIC`
-- 角色: planner
-
-## 状态标记
-- status: completed
+- Node PATH 需包含 `/Users/chenguoxie/.workbuddy/binaries/node/versions/20.18.0/bin`
+- 仅允许修改 worktree 内文件
+- 本次仅做搜索/阅读与进度记录，未改业务代码

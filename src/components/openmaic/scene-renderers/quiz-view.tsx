@@ -200,6 +200,7 @@ function QuizCover({
       </motion.div>
 
       <motion.button
+        data-testid="quiz-start-button"
         initial={{ y: 10, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.3 }}
@@ -235,7 +236,7 @@ function SingleChoiceQuestion({
   return (
     <QuestionCard question={question} index={index} result={result}>
       <div className="grid gap-2">
-        {question.options?.map((opt) => {
+        {question.options?.map((opt, optionIndex) => {
           const selected = value === opt.value;
           const isCorrectOpt = isReview && question.answer?.includes(opt.value);
           const isWrong = isReview && selected && result?.status === 'incorrect';
@@ -243,6 +244,7 @@ function SingleChoiceQuestion({
           return (
             <button
               key={opt.value}
+              data-testid={`option-${optionIndex}`}
               disabled={disabled}
               onClick={() => !disabled && onChange(opt.value)}
               className={cn(
@@ -765,6 +767,22 @@ export function QuizView({ questions, sceneId }: QuizViewProps) {
       const ordered = questions.map((q) => allResultsMap.get(q.id)!).filter(Boolean);
 
       setResults(ordered);
+
+      // 4. Dispatch quiz results event so ClassroomBridge can relay to learningStore
+      try {
+        const resultsPayload = ordered.map((r) => ({
+          questionId: r.questionId,
+          isCorrect: r.status === 'correct',
+        }));
+        window.dispatchEvent(
+          new CustomEvent('quiz-answer-results', {
+            detail: { sceneId, results: resultsPayload },
+          }),
+        );
+        log.info('[quiz-view] Dispatched quiz-answer-results:', resultsPayload.length, 'questions');
+      } catch (err) {
+        log.error('[quiz-view] Failed to dispatch quiz-answer-results:', err);
+      }
 
       setPhase('reviewing');
     })();

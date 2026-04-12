@@ -83,3 +83,9 @@ current.yml
 current.yaml
 login-snap.yml
 build.yml
+playwright-report/
+test-results/
+
+# Dedicated E2E env files
+.env.e2e
+.env.e2e.local

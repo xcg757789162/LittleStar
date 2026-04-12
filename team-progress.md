@@ -9,7 +9,7 @@
 ## 任务拆分
 - [x] Task 1: 搭建 Playwright Runner 骨架
 - [x] Task 2: 抽取共享夹具与辅助工具
-- [ ] Task 3: 迁移核心学习闭环到 full 用例
+- [x] Task 3: 迁移核心学习闭环到 full 用例
 - [ ] Task 4: 迁移关键 bug 回归到 feature 用例
 - [ ] Task 5: 归档 legacy bridge 诊断用例
 - [ ] Task 6: 更新文档索引并清理旧脚本
