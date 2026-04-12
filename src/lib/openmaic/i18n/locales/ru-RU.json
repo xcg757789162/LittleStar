@@ -335,6 +335,7 @@
     "model": "Настройка модели",
     "modelDesc": "Настройте AI-модели",
     "modelPlaceholder": "Введите или выберите название модели",
+    "asrModel": "Модель ASR",
     "ttsModel": "Модель TTS",
     "ttsModelDesc": "Настройте модели TTS",
     "ttsModelPlaceholder": "Введите или выберите модель TTS",

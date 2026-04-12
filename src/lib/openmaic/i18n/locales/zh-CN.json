@@ -335,6 +335,7 @@
     "model": "模型配置",
     "modelDesc": "配置AI模型",
     "modelPlaceholder": "输入或选择模型名称",
+    "asrModel": "ASR 模型",
     "ttsModel": "TTS模型",
     "ttsModelDesc": "配置TTS模型",
     "ttsModelPlaceholder": "输入或选择TTS模型名称",

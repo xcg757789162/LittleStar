@@ -1,23 +1,13 @@
 /**
  * Settings Reverse Sync — 反向同步 OpenMAIC Settings Store → ChildSettings → PostgreSQL
  *
- * 与 settings-sync.ts (ChildSettings → OpenMAIC Store) 方向相反。
  * 当用户在 SettingsDialog（家长模块 → 高级设置）中修改了配置后，
- * 需要将 OpenMAIC Store 中的最新配置反向写入数据库，确保持久化。
+ * 将 OpenMAIC Store 中当前生效的配置反向写入数据库，确保持久化。
  *
- * 调用时机：
- * 1. SettingsDialog 关闭时（onOpenChange(false)）
- * 2. 未来可扩展到其他需要持久化的场景
+ * 设计原则：只存"当前生效的"provider 配置（apiKey/baseUrl 等），
+ * 对应 ChildSettings 中已有的字段。简单直接，没有快照。
  *
- * 同步的字段：
- * - LLM：providerId + modelId → llmModel ("provider:model"), apiKey, baseUrl
- * - TTS：providerId, apiKey, voice, speed, enabled
- * - ASR：providerId, apiKey, baseUrl, enabled, language
- * - ISE：providerId, appId, apiKey, apiSecret, enabled
- * - Image：providerId, apiKey, baseUrl, enabled
- * - Video：providerId, apiKey, baseUrl, enabled
- * - PDF：providerId, apiKey, baseUrl, enabled
- * - WebSearch：providerId, apiKey, enabled
+ * 调用时机：SettingsDialog 关闭时（onOpenChange(false)）
  */
 
 import { useSettingsStore } from '@/lib/openmaic/store/settings'
@@ -29,7 +19,6 @@ const log = createLogger('SettingsReverseSync')
 
 /**
  * 将 OpenMAIC TTS Provider ID 反向映射为 ChildSettings 的 ttsProviderId
- * （settings-sync.ts 中 mapChildTTSProviderId 的反向操作）
  */
 function reverseMapTTSProviderId(openmaicId: string): string {
   switch (openmaicId) {
@@ -55,55 +44,51 @@ function reverseMapTTSProviderId(openmaicId: string): string {
 }
 
 /**
- * 从 OpenMAIC Settings Store 读取所有配置，
+ * 从 OpenMAIC Settings Store 读取当前生效的所有配置，
  * 转换为 ChildSettings 格式的 Partial 对象。
- *
- * 只包含"高级设置"相关字段，不会覆盖孩子的基础信息（name/age/avatar等）。
  */
 export function extractChildSettingsFromStore(): Partial<ChildSettings> {
   const s = useSettingsStore.getState()
 
-  // LLM：组合 providerId + modelId → "provider:model" 格式
+  // === LLM ===
   const llmModel = s.providerId && s.modelId
     ? `${s.providerId}:${s.modelId}`
     : ''
-
-  // 获取当前 LLM provider 的 apiKey 和 baseUrl
   const llmProviderConfig = s.providersConfig[s.providerId]
   const llmApiKey = llmProviderConfig?.apiKey || ''
   const llmBaseUrl = llmProviderConfig?.baseUrl || ''
 
-  // TTS
+  // === TTS ===
   const ttsConfig = s.ttsProvidersConfig[s.ttsProviderId]
   const ttsApiKey = ttsConfig?.apiKey || ''
 
-  // ASR
+  // === ASR ===
   const asrConfig = s.asrProvidersConfig[s.asrProviderId]
   const asrApiKey = asrConfig?.apiKey || ''
   const asrBaseUrl = asrConfig?.baseUrl || ''
 
-  // ISE
+  // === ISE ===
   const iseConfig = s.iseProvidersConfig[s.iseProviderId]
   const iseApiKey = iseConfig?.apiKey || ''
-  const iseAppId = (iseConfig as { appId?: string })?.appId || ''
-  const iseApiSecret = (iseConfig as { apiSecret?: string })?.apiSecret || ''
+  const iseAppId = (iseConfig as Record<string, unknown>)?.appId as string || ''
+  const iseApiSecret = (iseConfig as Record<string, unknown>)?.apiSecret as string || ''
 
-  // Image
+  // === Image ===
   const imageConfig = s.imageProvidersConfig[s.imageProviderId]
   const imageApiKey = imageConfig?.apiKey || ''
   const imageBaseUrl = imageConfig?.baseUrl || ''
 
-  // Video
+  // === Video ===
   const videoConfig = s.videoProvidersConfig[s.videoProviderId]
   const videoApiKey = videoConfig?.apiKey || ''
   const videoBaseUrl = videoConfig?.baseUrl || ''
 
-  // PDF
+  // === PDF ===
   const pdfConfig = s.pdfProvidersConfig[s.pdfProviderId]
   const pdfApiKey = pdfConfig?.apiKey || ''
   const pdfBaseUrl = pdfConfig?.baseUrl || ''
 
-  // WebSearch
+  // === WebSearch ===
   const webSearchConfig = s.webSearchProvidersConfig[s.webSearchProviderId]
   const webSearchApiKey = webSearchConfig?.apiKey || ''
 
@@ -138,12 +123,14 @@ export function extractChildSettingsFromStore(): Partial<ChildSettings> {
     // Image
     enableImageGeneration: s.imageGenerationEnabled,
     imageProviderId: s.imageProviderId,
+    imageModelId: s.imageModelId || '',
     imageApiKey,
     imageBaseUrl,
 
     // Video
     enableVideoGeneration: s.videoGenerationEnabled,
     videoProviderId: s.videoProviderId,
+    videoModelId: s.videoModelId || '',
     videoApiKey,
     videoBaseUrl,
 
@@ -161,13 +148,7 @@ export function extractChildSettingsFromStore(): Partial<ChildSettings> {
 }
 
 /**
- * 将 OpenMAIC Settings Store 中的配置反向同步到数据库（PostgreSQL）。
- *
- * 流程：
- * 1. 从 useSettingsStore.getState() 提取所有配置
- * 2. 转换字段名 → ChildSettings 格式
- * 3. 合并到当前孩子的 settings 中（不覆盖非高级设置字段）
- * 4. 写入数据库
+ * 将 OpenMAIC Settings Store 中当前生效的配置反向同步到数据库。
  *
  * @returns true 成功，false 失败
  */
@@ -179,23 +160,61 @@ export async function syncOpenMAICToChild(): Promise<boolean> {
   }
 
   const settingsToSync = extractChildSettingsFromStore()
-  log.info('反向同步开始, child_id:', child.id, 'llmModel:', settingsToSync.llmModel)
+  log.info('反向同步开始, child_id:', child.id,
+    'llmProvider:', settingsToSync.llmProviderId,
+    'imageProvider:', settingsToSync.imageProviderId,
+    'videoProvider:', settingsToSync.videoProviderId,
+  )
 
   try {
-    // 1. 合并到现有 settings（保留非高级设置字段如 dailyLearningMinutes 等）
+    // 合并到现有 settings（保留非高级设置字段如 dailyLearningMinutes 等）
     const currentSettings = (child.settings || {}) as Partial<ChildSettings>
-    const mergedSettings = { ...currentSettings, ...settingsToSync }
 
-    // 2. 写入数据库
+    // === 防空值覆盖保护 ===
+    // 场景：新浏览器打开 → localStorage 空 → Store 用默认空值初始化
+    // → Dialog 关闭时 extractChildSettingsFromStore() 提取全部空值
+    // → 如果直接写入 DB 会覆盖掉已有的 API Key
+    //
+    // 策略：对每个 API Key 字段，如果 Store 中是空的但 DB 中有非空值，
+    // 就保留 DB 中的值，不用 Store 的空值覆盖。
+    const safeSettings = { ...settingsToSync }
+    const protectedKeyFields: (keyof ChildSettings)[] = [
+      'llmApiKey', 'llmBaseUrl', 'llmModel', 'llmProviderId',
+      'ttsApiKey', 'ttsProviderId', 'ttsVoice',
+      'asrApiKey', 'asrBaseUrl', 'asrProviderId',
+      'iseApiKey', 'iseAppId', 'iseApiSecret', 'iseProviderId',
+      'imageApiKey', 'imageBaseUrl', 'imageProviderId', 'imageModelId',
+      'videoApiKey', 'videoBaseUrl', 'videoProviderId', 'videoModelId',
+      'pdfApiKey', 'pdfBaseUrl', 'pdfProviderId',
+      'webSearchApiKey', 'webSearchProviderId',
+    ]
+
+    let protectedCount = 0
+    for (const field of protectedKeyFields) {
+      const storeValue = safeSettings[field as keyof typeof safeSettings]
+      const dbValue = currentSettings[field]
+      // Store 值为空（空字符串或 undefined）但 DB 有非空值 → 保留 DB 值
+      if ((!storeValue || storeValue === '') && dbValue && dbValue !== '') {
+        ;(safeSettings as Record<string, unknown>)[field] = dbValue
+        protectedCount++
+      }
+    }
+    if (protectedCount > 0) {
+      log.info(`防空值覆盖：保护了 ${protectedCount} 个字段不被空值覆盖`)
+    }
+
+    const mergedSettings = { ...currentSettings, ...safeSettings }
+
+    // 写入数据库
     const { apiClient } = await import('@/services/api')
     await apiClient.patch('/children', { settings: mergedSettings }, {
       filters: [{ column: 'id', operator: 'eq', value: Number(child.id) }],
     })
 
-    // 3. 同步更新内存中的 childStore
-    useChildStore.getState().updateChildSettings(String(child.id), settingsToSync)
+    // 同步更新内存中的 childStore
+    useChildStore.getState().updateChildSettings(String(child.id), safeSettings)
 
-    log.info('反向同步完成 ✅, child_id:', child.id)
+    log.info('反向同步完成 ✅')
     return true
   } catch (err) {
     log.error('反向同步失败 ❌:', err)

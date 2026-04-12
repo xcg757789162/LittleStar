@@ -28,7 +28,6 @@ export function ISESettings({ selectedProviderId }: ISESettingsProps) {
   const currentConfig = iseProvidersConfig[selectedProviderId] || {};
 
   const [showApiKey, setShowApiKey] = useState(false);
-  const [showApiSecret, setShowApiSecret] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
 
@@ -37,7 +36,6 @@ export function ISESettings({ selectedProviderId }: ISESettingsProps) {
   if (selectedProviderId !== prevProviderId) {
     setPrevProviderId(selectedProviderId);
     setShowApiKey(false);
-    setShowApiSecret(false);
     setTestStatus('idle');
     setTestMessage('');
   }
@@ -201,13 +199,6 @@ export function ISESettings({ selectedProviderId }: ISESettingsProps) {
 
   return (
     <div className="space-y-6 max-w-3xl">
-      {/* Provider Description */}
-      {iseProvider.description && (
-        <div className="rounded-lg border border-muted bg-muted/30 p-4 text-sm text-muted-foreground">
-          {iseProvider.description}
-        </div>
-      )}
-
       {/* Server-configured notice */}
       {isServerConfigured && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 p-3 text-sm text-blue-700 dark:text-blue-300">
@@ -229,20 +220,18 @@ export function ISESettings({ selectedProviderId }: ISESettingsProps) {
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                placeholder={
-                  isServerConfigured ? t('settings.optionalOverride') : '请输入讯飞 App ID'
-                }
+                placeholder={isServerConfigured ? t('settings.optionalOverride') : '请输入 App ID'}
                 value={currentConfig.appId || ''}
                 onChange={(e) =>
                   setISEProviderConfig(selectedProviderId, {
                     appId: e.target.value,
                   })
                 }
-                className="font-mono text-sm"
+                className="text-sm"
               />
             </div>
 
-            {/* API Key */}
+            {/* API Key (unified) */}
             <div className="space-y-2">
               <Label className="text-sm">API Key</Label>
               <div className="relative">
@@ -254,7 +243,7 @@ export function ISESettings({ selectedProviderId }: ISESettingsProps) {
                   autoCorrect="off"
                   spellCheck={false}
                   placeholder={
-                    isServerConfigured ? t('settings.optionalOverride') : '请输入讯飞 API Key'
+                    isServerConfigured ? t('settings.optionalOverride') : '请输入 API Key'
                   }
                   value={currentConfig.apiKey || ''}
                   onChange={(e) =>
@@ -280,14 +269,12 @@ export function ISESettings({ selectedProviderId }: ISESettingsProps) {
               <div className="relative">
                 <Input
                   name="ise-api-secret"
-                  type={showApiSecret ? 'text' : 'password'}
+                  type={showApiKey ? 'text' : 'password'}
                   autoComplete="new-password"
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
-                  placeholder={
-                    isServerConfigured ? t('settings.optionalOverride') : '请输入讯飞 API Secret'
-                  }
+                  placeholder={isServerConfigured ? t('settings.optionalOverride') : '请输入 API Secret'}
                   value={currentConfig.apiSecret || ''}
                   onChange={(e) =>
                     setISEProviderConfig(selectedProviderId, {
@@ -298,45 +285,38 @@ export function ISESettings({ selectedProviderId }: ISESettingsProps) {
                 />
                 <button
                   type="button"
-                  onClick={() => setShowApiSecret(!showApiSecret)}
+                  onClick={() => setShowApiKey(!showApiKey)}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
-                  {showApiSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
-          </div>
 
-          {/* Help Link */}
-          <p className="text-xs text-muted-foreground">
-            获取密钥：
-            <a
-              href="https://console.xfyun.cn/services/ise"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline ml-1"
-            >
-              讯飞开放平台控制台
-            </a>
-          </p>
+            {/* Base URL */}
+            <div className="space-y-2">
+              <Label className="text-sm">Base URL</Label>
+              <Input
+                name="ise-base-url"
+                type="url"
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder={
+                  isServerConfigured ? t('settings.optionalOverride') : 'wss://ise-api.xfyun.cn/v2/open-ise'
+                }
+                value={currentConfig.baseUrl || ''}
+                onChange={(e) =>
+                  setISEProviderConfig(selectedProviderId, {
+                    baseUrl: e.target.value,
+                  })
+                }
+                className="text-sm"
+              />
+            </div>
+          </div>
         </>
-      )}
-
-      {/* Text Match Fallback Info */}
-      {selectedProviderId === 'text-match-fallback' && (
-        <div className="space-y-4">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4">
-            <h4 className="font-medium text-amber-800 dark:text-amber-300 mb-2">
-              ⚠️ 免费模式说明
-            </h4>
-            <ul className="text-sm text-amber-700 dark:text-amber-400 space-y-1 list-disc list-inside">
-              <li>使用语音识别（ASR）将用户发音转为文本</li>
-              <li>通过文本相似度算法计算发音得分</li>
-              <li>无法提供音素级别的详细评测反馈</li>
-              <li>评测精度低于专业 ISE 服务</li>
-            </ul>
-          </div>
-        </div>
       )}
 
       {/* Test Connection */}

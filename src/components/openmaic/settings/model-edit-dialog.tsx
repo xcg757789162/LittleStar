@@ -4,8 +4,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { Button } from '@/components/openmaic/ui/button';
 import { Input } from '@/components/openmaic/ui/input';
 import { Label } from '@/components/openmaic/ui/label';
-import { Checkbox } from '@/components/openmaic/ui/checkbox';
-import { Sparkles, Wrench, Zap, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { useI18n } from '@/lib/openmaic/hooks/use-i18n';
 import type { EditingModel } from '@/lib/openmaic/types/settings';
 import type { ProviderId } from '@/lib/openmaic/ai/providers';
@@ -165,138 +164,6 @@ export function ModelEditDialog({
               }
               onBlur={() => onAutoSave?.()}
             />
-          </div>
-
-          {/* Capabilities */}
-          <div className="space-y-2">
-            <Label>{t('settings.modelCapabilities')}</Label>
-            <div className="flex gap-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="cap-vision"
-                  checked={editingModel.model.capabilities?.vision || false}
-                  onCheckedChange={(checked) => {
-                    setEditingModel({
-                      ...editingModel,
-                      model: {
-                        ...editingModel.model,
-                        capabilities: {
-                          ...editingModel.model.capabilities,
-                          vision: checked as boolean,
-                        },
-                      },
-                    });
-                    onAutoSave?.();
-                  }}
-                />
-                <label
-                  htmlFor="cap-vision"
-                  className="text-sm flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {t('settings.capabilities.vision')}
-                </label>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="cap-tools"
-                  checked={editingModel.model.capabilities?.tools || false}
-                  onCheckedChange={(checked) => {
-                    setEditingModel({
-                      ...editingModel,
-                      model: {
-                        ...editingModel.model,
-                        capabilities: {
-                          ...editingModel.model.capabilities,
-                          tools: checked as boolean,
-                        },
-                      },
-                    });
-                    onAutoSave?.();
-                  }}
-                />
-                <label
-                  htmlFor="cap-tools"
-                  className="text-sm flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Wrench className="h-3.5 w-3.5" />
-                  {t('settings.capabilities.tools')}
-                </label>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="cap-streaming"
-                  checked={editingModel.model.capabilities?.streaming || false}
-                  onCheckedChange={(checked) => {
-                    setEditingModel({
-                      ...editingModel,
-                      model: {
-                        ...editingModel.model,
-                        capabilities: {
-                          ...editingModel.model.capabilities,
-                          streaming: checked as boolean,
-                        },
-                      },
-                    });
-                    onAutoSave?.();
-                  }}
-                />
-                <label
-                  htmlFor="cap-streaming"
-                  className="text-sm flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Zap className="h-3.5 w-3.5" />
-                  {t('settings.capabilities.streaming')}
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* Advanced Settings */}
-          <div className="space-y-3 pt-3 border-t">
-            <Label className="text-base">{t('settings.advancedSettings')}</Label>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label className="text-sm">{t('settings.contextWindowLabel')}</Label>
-                <Input
-                  type="number"
-                  placeholder={t('settings.contextWindowPlaceholder')}
-                  value={editingModel.model.contextWindow || ''}
-                  onChange={(e) =>
-                    setEditingModel({
-                      ...editingModel,
-                      model: {
-                        ...editingModel.model,
-                        contextWindow: e.target.value ? parseInt(e.target.value) : undefined,
-                      },
-                    })
-                  }
-                  onBlur={() => onAutoSave?.()}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm">{t('settings.outputWindowLabel')}</Label>
-                <Input
-                  type="number"
-                  placeholder={t('settings.outputWindowPlaceholder')}
-                  value={editingModel.model.outputWindow || ''}
-                  onChange={(e) =>
-                    setEditingModel({
-                      ...editingModel,
-                      model: {
-                        ...editingModel.model,
-                        outputWindow: e.target.value ? parseInt(e.target.value) : undefined,
-                      },
-                    })
-                  }
-                  onBlur={() => onAutoSave?.()}
-                />
-              </div>
-            </div>
           </div>
 
           {/* Test Model */}

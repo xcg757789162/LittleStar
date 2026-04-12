@@ -9,20 +9,20 @@
  * 2. 家长切换孩子后
  * 3. 家长修改高级设置后
  *
- * 这样 OpenMAIC 的组件（Chat/Roundtable/TTS/ASR/ImageGen 等）
- * 可以直接从自己的 Settings Store 读取配置，无需了解 LittleStar 的 ChildSettings。
+ * 设计原则：只同步当前生效的 provider 的配置，简单直接。
  *
  * 注意：方法名必须与 OpenMAIC Settings Store 中的实际 action 名称完全匹配：
- *   - setModel(providerId, modelId)  — 不是 setProviderId/setModelId
- *   - setTTSProvider(id)             — 不是 setTTSProviderId
- *   - setImageProvider(id)           — 不是 setImageProviderId
+ *   - setModel(providerId, modelId)
+ *   - setTTSProvider(id)
+ *   - setImageProvider(id)
  *   - setImageGenerationEnabled(bool)
  *   - setTTSEnabled(bool)
  */
 
 import type { ChildSettings } from '@/types/models'
-import type { TTSProviderId, ASRProviderId } from '@/lib/openmaic/audio/types'
+import type { TTSProviderId, ASRProviderId, ISEProviderId } from '@/lib/openmaic/audio/types'
 import type { PDFProviderId } from '@/lib/openmaic/pdf/types'
+import type { ImageProviderId, VideoProviderId } from '@/lib/openmaic/media/types'
 import type { WebSearchProviderId } from '@/lib/openmaic/web-search/types'
 import { useSettingsStore } from '@/lib/openmaic/store/settings'
 import { createLogger } from '@/lib/openmaic/logger'
@@ -70,222 +70,163 @@ const log = createLogger('SettingsSync')
 /**
  * 将 LittleStar ChildSettings 同步到 OpenMAIC Settings Store
  *
- * 只同步有实际值的字段，不覆盖用户在 OpenMAIC 面板中设置的其他高级配置。
+ * 逐字段同步当前生效的 provider 配置（apiKey/baseUrl/enabled 等）
  */
 export function syncSettingsToOpenMAIC(settings: ChildSettings): void {
-  const store = useSettingsStore.getState()
-  log.info('开始同步设置到 OpenMAIC, llmModel:', settings.llmModel ?? '(未设置)')
+  log.info('开始同步设置到 OpenMAIC, llmModel:',
+    settings.llmModel ?? '(未设置)',
+    'imageProvider:', settings.imageProviderId ?? '(未设置)',
+    'videoProvider:', settings.videoProviderId ?? '(未设置)',
+  )
 
-  // === LLM 配置 ===
+  const store = useSettingsStore.getState()
+
+  // === 1. LLM 配置 ===
   if (settings.llmModel) {
-    // LittleStar 的 llmModel 格式: "provider:model-id" (如 "openai:gpt-4o")
     const [provider, ...modelParts] = settings.llmModel.split(':')
     const modelId = modelParts.join(':')
 
     if (provider && modelId) {
       try {
-        // setModel 同时设置 providerId 和 modelId（Store 中没有单独的 setter）
         store.setModel(provider as never, modelId)
-        log.debug('LLM 模型设置成功:', provider, modelId)
       } catch (err) {
-        // provider 不在 OpenMAIC 支持列表中
-        log.warn('LLM 模型设置失败, provider 不支持:', provider, err)
+        log.warn('LLM 模型设置失败:', provider, err)
       }
     }
 
-    // 同步 API Key 和 Base URL 到 provider config
     if (settings.llmApiKey && provider) {
       try {
         store.setProviderConfig(provider as never, {
           apiKey: settings.llmApiKey,
           ...(settings.llmBaseUrl ? { baseUrl: settings.llmBaseUrl } : {}),
         })
-        log.debug('Provider config 设置成功:', provider)
       } catch (err) {
-        log.warn('Provider config 设置失败:', provider, err)
+        log.warn('LLM provider config 设置失败:', provider, err)
       }
     }
   }
 
-  // === TTS 配置 ===
+  // === 2. TTS 配置 ===
   if (settings.enableTTS !== undefined) {
-    try {
-      store.setTTSEnabled(settings.enableTTS)
-    } catch (err) {
-      log.warn('TTS 启用设置失败:', err)
-    }
+    try { store.setTTSEnabled(settings.enableTTS) } catch { /* */ }
   }
   const mappedTTSProviderId = settings.ttsProviderId
     ? mapChildTTSProviderId(settings.ttsProviderId)
     : null
-
   if (mappedTTSProviderId) {
-    try {
-      // setTTSProvider — 不是 setTTSProviderId
-      store.setTTSProvider(mappedTTSProviderId)
-    } catch (err) {
-      log.warn('TTS provider 设置失败:', settings.ttsProviderId, err)
-    }
+    try { store.setTTSProvider(mappedTTSProviderId) } catch { /* */ }
   }
   if (settings.ttsVoice) {
-    try {
-      store.setTTSVoice(settings.ttsVoice)
-    } catch (err) {
-      log.warn('TTS voice 设置失败:', err)
-    }
+    try { store.setTTSVoice(settings.ttsVoice) } catch { /* */ }
   }
   if (settings.ttsSpeed) {
-    try {
-      store.setTTSSpeed(settings.ttsSpeed)
-    } catch (err) {
-      log.warn('TTS speed 设置失败:', err)
-    }
+    try { store.setTTSSpeed(settings.ttsSpeed) } catch { /* */ }
   }
-
-  // === TTS Provider API Key 同步 ===
   if (mappedTTSProviderId && settings.ttsApiKey) {
     try {
       store.setTTSProviderConfig(mappedTTSProviderId, {
         apiKey: settings.ttsApiKey,
         enabled: true,
       })
-    } catch (err) {
-      log.warn('TTS provider config 设置失败:', err)
-    }
+    } catch { /* */ }
   }
 
-  // === 图片生成配置 ===
-  if (settings.enableImageGeneration !== undefined) {
-    // 先设置 provider 和 apiKey，这样 setImageGenerationEnabled(true) 的校验才能通过
-    if (settings.imageProviderId) {
-      try {
-        // setImageProvider — 不是 setImageProviderId
-        store.setImageProvider(settings.imageProviderId as never)
-      } catch (err) {
-        log.warn('Image provider 设置失败:', settings.imageProviderId, err)
-      }
-    }
-    if (settings.imageProviderId && settings.imageApiKey) {
-      try {
-        store.setImageProviderConfig(settings.imageProviderId as never, {
-          apiKey: settings.imageApiKey,
-          enabled: true,
-        })
-      } catch (err) {
-        log.warn('Image provider config 设置失败:', err)
-      }
-    }
-    try {
-      store.setImageGenerationEnabled(settings.enableImageGeneration)
-    } catch (err) {
-      log.warn('图片生成启用设置失败:', err)
-    }
-  }
-
-  // === 视频生成配置 ===
-  if (settings.enableVideoGeneration !== undefined) {
-    // 先设置 provider 和 apiKey，这样 setVideoGenerationEnabled(true) 的校验才能通过
-    if (settings.videoProviderId) {
-      try {
-        store.setVideoProvider(settings.videoProviderId as never)
-      } catch (err) {
-        log.warn('Video provider 设置失败:', settings.videoProviderId, err)
-      }
-    }
-    if (settings.videoProviderId && settings.videoApiKey) {
-      try {
-        store.setVideoProviderConfig(settings.videoProviderId as never, {
-          apiKey: settings.videoApiKey,
-          enabled: true,
-        })
-      } catch (err) {
-        log.warn('Video provider config 设置失败:', err)
-      }
-    }
-    try {
-      store.setVideoGenerationEnabled(settings.enableVideoGeneration)
-    } catch (err) {
-      log.warn('视频生成启用设置失败:', err)
-    }
-  }
-
-  // === ASR 配置 ===
+  // === 3. ASR 配置 ===
   if (settings.enableASR !== undefined) {
-    try {
-      store.setASREnabled(settings.enableASR)
-    } catch (err) {
-      log.warn('ASR 启用设置失败:', err)
-    }
+    try { store.setASREnabled(settings.enableASR) } catch { /* */ }
   }
-
   const mappedASRProviderId = settings.asrProviderId
     ? mapChildASRProviderId(settings.asrProviderId)
     : null
-
   if (mappedASRProviderId) {
-    try {
-      store.setASRProvider(mappedASRProviderId)
-    } catch (err) {
-      log.warn('ASR provider 设置失败:', settings.asrProviderId, err)
-    }
-  }
-
-  if (mappedASRProviderId) {
+    try { store.setASRProvider(mappedASRProviderId) } catch { /* */ }
     try {
       store.setASRProviderConfig(mappedASRProviderId, {
         ...(settings.asrApiKey ? { apiKey: settings.asrApiKey } : {}),
         ...(settings.asrBaseUrl ? { baseUrl: settings.asrBaseUrl } : {}),
         ...(settings.enableASR !== undefined ? { enabled: settings.enableASR } : {}),
       })
-    } catch (err) {
-      log.warn('ASR provider config 设置失败:', err)
-    }
+    } catch { /* */ }
   }
-
   if (settings.asrLanguage) {
+    try { store.setASRLanguage(settings.asrLanguage) } catch { /* */ }
+  }
+
+  // === 4. ISE（发音评测）配置 ===
+  if (settings.iseProviderId) {
+    try { store.setISEProvider(settings.iseProviderId as ISEProviderId) } catch { /* */ }
+  }
+  if (settings.iseProviderId && (settings.iseApiKey || settings.iseAppId || settings.iseApiSecret)) {
     try {
-      store.setASRLanguage(settings.asrLanguage)
-    } catch (err) {
-      log.warn('ASR language 设置失败:', err)
-    }
+      store.setISEProviderConfig(settings.iseProviderId as ISEProviderId, {
+        ...(settings.iseApiKey ? { apiKey: settings.iseApiKey } : {}),
+        ...(settings.iseAppId ? { appId: settings.iseAppId } : {}),
+        ...(settings.iseApiSecret ? { apiSecret: settings.iseApiSecret } : {}),
+        ...(settings.enableISE !== undefined ? { enabled: settings.enableISE } : {}),
+      })
+    } catch { /* */ }
   }
 
-  // === WebSearch 配置 ===
+  // === 5. 图片生成配置 ===
+  if (settings.imageProviderId) {
+    try { store.setImageProvider(settings.imageProviderId as ImageProviderId) } catch { /* */ }
+  }
+  if (settings.imageProviderId && settings.imageApiKey) {
+    try {
+      store.setImageProviderConfig(settings.imageProviderId as ImageProviderId, {
+        apiKey: settings.imageApiKey,
+        ...(settings.imageBaseUrl ? { baseUrl: settings.imageBaseUrl } : {}),
+        enabled: true,
+      })
+    } catch { /* */ }
+  }
+  if (settings.imageModelId) {
+    try { store.setImageModelId(settings.imageModelId) } catch { /* */ }
+  }
+  if (settings.enableImageGeneration !== undefined) {
+    try { store.setImageGenerationEnabled(settings.enableImageGeneration) } catch { /* */ }
+  }
+
+  // === 6. 视频生成配置 ===
+  if (settings.videoProviderId) {
+    try { store.setVideoProvider(settings.videoProviderId as VideoProviderId) } catch { /* */ }
+  }
+  if (settings.videoProviderId && settings.videoApiKey) {
+    try {
+      store.setVideoProviderConfig(settings.videoProviderId as VideoProviderId, {
+        apiKey: settings.videoApiKey,
+        ...(settings.videoBaseUrl ? { baseUrl: settings.videoBaseUrl } : {}),
+        enabled: true,
+      })
+    } catch { /* */ }
+  }
+  if (settings.videoModelId) {
+    try { store.setVideoModelId(settings.videoModelId) } catch { /* */ }
+  }
+  if (settings.enableVideoGeneration !== undefined) {
+    try { store.setVideoGenerationEnabled(settings.enableVideoGeneration) } catch { /* */ }
+  }
+
+  // === 7. WebSearch 配置 ===
   const webSearchProviderId = (settings.webSearchProviderId || 'tavily') as WebSearchProviderId
-
-  try {
-    store.setWebSearchProvider(webSearchProviderId)
-  } catch (err) {
-    log.warn('WebSearch provider 设置失败:', webSearchProviderId, err)
-  }
-
+  try { store.setWebSearchProvider(webSearchProviderId) } catch { /* */ }
   try {
     store.setWebSearchProviderConfig(webSearchProviderId, {
       ...(settings.webSearchApiKey ? { apiKey: settings.webSearchApiKey } : {}),
       ...(settings.enableWebSearch !== undefined ? { enabled: settings.enableWebSearch } : {}),
     })
-  } catch (err) {
-    log.warn('WebSearch provider config 设置失败:', err)
-  }
+  } catch { /* */ }
 
-  // === PDF 配置 ===
+  // === 8. PDF 配置 ===
   const pdfProviderId = (settings.pdfProviderId || 'unpdf') as PDFProviderId
-
-  try {
-    store.setPDFProvider(pdfProviderId)
-  } catch (err) {
-    log.warn('PDF provider 设置失败:', pdfProviderId, err)
-  }
-
+  try { store.setPDFProvider(pdfProviderId) } catch { /* */ }
   try {
     store.setPDFProviderConfig(pdfProviderId, {
       ...(settings.pdfApiKey ? { apiKey: settings.pdfApiKey } : {}),
       ...(settings.pdfBaseUrl ? { baseUrl: settings.pdfBaseUrl } : {}),
       ...(settings.enablePDF !== undefined ? { enabled: settings.enablePDF } : {}),
     })
-  } catch (err) {
-    log.warn('PDF provider config 设置失败:', err)
-  }
+  } catch { /* */ }
 
-  log.info('设置同步完成')
+  log.info('设置同步完成 ✅')
 }

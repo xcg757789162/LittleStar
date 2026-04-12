@@ -49,19 +49,6 @@ export function ProviderList({
       className="flex flex-shrink-0 flex-col border-r border-orange-100/70 bg-white/75 backdrop-blur-sm"
       style={{ width: width ?? 224 }}
     >
-      <div className="border-b border-orange-100/70 px-5 py-4">
-        <div className="rounded-2xl bg-gradient-to-br from-orange-50 via-amber-50 to-white p-3.5 shadow-sm ring-1 ring-orange-100/70">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-500">
-            {t('settings.currentActiveSummary')}
-          </div>
-          <div className="mt-2 text-sm font-semibold text-slate-800">{activeProviderName}</div>
-          <div className="mt-1 text-xs leading-5 text-slate-500">{activeModelName}</div>
-          <p className="mt-3 text-xs leading-5 text-slate-400">
-            {t('settings.providerListDescription')}
-          </p>
-        </div>
-      </div>
-
       <div className="flex-1 space-y-2 overflow-y-auto p-4">
         {providers.map((provider) => {
           const isViewing = selectedProviderId === provider.id;

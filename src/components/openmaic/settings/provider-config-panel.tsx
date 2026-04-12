@@ -3,37 +3,20 @@ import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/openmaic/ui/button';
 import { Input } from '@/components/openmaic/ui/input';
 import { Label } from '@/components/openmaic/ui/label';
-import { Checkbox } from '@/components/openmaic/ui/checkbox';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/openmaic/ui/alert-dialog';
 import {
   Loader2,
   CheckCircle2,
   XCircle,
   Eye,
   EyeOff,
-  RotateCcw,
   Plus,
   Zap,
   Settings2,
   Trash2,
-  Sparkles,
-  Wrench,
-  FileText,
-  Send,
 } from 'lucide-react';
 import { useI18n } from '@/lib/openmaic/hooks/use-i18n';
 import type { ProviderConfig } from '@/lib/openmaic/ai/providers';
 import type { ProvidersConfig } from '@/lib/openmaic/types/settings';
-import { formatContextWindow } from './utils';
 import { cn } from '@/lib/openmaic/utils';
 
 interface ProviderConfigPanelProps {
@@ -80,11 +63,9 @@ export function ProviderConfigPanel({
   // Local state for this provider
   const [apiKey, setApiKey] = useState(initialApiKey);
   const [baseUrl, setBaseUrl] = useState(initialBaseUrl);
-  const [requiresApiKey, setRequiresApiKey] = useState(initialRequiresApiKey);
   const [showApiKey, setShowApiKey] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
-  const [showResetDialog, setShowResetDialog] = useState(false);
 
   // Update local state when provider changes or initial values change
   useEffect(() => {
@@ -92,8 +73,6 @@ export function ProviderConfigPanel({
     setApiKey(initialApiKey);
 
     setBaseUrl(initialBaseUrl);
-
-    setRequiresApiKey(initialRequiresApiKey);
 
     setTestStatus('idle');
 
@@ -103,17 +82,12 @@ export function ProviderConfigPanel({
   // Notify parent of changes
   const handleApiKeyChange = (key: string) => {
     setApiKey(key);
-    onConfigChange(key, baseUrl, requiresApiKey);
+    onConfigChange(key, baseUrl, initialRequiresApiKey);
   };
 
   const handleBaseUrlChange = (url: string) => {
     setBaseUrl(url);
-    onConfigChange(apiKey, url, requiresApiKey);
-  };
-
-  const handleRequiresApiKeyChange = (requires: boolean) => {
-    setRequiresApiKey(requires);
-    onConfigChange(apiKey, baseUrl, requires);
+    onConfigChange(apiKey, url, initialRequiresApiKey);
   };
 
   const handleTestApi = useCallback(async () => {
@@ -142,7 +116,7 @@ export function ProviderConfigPanel({
           baseUrl,
           model: `${provider.id}:${testModelId}`,
           providerType: provider.type,
-          requiresApiKey: requiresApiKey,
+          requiresApiKey: initialRequiresApiKey,
         }),
       });
 
@@ -166,50 +140,16 @@ export function ProviderConfigPanel({
     baseUrl,
     provider.id,
     provider.type,
-    requiresApiKey,
+    initialRequiresApiKey,
     providersConfig,
     t,
   ]);
 
   const models = providersConfig[provider.id]?.models || [];
   const isServerConfigured = providersConfig[provider.id]?.isServerConfigured;
-  const isManagingActiveProvider = activeProviderId === provider.id;
-  const activeModelLabel = activeModelName || activeModelId || t('settings.selectModel');
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <section className="rounded-[24px] border border-orange-100 bg-gradient-to-br from-orange-50 via-rose-50 to-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-500">
-              {t('settings.currentActiveSummary')}
-            </div>
-            <div className="mt-2 text-lg font-semibold text-slate-800">{activeProviderName}</div>
-            <div className="mt-1 break-all text-sm text-slate-500">{activeModelLabel}</div>
-          </div>
-          <span
-            className={cn(
-              'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold ring-1',
-              isManagingActiveProvider
-                ? 'bg-emerald-50 text-emerald-600 ring-emerald-100'
-                : 'bg-orange-50 text-orange-600 ring-orange-100',
-            )}
-          >
-            {isManagingActiveProvider
-              ? t('settings.activeProviderStatus')
-              : t('settings.viewingProvider')}
-          </span>
-        </div>
-        <p className="mt-3 text-sm leading-6 text-slate-600">
-          {isManagingActiveProvider
-            ? t('settings.activeProviderManaged')
-            : t('settings.providerSwitchHelper', {
-                provider: activeProviderName,
-                model: activeModelLabel,
-              })}
-        </p>
-      </section>
-
       {/* Server-configured notice */}
       {isServerConfigured && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 p-3 text-sm text-blue-700 dark:text-blue-300">
@@ -240,14 +180,14 @@ export function ProviderConfigPanel({
               value={apiKey}
               onChange={(e) => handleApiKeyChange(e.target.value)}
               onBlur={onSave}
-              disabled={!requiresApiKey && !isServerConfigured}
+              disabled={!initialRequiresApiKey && !isServerConfigured}
               className="h-9 rounded-xl pr-9"
             />
             <button
               type="button"
               onClick={() => setShowApiKey(!showApiKey)}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-              disabled={!requiresApiKey}
+              disabled={!initialRequiresApiKey}
             >
               {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
@@ -257,7 +197,7 @@ export function ProviderConfigPanel({
             size="sm"
             onClick={handleTestApi}
             disabled={
-              testStatus === 'testing' || (requiresApiKey && !apiKey && !isServerConfigured)
+              testStatus === 'testing' || (initialRequiresApiKey && !apiKey && !isServerConfigured)
             }
             className="h-9 gap-1.5 rounded-xl border-orange-200 bg-white px-4 font-semibold text-orange-600 shadow-sm hover:bg-orange-50 hover:shadow-md transition-all"
           >
@@ -286,22 +226,6 @@ export function ProviderConfigPanel({
             </div>
           </div>
         )}
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id={`requires-api-key-${provider.id}`}
-            checked={requiresApiKey}
-            onCheckedChange={(checked) => {
-              handleRequiresApiKeyChange(checked as boolean);
-              onSave();
-            }}
-          />
-          <label
-            htmlFor={`requires-api-key-${provider.id}`}
-            className="text-sm cursor-pointer text-muted-foreground"
-          >
-            {t('settings.requiresApiKey')}
-          </label>
-        </div>
       </div>
 
       {/* API Host */}
@@ -355,26 +279,12 @@ export function ProviderConfigPanel({
         <div className="flex items-center justify-between flex-wrap gap-2">
           <Label className="text-base">{t('settings.models')}</Label>
           <div className="flex items-center gap-2 flex-wrap">
-            {isBuiltIn && onResetToDefault && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowResetDialog(true)}
-                className="gap-1.5"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                {t('settings.reset')}
-              </Button>
-            )}
             <Button variant="outline" size="sm" onClick={onAddModel} className="gap-1.5">
               <Plus className="h-3.5 w-3.5" />
               {t('settings.addNewModel')}
             </Button>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">{t('settings.modelsManagementDescription')}</p>
-        <p className="text-xs leading-5 text-slate-500">{t('settings.modelSelectorHint')}</p>
-
         <div className="space-y-2">
           {models.map((model, index) => {
             const isActive = activeProviderId === provider.id && activeModelId === model.id;
@@ -399,41 +309,7 @@ export function ProviderConfigPanel({
                         </span>
                       )}
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {/* Capabilities as readable tags */}
-                      {model.capabilities?.vision && (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-600 ring-1 ring-violet-100" title={t('settings.capabilities.vision')}>
-                          <Sparkles className="h-3 w-3" />
-                          视觉
-                        </span>
-                      )}
-                      {model.capabilities?.tools && (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-600 ring-1 ring-blue-100" title={t('settings.capabilities.tools')}>
-                          <Wrench className="h-3 w-3" />
-                          工具
-                        </span>
-                      )}
-                      {model.capabilities?.streaming && (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-600 ring-1 ring-amber-100" title={t('settings.capabilities.streaming')}>
-                          <Zap className="h-3 w-3" />
-                          流式
-                        </span>
-                      )}
-                      {/* Context Window - human readable */}
-                      {model.contextWindow && (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-slate-100" title="上下文窗口大小">
-                          <FileText className="h-3 w-3" />
-                          上下文 {formatContextWindow(model.contextWindow)}
-                        </span>
-                      )}
-                      {/* Output Window - human readable */}
-                      {model.outputWindow && (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-slate-100" title="最大输出长度">
-                          <Send className="h-3 w-3" />
-                          输出 {formatContextWindow(model.outputWindow)}
-                        </span>
-                      )}
-                    </div>
+
                   </div>
 
                   {/* Actions - larger click targets */}
@@ -474,26 +350,6 @@ export function ProviderConfigPanel({
         </div>
       </div>
 
-      {/* Reset Confirmation Dialog */}
-      <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-        <AlertDialogContent overlayClassName="z-[1200]" className="z-[1201]">
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('settings.resetToDefault')}</AlertDialogTitle>
-            <AlertDialogDescription>{t('settings.resetConfirmDescription')}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('settings.cancelEdit')}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setShowResetDialog(false);
-                onResetToDefault?.();
-              }}
-            >
-              {t('settings.confirmReset')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

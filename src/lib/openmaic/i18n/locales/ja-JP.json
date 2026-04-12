@@ -335,6 +335,7 @@
     "model": "モデル設定",
     "modelDesc": "AIモデルの設定",
     "modelPlaceholder": "モデル名を入力または選択",
+    "asrModel": "ASRモデル",
     "ttsModel": "TTSモデル",
     "ttsModelDesc": "音声合成モデルの設定",
     "ttsModelPlaceholder": "TTSモデル名を入力または選択",

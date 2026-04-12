@@ -156,43 +156,6 @@ export function ASRSettings({ selectedProviderId }: ASRSettingsProps) {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div
-        className={cn(
-          'rounded-[24px] border p-4 shadow-sm',
-          selectedProviderId === 'browser-native'
-            ? 'border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-sky-50'
-            : 'border-amber-100 bg-gradient-to-br from-amber-50 via-white to-orange-50',
-        )}
-      >
-        <div className="flex items-start gap-3">
-          <div
-            className={cn(
-              'flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white',
-              selectedProviderId === 'browser-native' ? 'bg-emerald-500' : 'bg-orange-500',
-            )}
-          >
-            <Mic className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold text-slate-800">
-              {selectedProviderId === 'browser-native'
-                ? '默认推荐：浏览器原生语音识别'
-                : '独立语音识别服务'}
-            </div>
-            <p className="mt-1 text-sm leading-6 text-slate-500">
-              {selectedProviderId === 'browser-native'
-                ? '直接调用浏览器自带功能，无需配置 API Key，适合日常体验与开发测试。'
-                : '如果需要更高识别率和稳定性，请在这里填入对应服务的 API Key 和调用地址。'}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              <span className="rounded-full bg-white px-2.5 py-1 text-slate-500 border border-slate-200">课堂麦克风</span>
-              <span className="rounded-full bg-white px-2.5 py-1 text-slate-500 border border-slate-200">语音转文字</span>
-              <span className="rounded-full bg-white px-2.5 py-1 text-slate-600 ring-1 ring-slate-200">默认可直接使用</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Server-configured notice */}
       {isServerConfigured && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
@@ -332,7 +295,7 @@ export function ASRSettings({ selectedProviderId }: ASRSettingsProps) {
       {/* Model Selection */}
       {asrProvider.models.length > 0 && (
         <div className="space-y-2">
-          <Label className="text-sm">{t('settings.ttsModel')}</Label>
+          <Label className="text-sm">{t('settings.asrModel')}</Label>
           <Select
             value={asrProvidersConfig[selectedProviderId]?.modelId || asrProvider.defaultModelId}
             onValueChange={(value) => setASRProviderConfig(selectedProviderId, { modelId: value })}

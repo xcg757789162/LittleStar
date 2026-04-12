@@ -2,23 +2,16 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Check,
-  Search,
-  Sparkles,
-  Wrench,
   Zap,
   Loader2,
   CheckCircle,
   XCircle,
-  FileText,
-  Send,
 } from 'lucide-react';
 import { Button } from '@/components/openmaic/ui/button';
-import { Input } from '@/components/openmaic/ui/input';
 import { cn } from '@/lib/openmaic/utils';
 import { useI18n } from '@/lib/openmaic/hooks/use-i18n';
 import type { ProviderId } from '@/lib/openmaic/ai/providers';
 import type { ProvidersConfig } from '@/lib/openmaic/types/settings';
-import { formatContextWindow } from './utils';
 
 interface ModelSelectorProps {
   providerId: ProviderId;
@@ -35,13 +28,11 @@ export function ModelSelector({
 }: ModelSelectorProps) {
   const { t } = useI18n();
   const [activeProvider, setActiveProvider] = useState<ProviderId>(providerId);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchExpanded, setSearchExpanded] = useState(false);
+  const [searchQuery] = useState('');
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
   const [testingModelId, setTestingModelId] = useState<string | null>(null);
   const selectedModelRef = useRef<HTMLButtonElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Helper function to get translated provider name
   const getProviderDisplayName = (pid: ProviderId, name: string) => {
@@ -122,13 +113,6 @@ export function ModelSelector({
       });
     }
   }, [effectiveProvider]);
-
-  // Auto focus search input when expanded
-  useEffect(() => {
-    if (searchExpanded && searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-  }, [searchExpanded]);
 
   // Test model function
   const handleTestModel = useCallback(
@@ -263,36 +247,6 @@ export function ModelSelector({
             <p className="mt-1 text-xs leading-5 text-slate-500">{t('settings.modelSelectorHint')}</p>
           </div>
 
-          {/* Floating Search Button - Bottom Right */}
-          <div className="absolute bottom-4 right-4 z-10">
-            {searchExpanded ? (
-              <div className="relative w-64 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  ref={searchInputRef}
-                  placeholder={t('settings.searchModels')}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onBlur={() => {
-                    if (!searchQuery) {
-                      setSearchExpanded(false);
-                    }
-                  }}
-                  className="pl-9 h-9 pr-3 shadow-lg border-primary/20 bg-card dark:bg-card"
-                />
-              </div>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-10 w-10 rounded-full p-0 shadow-md hover:shadow-lg transition-shadow bg-card hover:bg-card dark:bg-card dark:hover:bg-card"
-                onClick={() => setSearchExpanded(true)}
-              >
-                <Search className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-
           {/* Model Items */}
           <div className="flex-1 overflow-y-auto">
             {filteredModels.length === 0 ? (
@@ -328,46 +282,6 @@ export function ModelSelector({
                               </span>
                             )}
                           </div>
-                          {(model.capabilities || model.contextWindow || model.outputWindow) && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              {/* Capabilities */}
-                              <div className="flex items-center gap-1">
-                                {model.capabilities?.vision && (
-                                  <div title={t('settings.capabilities.vision')}>
-                                    <Sparkles className="h-3 w-3" />
-                                  </div>
-                                )}
-                                {model.capabilities?.tools && (
-                                  <div title={t('settings.capabilities.tools')}>
-                                    <Wrench className="h-3 w-3" />
-                                  </div>
-                                )}
-                                {model.capabilities?.streaming && (
-                                  <div title={t('settings.capabilities.streaming')}>
-                                    <Zap className="h-3 w-3" />
-                                  </div>
-                                )}
-                              </div>
-                              {/* Context Window */}
-                              {model.contextWindow && (
-                                <span className="flex items-center gap-0.5">
-                                  <FileText className="h-3 w-3" />
-                                  <span className="text-[10px]">
-                                    {formatContextWindow(model.contextWindow)}
-                                  </span>
-                                </span>
-                              )}
-                              {/* Output Window */}
-                              {model.outputWindow && (
-                                <span className="flex items-center gap-0.5">
-                                  <Send className="h-3 w-3" />
-                                  <span className="text-[10px]">
-                                    {formatContextWindow(model.outputWindow)}
-                                  </span>
-                                </span>
-                              )}
-                            </div>
-                          )}
                         </div>
                         {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
                       </button>

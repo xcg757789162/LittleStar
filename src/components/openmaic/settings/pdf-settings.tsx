@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { Label } from '@/components/openmaic/ui/label';
 import { Input } from '@/components/openmaic/ui/input';
-import { Badge } from '@/components/openmaic/ui/badge';
 import { Button } from '@/components/openmaic/ui/button';
 import { useI18n } from '@/lib/openmaic/hooks/use-i18n';
 import { useSettingsStore } from '@/lib/openmaic/store/settings';
@@ -10,21 +9,6 @@ import { PDF_PROVIDERS } from '@/lib/openmaic/pdf/constants';
 import type { PDFProviderId } from '@/lib/openmaic/pdf/types';
 import { CheckCircle2, Eye, EyeOff, Loader2, Zap, XCircle } from 'lucide-react';
 import { cn } from '@/lib/openmaic/utils';
-
-/**
- * Get display label for feature
- */
-function getFeatureLabel(feature: string, t: (key: string) => string): string {
-  const labels: Record<string, string> = {
-    text: t('settings.featureText'),
-    images: t('settings.featureImages'),
-    tables: t('settings.featureTables'),
-    formulas: t('settings.featureFormulas'),
-    'layout-analysis': t('settings.featureLayoutAnalysis'),
-    metadata: t('settings.featureMetadata'),
-  };
-  return labels[feature] || feature;
-}
 
 interface PDFSettingsProps {
   selectedProviderId: PDFProviderId;
@@ -206,18 +190,6 @@ export function PDFSettings({ selectedProviderId }: PDFSettingsProps) {
         </>
       )}
 
-      {/* Features List */}
-      <div className="space-y-2">
-        <Label className="text-sm">{t('settings.pdfFeatures')}</Label>
-        <div className="flex flex-wrap gap-2">
-          {pdfProvider.features.map((feature) => (
-            <Badge key={feature} variant="secondary" className="font-normal">
-              <CheckCircle2 className="h-3 w-3 mr-1" />
-              {getFeatureLabel(feature, t)}
-            </Badge>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

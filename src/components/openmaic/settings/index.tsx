@@ -61,12 +61,15 @@ import { ModelEditDialog } from './model-edit-dialog';
 import { AddProviderDialog, type NewProviderData } from './add-provider-dialog';
 import type { SettingsSection, EditingModel } from '@/lib/openmaic/types/settings';
 import { syncOpenMAICToChild } from '@/stores/openmaic/settings-reverse-sync';
+import { syncSettingsToOpenMAIC } from '@/stores/openmaic/settings-sync';
+import { useChildStore } from '@/stores/childStore';
 
 // ─── Provider List Column (reusable) ───
 function ProviderListColumn<T extends string>({
   providers,
   configs,
   selectedId,
+  activeId,
   onSelect,
   width,
   t,
@@ -74,6 +77,7 @@ function ProviderListColumn<T extends string>({
   providers: Array<{ id: T; name: string; icon?: string }>;
   configs: Record<string, { isServerConfigured?: boolean }>;
   selectedId: T;
+  activeId?: T;
   onSelect: (id: T) => void;
   width: number;
   t: (key: string) => string;
@@ -86,33 +90,44 @@ function ProviderListColumn<T extends string>({
       <div className="border-b border-orange-100/70 px-4 py-4">
         <div className="rounded-2xl bg-gradient-to-br from-sky-50 via-white to-orange-50 p-3">
           <div className="text-sm font-semibold text-slate-800">可选服务</div>
-          <p className="mt-1 text-xs leading-5 text-slate-500">选择一个服务，再在右侧完成配置。</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">点击切换当前使用的服务。</p>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {providers.map((provider) => (
-          <button
-            key={provider.id}
-            onClick={() => onSelect(provider.id)}
-            className={cn(
-              'w-full rounded-2xl border px-3 py-3 text-left transition-all duration-200',
-              selectedId === provider.id
-                ? 'border-orange-200 bg-gradient-to-r from-orange-50 via-rose-50 to-white shadow-[0_10px_24px_rgba(249,115,22,0.10)]'
-                : 'border-transparent bg-white/80 hover:border-orange-100 hover:bg-white',
-            )}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <span className="truncate text-sm font-semibold text-slate-800">{provider.name}</span>
-              </div>
-              {configs[provider.id]?.isServerConfigured && (
-                <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-600 ring-1 ring-emerald-100">
-                  {t('settings.serverConfigured')}
-                </span>
+        {providers.map((provider) => {
+          const isSelected = selectedId === provider.id;
+          const isActive = activeId === provider.id;
+          return (
+            <button
+              key={provider.id}
+              onClick={() => onSelect(provider.id)}
+              className={cn(
+                'w-full rounded-2xl border px-3 py-3 text-left transition-all duration-200',
+                isSelected
+                  ? 'border-orange-200 bg-gradient-to-r from-orange-50 via-rose-50 to-white shadow-[0_10px_24px_rgba(249,115,22,0.10)]'
+                  : 'border-transparent bg-white/80 hover:border-orange-100 hover:bg-white',
               )}
-            </div>
-          </button>
-        ))}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <span className="truncate text-sm font-semibold text-slate-800">{provider.name}</span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {isActive && (
+                    <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-600 ring-1 ring-orange-200">
+                      当前使用
+                    </span>
+                  )}
+                  {configs[provider.id]?.isServerConfigured && (
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-600 ring-1 ring-emerald-100">
+                      {t('settings.serverConfigured')}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -221,6 +236,28 @@ interface SettingsDialogProps {
 export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsDialogProps) {
   const { t } = useI18n();
 
+  // 正向同步标记：确保 Dialog 打开时只触发一次 DB → Store 同步
+  const hasSyncedOnOpen = useRef(false);
+
+  // === 关键修复：Dialog 打开时，从数据库正向同步到 OpenMAIC Store ===
+  // 解决「换浏览器看不到已保存配置」的核心 Bug：
+  // 新浏览器的 localStorage 为空 → OpenMAIC Store 用默认空值初始化
+  // 如果不在 Dialog 打开时先从 DB 加载，Dialog 显示的就是空值，
+  // 关闭时反向同步还会把空值覆盖到 DB，导致已有配置丢失。
+  useEffect(() => {
+    if (open && !hasSyncedOnOpen.current) {
+      hasSyncedOnOpen.current = true;
+      const currentChild = useChildStore.getState().currentChild;
+      if (currentChild?.settings) {
+        console.log('[SettingsDialog] 📥 打开时正向同步 DB → Store, child:', currentChild.id);
+        syncSettingsToOpenMAIC(currentChild.settings);
+      }
+    }
+    if (!open) {
+      hasSyncedOnOpen.current = false;
+    }
+  }, [open]);
+
   // 包装 onOpenChange，在关闭时自动反向同步到数据库
   const handleOpenChange = useCallback((newOpen: boolean) => {
     onOpenChange(newOpen);
@@ -262,6 +299,10 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
   const setTTSProvider = useSettingsStore((state) => state.setTTSProvider);
   const setASRProvider = useSettingsStore((state) => state.setASRProvider);
   const setISEProvider = useSettingsStore((state) => state.setISEProvider);
+  const setImageProvider = useSettingsStore((state) => state.setImageProvider);
+  const setVideoProvider = useSettingsStore((state) => state.setVideoProvider);
+  const setPDFProvider = useSettingsStore((state) => state.setPDFProvider);
+  const setWebSearchProvider = useSettingsStore((state) => state.setWebSearchProvider);
 
   // Navigation
   const [activeSection, setActiveSection] = useState<SettingsSection>('providers');
@@ -838,7 +879,11 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                 providers={Object.values(PDF_PROVIDERS)}
                 configs={pdfProvidersConfig}
                 selectedId={selectedPdfProviderId}
-                onSelect={setSelectedPdfProviderId}
+                activeId={pdfProviderId}
+                onSelect={(id: PDFProviderId) => {
+                  setSelectedPdfProviderId(id);
+                  setPDFProvider(id);
+                }}
                 width={providerListWidth}
                 t={t}
               />
@@ -857,7 +902,11 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                 providers={Object.values(WEB_SEARCH_PROVIDERS)}
                 configs={webSearchProvidersConfig}
                 selectedId={selectedWebSearchProviderId}
-                onSelect={setSelectedWebSearchProviderId}
+                activeId={webSearchProviderId}
+                onSelect={(id: WebSearchProviderId) => {
+                  setSelectedWebSearchProviderId(id);
+                  setWebSearchProvider(id);
+                }}
                 width={providerListWidth}
                 t={t}
               />
@@ -880,7 +929,11 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                 }))}
                 configs={imageProvidersConfig}
                 selectedId={selectedImageProviderId}
-                onSelect={setSelectedImageProviderId}
+                activeId={imageProviderId}
+                onSelect={(id: ImageProviderId) => {
+                  setSelectedImageProviderId(id);
+                  setImageProvider(id);
+                }}
                 width={providerListWidth}
                 t={t}
               />
@@ -903,7 +956,11 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                 }))}
                 configs={videoProvidersConfig}
                 selectedId={selectedVideoProviderId}
-                onSelect={setSelectedVideoProviderId}
+                activeId={videoProviderId}
+                onSelect={(id: VideoProviderId) => {
+                  setSelectedVideoProviderId(id);
+                  setVideoProvider(id);
+                }}
                 width={providerListWidth}
                 t={t}
               />
@@ -926,6 +983,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                 }))}
                 configs={ttsProvidersConfig}
                 selectedId={ttsProviderId}
+                activeId={ttsProviderId}
                 onSelect={setTTSProvider}
                 width={providerListWidth}
                 t={t}
@@ -949,6 +1007,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                 }))}
                 configs={asrProvidersConfig}
                 selectedId={asrProviderId}
+                activeId={asrProviderId}
                 onSelect={setASRProvider}
                 width={providerListWidth}
                 t={t}
@@ -972,6 +1031,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                 }))}
                 configs={iseProvidersConfig}
                 selectedId={iseProviderId}
+                activeId={iseProviderId}
                 onSelect={setISEProvider}
                 width={providerListWidth}
                 t={t}
@@ -1010,13 +1070,6 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
-                  <div className="hidden min-w-[220px] rounded-[20px] border border-orange-100 bg-white/90 px-4 py-3 text-left shadow-sm xl:block">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-500">
-                      {t('settings.currentActiveSummary')}
-                    </div>
-                    <div className="mt-1 text-sm font-semibold text-slate-800">{currentProviderName}</div>
-                    <div className="mt-1 max-w-[220px] truncate text-xs text-slate-500">{currentModelName}</div>
-                  </div>
                   {activeSection === 'providers' &&
                     !providersConfig[selectedProviderId]?.isBuiltIn && (
                       <Button
@@ -1052,14 +1105,6 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                   currentModelName={currentModelName}
                   providersConfig={providersConfig}
                   onModelChange={setModel}
-                  onManualAddModel={() => {
-                    setActiveSection('providers');
-                    openAddModelDialog(activeProviderId);
-                  }}
-                  onOpenProviderManager={() => {
-                    setActiveSection('providers');
-                    setSelectedProviderId(activeProviderId);
-                  }}
                 />
               )}
 

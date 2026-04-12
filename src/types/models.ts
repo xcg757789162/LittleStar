@@ -128,6 +128,11 @@ export interface ChildSettings {
   /** 视频生成 Base URL */
   videoBaseUrl: string
 
+  /** 图片生成模型 ID（如 'dall-e-3', 'seedream-3.0'） */
+  imageModelId: string
+  /** 视频生成模型 ID（如 'seedance-1-0'） */
+  videoModelId: string
+
   /** 课堂 Agent 模式：preset(预设角色) | auto(自动生成) */
   classroomAgentMode: ClassroomAgentMode
   /** 已选中的学生角色 ID 列表（不含 teacher，teacher 始终启用） */
@@ -150,8 +155,8 @@ export const DEFAULT_ADVANCED_SETTINGS: Pick<ChildSettings,
   | 'enableISE' | 'iseProviderId' | 'iseAppId' | 'iseApiKey' | 'iseApiSecret'
   | 'enableWebSearch' | 'webSearchProviderId' | 'webSearchApiKey'
   | 'enablePDF' | 'pdfProviderId' | 'pdfApiKey' | 'pdfBaseUrl'
-  | 'enableImageGeneration' | 'imageProviderId' | 'imageApiKey' | 'imageBaseUrl'
-  | 'enableVideoGeneration' | 'videoProviderId' | 'videoApiKey' | 'videoBaseUrl'
+  | 'enableImageGeneration' | 'imageProviderId' | 'imageApiKey' | 'imageBaseUrl' | 'imageModelId'
+  | 'enableVideoGeneration' | 'videoProviderId' | 'videoApiKey' | 'videoBaseUrl' | 'videoModelId'
   | 'classroomAgentMode' | 'selfIntroduction'
   | 'selectedAgents' | 'agentVoiceMap' | 'teacherVoice' | 'maxDiscussionRounds'
 > = {
@@ -185,10 +190,12 @@ export const DEFAULT_ADVANCED_SETTINGS: Pick<ChildSettings,
   imageProviderId: '',
   imageApiKey: '',
   imageBaseUrl: '',
+  imageModelId: '',
   enableVideoGeneration: true,
   videoProviderId: '',
   videoApiKey: '',
   videoBaseUrl: '',
+  videoModelId: '',
   classroomAgentMode: 'preset',
   selfIntroduction: '',
   selectedAgents: ['assistant', 'showoff', 'curious'],

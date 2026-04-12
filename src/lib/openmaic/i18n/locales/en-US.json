@@ -335,6 +335,7 @@
     "model": "Model Configuration",
     "modelDesc": "Configure AI models",
     "modelPlaceholder": "Enter or select model name",
+    "asrModel": "ASR Model",
     "ttsModel": "TTS Model",
     "ttsModelDesc": "Configure TTS models",
     "ttsModelPlaceholder": "Enter or select TTS model name",

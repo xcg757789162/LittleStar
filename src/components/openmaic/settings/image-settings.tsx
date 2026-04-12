@@ -30,7 +30,7 @@ export function ImageSettings({ selectedProviderId }: ImageSettingsProps) {
 
   const imageModelId = useSettingsStore((state) => state.imageModelId);
   const imageProvidersConfig = useSettingsStore((state) => state.imageProvidersConfig);
-  const _setImageModelId = useSettingsStore((state) => state.setImageModelId);
+  const setImageModelId = useSettingsStore((state) => state.setImageModelId);
   const setImageProviderConfig = useSettingsStore((state) => state.setImageProviderConfig);
 
   const [showApiKey, setShowApiKey] = useState(false);
@@ -253,53 +253,86 @@ export function ImageSettings({ selectedProviderId }: ImageSettingsProps) {
             {t('settings.addNewModel')}
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">点击模型卡片选择当前使用的图像生成模型</p>
 
         <div className="space-y-1.5">
           {/* Built-in models */}
-          {builtInModels.map((model) => (
-            <div
-              key={model.id}
-              className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-card"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="font-mono text-sm font-medium">{model.name}</div>
-                <div className="text-xs text-muted-foreground font-mono mt-0.5">{model.id}</div>
-              </div>
-            </div>
-          ))}
+          {builtInModels.map((model) => {
+            const isActive = imageModelId === model.id;
+            return (
+              <button
+                key={model.id}
+                type="button"
+                onClick={() => setImageModelId(model.id)}
+                className={cn(
+                  'w-full flex items-center justify-between p-3 rounded-lg border text-left transition-all duration-150',
+                  isActive
+                    ? 'border-orange-300 bg-orange-50/80 shadow-[0_4px_12px_rgba(249,115,22,0.10)]'
+                    : 'border-border/50 bg-card hover:border-orange-200 hover:bg-orange-50/30',
+                )}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="font-mono text-sm font-medium">{model.name}</div>
+                  <div className="text-xs text-muted-foreground font-mono mt-0.5">{model.id}</div>
+                </div>
+                {isActive && (
+                  <span className="shrink-0 ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700 ring-1 ring-orange-200">
+                    ✓ 当前使用
+                  </span>
+                )}
+              </button>
+            );
+          })}
 
           {/* Custom models */}
-          {customModels.map((model, index) => (
-            <div
-              key={`custom-${index}`}
-              className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-card"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="font-mono text-sm font-medium">{model.name}</div>
-                <div className="text-xs text-muted-foreground font-mono mt-0.5">{model.id}</div>
-              </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2"
-                  onClick={() => handleOpenEditModel(index)}
-                  title={t('settings.editModel')}
+          {customModels.map((model, index) => {
+            const isActive = imageModelId === model.id;
+            return (
+              <div
+                key={`custom-${index}`}
+                className={cn(
+                  'flex items-center justify-between p-3 rounded-lg border transition-all duration-150',
+                  isActive
+                    ? 'border-orange-300 bg-orange-50/80 shadow-[0_4px_12px_rgba(249,115,22,0.10)]'
+                    : 'border-border/50 bg-card hover:border-orange-200 hover:bg-orange-50/30',
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => setImageModelId(model.id)}
+                  className="flex-1 min-w-0 text-left"
                 >
-                  <Settings2 className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={() => handleDeleteModel(index)}
-                  title={t('settings.deleteModel')}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                  <div className="font-mono text-sm font-medium">{model.name}</div>
+                  <div className="text-xs text-muted-foreground font-mono mt-0.5">{model.id}</div>
+                </button>
+                <div className="flex items-center gap-1 shrink-0 ml-2">
+                  {isActive && (
+                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700 ring-1 ring-orange-200">
+                      ✓ 当前使用
+                    </span>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => handleOpenEditModel(index)}
+                    title={t('settings.editModel')}
+                  >
+                    <Settings2 className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => handleDeleteModel(index)}
+                    title={t('settings.deleteModel')}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
