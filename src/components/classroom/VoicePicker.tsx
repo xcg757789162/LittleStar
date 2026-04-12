@@ -55,6 +55,7 @@ export function VoicePicker({
   const previewCancelRef = useRef<(() => void) | null>(null)
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
   const previewAbortRef = useRef<AbortController | null>(null)
+  const previewRequestIdRef = useRef(0)
   const ttsProvidersConfig = useSettingsStore((s) => s.ttsProvidersConfig)
 
   const voiceGroups = useMemo<VoiceGroupOption[]>(() => {
@@ -98,7 +99,16 @@ export function VoicePicker({
 
   const activeGroup = voiceGroups.find((group) => group.key === selectedGroupKey) || voiceGroups[0]
 
+  const finishPreview = useCallback((requestId: number) => {
+    if (previewRequestIdRef.current !== requestId) return
+    previewCancelRef.current = null
+    previewAbortRef.current = null
+    previewAudioRef.current = null
+    setPreviewingKey(null)
+  }, [])
+
   const stopPreview = useCallback(() => {
+    previewRequestIdRef.current += 1
     previewCancelRef.current?.()
     previewCancelRef.current = null
     previewAbortRef.current?.abort()
@@ -120,6 +130,8 @@ export function VoicePicker({
       }
 
       stopPreview()
+      const requestId = previewRequestIdRef.current + 1
+      previewRequestIdRef.current = requestId
       setPreviewingKey(key)
       const previewText = '欢迎来到AI课堂'
 
@@ -131,7 +143,7 @@ export function VoicePicker({
         } catch {
           // ignore preview errors
         }
-        setPreviewingKey(null)
+        finishPreview(requestId)
         return
       }
 
@@ -154,19 +166,28 @@ export function VoicePicker({
           }),
           signal: controller.signal,
         })
+        if (previewRequestIdRef.current !== requestId) return
         if (!res.ok) throw new Error('TTS error')
         const data = await res.json()
+        if (previewRequestIdRef.current !== requestId) return
         if (!data.base64) throw new Error('No audio')
         const audio = new Audio(`data:audio/${data.format || 'mp3'};base64,${data.base64}`)
         previewAudioRef.current = audio
-        audio.addEventListener('ended', () => setPreviewingKey(null), { once: true })
-        audio.addEventListener('error', () => setPreviewingKey(null), { once: true })
+        audio.addEventListener('ended', () => finishPreview(requestId), { once: true })
+        audio.addEventListener('error', () => finishPreview(requestId), { once: true })
         await audio.play()
+        if (previewRequestIdRef.current !== requestId) {
+          audio.pause()
+          audio.src = ''
+          if (previewAudioRef.current === audio) {
+            previewAudioRef.current = null
+          }
+        }
       } catch {
-        setPreviewingKey(null)
+        finishPreview(requestId)
       }
     },
-    [previewingKey, stopPreview, ttsProvidersConfig],
+    [finishPreview, previewingKey, stopPreview, ttsProvidersConfig],
   )
 
   const handleOpenChange = useCallback(

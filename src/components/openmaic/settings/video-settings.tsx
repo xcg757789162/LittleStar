@@ -308,7 +308,7 @@ export function VideoSettings({ selectedProviderId }: VideoSettingsProps) {
 
       {/* Add/Edit Model Dialog */}
       <Dialog open={showModelDialog} onOpenChange={setShowModelDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent overlayClassName="z-[1200]" className="z-[1201] sm:max-w-md">
           <DialogTitle>
             {editingModelIndex !== null ? t('settings.editModel') : t('settings.addNewModel')}
           </DialogTitle>

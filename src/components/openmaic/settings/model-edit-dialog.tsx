@@ -99,7 +99,10 @@ export function ModelEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-hidden p-0 sm:max-w-[560px]">
+      <DialogContent
+        overlayClassName="z-[1200]"
+        className="z-[1201] max-h-[90vh] overflow-hidden p-0 sm:max-w-[560px]"
+      >
         <DialogTitle className="sr-only">
           {editingModel.modelIndex === null ? t('settings.addNewModel') : t('settings.editModel')}
         </DialogTitle>

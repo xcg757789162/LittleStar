@@ -62,7 +62,7 @@ export function AddProviderDialog({ open, onOpenChange, onAdd }: AddProviderDial
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[450px]">
+      <DialogContent overlayClassName="z-[1200]" className="z-[1201] sm:max-w-[450px]">
         <DialogTitle className="sr-only">{t('settings.addProviderDialog')}</DialogTitle>
         <DialogDescription className="sr-only">
           {t('settings.addProviderDescription')}

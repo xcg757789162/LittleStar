@@ -44,6 +44,8 @@ interface ProviderConfigPanelProps {
   providersConfig: ProvidersConfig;
   activeProviderId: string;
   activeModelId: string;
+  activeProviderName: string;
+  activeModelName: string;
   onSetActiveModel: (modelId: string) => void;
   onConfigChange: (apiKey: string, baseUrl: string, requiresApiKey: boolean) => void;
   onSave: () => void; // Auto-save on blur
@@ -62,6 +64,8 @@ export function ProviderConfigPanel({
   providersConfig,
   activeProviderId,
   activeModelId,
+  activeProviderName,
+  activeModelName,
   onSetActiveModel,
   onConfigChange,
   onSave,
@@ -124,7 +128,10 @@ export function ProviderConfigPanel({
       return;
     }
 
-    const testModelId = availableModels[0].id;
+    const testModelId =
+      activeProviderId === provider.id && availableModels.some((model) => model.id === activeModelId)
+        ? activeModelId
+        : availableModels[0].id;
 
     try {
       const response = await fetch('/api/verify-model', {
@@ -152,13 +159,57 @@ export function ProviderConfigPanel({
       setTestStatus('error');
       setTestMessage(t('settings.connectionFailed'));
     }
-  }, [apiKey, baseUrl, provider.id, provider.type, requiresApiKey, providersConfig, t]);
+  }, [
+    activeModelId,
+    activeProviderId,
+    apiKey,
+    baseUrl,
+    provider.id,
+    provider.type,
+    requiresApiKey,
+    providersConfig,
+    t,
+  ]);
 
   const models = providersConfig[provider.id]?.models || [];
   const isServerConfigured = providersConfig[provider.id]?.isServerConfigured;
+  const isManagingActiveProvider = activeProviderId === provider.id;
+  const activeModelLabel = activeModelName || activeModelId || t('settings.selectModel');
 
   return (
     <div className="space-y-6 max-w-3xl">
+      <section className="rounded-[24px] border border-orange-100 bg-gradient-to-br from-orange-50 via-rose-50 to-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-500">
+              {t('settings.currentActiveSummary')}
+            </div>
+            <div className="mt-2 text-lg font-semibold text-slate-800">{activeProviderName}</div>
+            <div className="mt-1 break-all text-sm text-slate-500">{activeModelLabel}</div>
+          </div>
+          <span
+            className={cn(
+              'inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold ring-1',
+              isManagingActiveProvider
+                ? 'bg-emerald-50 text-emerald-600 ring-emerald-100'
+                : 'bg-orange-50 text-orange-600 ring-orange-100',
+            )}
+          >
+            {isManagingActiveProvider
+              ? t('settings.activeProviderStatus')
+              : t('settings.viewingProvider')}
+          </span>
+        </div>
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          {isManagingActiveProvider
+            ? t('settings.activeProviderManaged')
+            : t('settings.providerSwitchHelper', {
+                provider: activeProviderName,
+                model: activeModelLabel,
+              })}
+        </p>
+      </section>
+
       {/* Server-configured notice */}
       {isServerConfigured && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 p-3 text-sm text-blue-700 dark:text-blue-300">
@@ -167,8 +218,15 @@ export function ProviderConfigPanel({
       )}
 
       {/* API Key */}
-      <div className="space-y-2">
-        <Label>{t('settings.apiSecret')}</Label>
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-semibold text-slate-700">{t('settings.apiSecret')}</Label>
+          {isServerConfigured && (
+            <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-[11px] font-medium text-sky-600 ring-1 ring-sky-100">
+              服务端已配 · 可选覆盖
+            </span>
+          )}
+        </div>
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Input
@@ -183,12 +241,12 @@ export function ProviderConfigPanel({
               onChange={(e) => handleApiKeyChange(e.target.value)}
               onBlur={onSave}
               disabled={!requiresApiKey && !isServerConfigured}
-              className="h-8 pr-8"
+              className="h-9 rounded-xl pr-9"
             />
             <button
               type="button"
               onClick={() => setShowApiKey(!showApiKey)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground transition-colors hover:text-foreground"
               disabled={!requiresApiKey}
             >
               {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -201,7 +259,7 @@ export function ProviderConfigPanel({
             disabled={
               testStatus === 'testing' || (requiresApiKey && !apiKey && !isServerConfigured)
             }
-            className="gap-1.5"
+            className="h-9 gap-1.5 rounded-xl border-orange-200 bg-white px-4 font-semibold text-orange-600 shadow-sm hover:bg-orange-50 hover:shadow-md transition-all"
           >
             {testStatus === 'testing' ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -315,93 +373,100 @@ export function ProviderConfigPanel({
           </div>
         </div>
         <p className="text-xs text-muted-foreground">{t('settings.modelsManagementDescription')}</p>
+        <p className="text-xs leading-5 text-slate-500">{t('settings.modelSelectorHint')}</p>
 
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {models.map((model, index) => {
+            const isActive = activeProviderId === provider.id && activeModelId === model.id;
             return (
               <div
                 key={model.id}
-                className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-card"
+                className={cn(
+                  'rounded-2xl border p-4 transition-all duration-200',
+                  isActive
+                    ? 'border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-emerald-50/30 shadow-[0_4px_16px_rgba(16,185,129,0.08)] ring-1 ring-emerald-100'
+                    : 'border-slate-100 bg-white hover:border-orange-100 hover:shadow-sm',
+                )}
               >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="font-mono text-sm font-medium">{model.name}</div>
-                    {activeProviderId === provider.id && activeModelId === model.id && (
-                      <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
-                        {t('settings.currentlyUsing')}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {/* Capabilities */}
-                    <div className="flex items-center gap-1">
-                      {model.capabilities?.vision && (
-                        <div title={t('settings.capabilities.vision')}>
-                          <Sparkles className="h-3 w-3" />
-                        </div>
-                      )}
-                      {model.capabilities?.tools && (
-                        <div title={t('settings.capabilities.tools')}>
-                          <Wrench className="h-3 w-3" />
-                        </div>
-                      )}
-                      {model.capabilities?.streaming && (
-                        <div title={t('settings.capabilities.streaming')}>
-                          <Zap className="h-3 w-3" />
-                        </div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="truncate text-sm font-semibold text-slate-800">{model.name}</div>
+                      {isActive && (
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          {t('settings.currentlyUsing')}
+                        </span>
                       )}
                     </div>
-                    {/* Context Window */}
-                    {model.contextWindow && (
-                      <span className="flex items-center gap-0.5">
-                        <FileText className="h-3 w-3" />
-                        <span className="text-[10px]">
-                          {formatContextWindow(model.contextWindow)}
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {/* Capabilities as readable tags */}
+                      {model.capabilities?.vision && (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-600 ring-1 ring-violet-100" title={t('settings.capabilities.vision')}>
+                          <Sparkles className="h-3 w-3" />
+                          视觉
                         </span>
-                      </span>
-                    )}
-                    {/* Output Window */}
-                    {model.outputWindow && (
-                      <span className="flex items-center gap-0.5">
-                        <Send className="h-3 w-3" />
-                        <span className="text-[10px]">
-                          {formatContextWindow(model.outputWindow)}
+                      )}
+                      {model.capabilities?.tools && (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-600 ring-1 ring-blue-100" title={t('settings.capabilities.tools')}>
+                          <Wrench className="h-3 w-3" />
+                          工具
                         </span>
-                      </span>
-                    )}
+                      )}
+                      {model.capabilities?.streaming && (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-600 ring-1 ring-amber-100" title={t('settings.capabilities.streaming')}>
+                          <Zap className="h-3 w-3" />
+                          流式
+                        </span>
+                      )}
+                      {/* Context Window - human readable */}
+                      {model.contextWindow && (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-slate-100" title="上下文窗口大小">
+                          <FileText className="h-3 w-3" />
+                          上下文 {formatContextWindow(model.contextWindow)}
+                        </span>
+                      )}
+                      {/* Output Window - human readable */}
+                      {model.outputWindow && (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-slate-100" title="最大输出长度">
+                          <Send className="h-3 w-3" />
+                          输出 {formatContextWindow(model.outputWindow)}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-2">
-                  {!(activeProviderId === provider.id && activeModelId === model.id) && (
+                  {/* Actions - larger click targets */}
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {!isActive && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 rounded-xl border-orange-200 bg-gradient-to-r from-orange-50 to-white px-4 text-xs font-semibold text-orange-600 shadow-sm hover:bg-orange-100 hover:text-orange-700 hover:shadow-md transition-all"
+                        onClick={() => onSetActiveModel(model.id)}
+                      >
+                        {t('settings.setAsActiveModel')}
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 rounded-full border-orange-200 bg-orange-50 px-3 text-orange-600 hover:bg-orange-100 hover:text-orange-700"
-                      onClick={() => onSetActiveModel(model.id)}
+                      className="h-9 w-9 rounded-xl p-0 text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                      onClick={() => onEditModel(index)}
+                      title={t('settings.editModel')}
                     >
-                      {t('settings.setAsActiveModel')}
+                      <Settings2 className="h-4 w-4" />
                     </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2"
-                    onClick={() => onEditModel(index)}
-                    title={t('settings.editModel')}
-                  >
-                    <Settings2 className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => onDeleteModel(index)}
-                    title={t('settings.deleteModel')}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 w-9 rounded-xl p-0 text-slate-300 hover:text-red-500 hover:bg-red-50 hover:border-red-200 transition-colors"
+                      onClick={() => onDeleteModel(index)}
+                      title={t('settings.deleteModel')}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             );
@@ -411,7 +476,7 @@ export function ProviderConfigPanel({
 
       {/* Reset Confirmation Dialog */}
       <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent overlayClassName="z-[1200]" className="z-[1201]">
           <AlertDialogHeader>
             <AlertDialogTitle>{t('settings.resetToDefault')}</AlertDialogTitle>
             <AlertDialogDescription>{t('settings.resetConfirmDescription')}</AlertDialogDescription>

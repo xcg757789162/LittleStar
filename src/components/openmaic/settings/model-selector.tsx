@@ -210,10 +210,22 @@ export function ModelSelector({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-wrap items-center gap-1">
                       <span className="truncate text-sm font-medium">
                         {getProviderDisplayName(provider.id, provider.name)}
                       </span>
+                      {provider.id === providerId && (
+                        <span
+                          className={cn(
+                            'inline-flex items-center rounded-full px-1.5 py-0 text-[10px] leading-4',
+                            isActive
+                              ? 'bg-white/20 text-primary-foreground ring-1 ring-white/20'
+                              : 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100',
+                          )}
+                        >
+                          {t('settings.currentlyUsing')}
+                        </span>
+                      )}
                       {provider.isServerConfigured && (
                         <span
                           className={cn(
@@ -241,6 +253,16 @@ export function ModelSelector({
 
         {/* Right: Model List */}
         <div className="flex-1 flex flex-col relative">
+          <div className="border-b bg-white/80 px-4 py-3 backdrop-blur-sm">
+            <div className="text-sm font-semibold text-slate-800">
+              {getProviderDisplayName(
+                effectiveProvider,
+                providersConfig[effectiveProvider]?.name || effectiveProvider,
+              )}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{t('settings.modelSelectorHint')}</p>
+          </div>
+
           {/* Floating Search Button - Bottom Right */}
           <div className="absolute bottom-4 right-4 z-10">
             {searchExpanded ? (
@@ -298,8 +320,13 @@ export function ModelSelector({
                         className="flex-1 flex items-center gap-2 text-left"
                       >
                         <div className="flex-1 min-w-0">
-                          <div className="font-mono text-sm font-medium mb-1.5 truncate">
-                            {model.name}
+                          <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                            <div className="font-mono text-sm font-medium truncate">{model.name}</div>
+                            {isSelected && (
+                              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 ring-1 ring-emerald-100">
+                                {t('settings.currentlyUsing')}
+                              </span>
+                            )}
                           </div>
                           {(model.capabilities || model.contextWindow || model.outputWindow) && (
                             <div className="flex items-center gap-2 text-xs text-muted-foreground">

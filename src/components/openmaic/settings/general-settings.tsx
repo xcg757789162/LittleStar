@@ -120,6 +120,25 @@ export function GeneralSettings({
               )}
             </div>
 
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[20px] border border-orange-100 bg-orange-50/70 p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-500">
+                  {t('settings.switchGuideTitle')}
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {t('settings.switchGuideDescription')}
+                </p>
+              </div>
+              <div className="rounded-[20px] border border-sky-100 bg-sky-50/80 p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-500">
+                  {t('settings.switchScopeTitle')}
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {t('settings.switchScopeDescription')}
+                </p>
+              </div>
+            </div>
+
             <div className="mt-5 flex flex-wrap gap-3">
               <Button
                 size="sm"
@@ -215,7 +234,7 @@ export function GeneralSettings({
           }
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent overlayClassName="z-[1200]" className="z-[1201]">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5" />

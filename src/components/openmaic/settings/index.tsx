@@ -265,6 +265,10 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
     }
   }, [open, initialSection]);
 
+  useEffect(() => {
+    setSelectedProviderId(activeProviderId);
+  }, [activeProviderId]);
+
   // Model editing state
   const [editingModel, setEditingModel] = useState<EditingModel | null>(null);
   const [showModelDialog, setShowModelDialog] = useState(false);
@@ -376,6 +380,34 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
     : activeProviderId;
   const currentModelName = activeModelInfo?.name || activeModelId || t('settings.selectModel');
 
+  const getFallbackActiveSelection = (config: typeof providersConfig, preferredProviderId?: ProviderId) => {
+    const pickFirstModel = (providerId: ProviderId | undefined) => {
+      if (!providerId) return null;
+      const modelId = config[providerId]?.models?.[0]?.id;
+      return modelId ? { providerId, modelId } : null;
+    };
+
+    const preferredSelection = pickFirstModel(preferredProviderId);
+    if (preferredSelection) return preferredSelection;
+
+    for (const [providerId, providerConfig] of Object.entries(config) as Array<
+      [ProviderId, (typeof providersConfig)[ProviderId]]
+    >) {
+      const modelId = providerConfig.models[0]?.id;
+      if (modelId) {
+        return { providerId, modelId };
+      }
+    }
+
+    return null;
+  };
+
+  const handleModelChange = (providerId: ProviderId, modelId: string) => {
+    setModel(providerId, modelId);
+    setSelectedProviderId(providerId);
+    handleProviderConfigSave();
+  };
+
   const openAddModelDialog = (providerId: ProviderId) => {
     setSelectedProviderId(providerId);
     setEditingModel({
@@ -411,8 +443,25 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
 
   const handleDeleteModel = (pid: ProviderId, modelIndex: number) => {
     const currentModels = providersConfig[pid]?.models || [];
+    const deletedModel = currentModels[modelIndex];
     const newModels = currentModels.filter((_, i) => i !== modelIndex);
+    const nextConfig = {
+      ...providersConfig,
+      [pid]: {
+        ...providersConfig[pid],
+        models: newModels,
+      },
+    };
+
     setProviderConfig(pid, { models: newModels });
+
+    if (activeProviderId === pid && deletedModel?.id === activeModelId) {
+      const fallbackSelection = getFallbackActiveSelection(nextConfig, pid);
+      if (fallbackSelection) {
+        setModel(fallbackSelection.providerId, fallbackSelection.modelId);
+        setSelectedProviderId(fallbackSelection.providerId);
+      }
+    }
   };
 
   const handleAutoSaveModel = () => {
@@ -524,7 +573,26 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
   const handleResetProvider = (pid: ProviderId) => {
     const provider = PROVIDERS[pid];
     if (!provider) return;
-    setProviderConfig(pid, { models: [...provider.models] });
+
+    const resetModels = [...provider.models];
+    const nextConfig = {
+      ...providersConfig,
+      [pid]: {
+        ...providersConfig[pid],
+        models: resetModels,
+      },
+    };
+
+    setProviderConfig(pid, { models: resetModels });
+
+    if (activeProviderId === pid && !resetModels.some((model) => model.id === activeModelId)) {
+      const fallbackSelection = getFallbackActiveSelection(nextConfig, pid);
+      if (fallbackSelection) {
+        setModel(fallbackSelection.providerId, fallbackSelection.modelId);
+        setSelectedProviderId(fallbackSelection.providerId);
+      }
+    }
+
     toast.success(t('settings.resetSuccess'));
   };
 
@@ -670,11 +738,16 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
             className="flex-shrink-0 border-r border-orange-100/80 bg-white/70 p-3 backdrop-blur-sm"
             style={{ width: sidebarWidth }}
           >
-            <div className="mb-3 rounded-[24px] border border-orange-100 bg-gradient-to-br from-orange-100 via-amber-50 to-white p-4 shadow-sm">
-              <div className="mb-1 text-base font-semibold text-slate-800">家长 AI 设置</div>
-              <p className="text-xs leading-5 text-slate-500">
-                先配置最常用的模型与语音能力；语音识别默认可直接使用，不必额外再配一套 Key。
-              </p>
+            <div className="mb-3 rounded-[24px] border border-orange-100 bg-gradient-to-br from-orange-100 via-amber-50 to-white p-3 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-pink-400 text-white shadow-sm">
+                  <Settings className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-slate-800">AI 设置</div>
+                  <p className="text-[11px] leading-4 text-slate-400">配置模型与语音能力</p>
+                </div>
+              </div>
             </div>
             <div className="space-y-2 overflow-y-auto pb-2">
               {sectionItems.map((item) => {
@@ -727,6 +800,9 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
               <ProviderList
                 providers={allProviders}
                 selectedProviderId={selectedProviderId}
+                activeProviderId={activeProviderId}
+                activeProviderName={currentProviderName}
+                activeModelName={currentModelName}
                 onSelect={handleProviderSelect}
                 onAddProvider={() => setShowAddProviderDialog(true)}
                 width={providerListWidth}
@@ -917,7 +993,14 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                     <p className="mt-2 text-sm leading-6 text-slate-500">{getSectionSummary(activeSection)}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-start gap-2">
+                  <div className="hidden min-w-[220px] rounded-[20px] border border-orange-100 bg-white/90 px-4 py-3 text-left shadow-sm xl:block">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-500">
+                      {t('settings.currentActiveSummary')}
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-800">{currentProviderName}</div>
+                    <div className="mt-1 max-w-[220px] truncate text-xs text-slate-500">{currentModelName}</div>
+                  </div>
                   {activeSection === 'providers' &&
                     !providersConfig[selectedProviderId]?.isBuiltIn && (
                       <Button
@@ -943,16 +1026,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6">
-              {activeSection !== 'asr' && activeSection !== 'general' && (
-                <div className="mb-5 rounded-[24px] border border-orange-100 bg-white/85 p-4 shadow-sm">
-                  <div className="text-sm font-semibold text-slate-800">
-                    {`当前分区：${activeSectionItem.label}`}
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
-                    {getSectionSummary(activeSection)}
-                  </p>
-                </div>
-              )}
+              {/* Section summary removed - already shown in header */}
 
               {activeSection === 'general' && (
                 <GeneralSettings
@@ -978,6 +1052,8 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                   provider={selectedProvider}
                   activeProviderId={activeProviderId}
                   activeModelId={activeModelId}
+                  activeProviderName={currentProviderName}
+                  activeModelName={currentModelName}
                   onSetActiveModel={(modelId) => setModel(selectedProviderId, modelId)}
                   initialApiKey={providersConfig[selectedProviderId]?.apiKey || ''}
                   initialBaseUrl={providersConfig[selectedProviderId]?.baseUrl || ''}
@@ -1015,39 +1091,31 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between gap-3 border-t border-orange-100/80 bg-white/80 px-6 py-4 backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-3 border-t border-orange-100/80 bg-white/80 px-6 py-3.5 backdrop-blur-sm">
               <div className="flex min-h-6 items-center gap-2 text-sm">
                 {saveStatus === 'saved' && (
-                  <div className="flex items-center gap-1.5 text-emerald-600">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>{t('settings.saveSuccess')}</span>
+                  <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-600 ring-1 ring-emerald-100">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">{t('settings.saveSuccess')}</span>
                   </div>
                 )}
                 {saveStatus === 'error' && (
-                  <div className="flex items-center gap-1.5 text-red-500">
-                    <XCircle className="h-4 w-4" />
-                    <span>{t('settings.saveFailed')}</span>
+                  <div className="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1.5 text-red-500 ring-1 ring-red-100">
+                    <XCircle className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">{t('settings.saveFailed')}</span>
                   </div>
                 )}
                 {saveStatus === 'idle' && (
-                  <span className="text-xs text-slate-400">改完后点保存即可生效</span>
+                  <span className="text-xs text-slate-400">💡 {t('settings.autoSaveHint')}</span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-2xl border-orange-200 bg-white hover:bg-orange-50"
-                  onClick={() => onOpenChange(false)}
-                >
-                  {t('settings.close')}
-                </Button>
+              <div className="flex items-center gap-2.5">
                 <Button
                   size="sm"
-                  className="rounded-2xl bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-[0_10px_24px_rgba(249,115,22,0.18)] hover:from-orange-500 hover:to-pink-500"
+                  className="h-9 rounded-2xl bg-gradient-to-r from-orange-500 to-pink-500 px-6 text-white shadow-[0_10px_24px_rgba(249,115,22,0.18)] hover:from-orange-500 hover:to-pink-500"
                   onClick={handleSave}
                 >
-                  {t('settings.save')}
+                  ✓ {t('settings.done')}
                 </Button>
               </div>
             </div>
@@ -1083,7 +1151,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
         open={providerToDelete !== null}
         onOpenChange={(open) => !open && setProviderToDelete(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent overlayClassName="z-[1200]" className="z-[1201]">
           <AlertDialogHeader>
             <AlertDialogTitle>{t('settings.deleteProvider')}</AlertDialogTitle>
             <AlertDialogDescription>{t('settings.deleteProviderConfirm')}</AlertDialogDescription>
