@@ -80,6 +80,7 @@ interface BackendStatusResponse {
   completedCount: number
   totalCount: number
   activeCount: number
+  failedCount: number
 }
 
 /** 获取后端 API 基础路径 */
@@ -342,7 +343,7 @@ export function usePreGeneration(
 
               backendTasks.push({
                 knowledgeNodeId: item.nodeId,
-                date: dateStr,
+                date: dayPlan.date,
                 requirement,
                 language: 'zh-CN',
               })
@@ -379,7 +380,24 @@ export function usePreGeneration(
         return
       }
 
-      // 6. 提交到后端
+      // 6. 先检查后端是否已有活跃任务（pending/running）
+      //    如果有，直接进入轮询模式，不重复提交
+      try {
+        const existingStatus = await pollStatus(numChildId)
+        if (existingStatus.activeCount > 0) {
+          log.info(`⏳ 后端已有 ${existingStatus.activeCount} 个活跃任务，直接轮询`)
+          setTotalCount(existingStatus.totalCount)
+          setCompletedCount(existingStatus.completedCount)
+          setPendingCount(existingStatus.activeCount)
+          setStageText('AI 老师正在创作课堂内容...')
+          startPolling(numChildId)
+          return
+        }
+      } catch (checkErr) {
+        log.warn('检查后端任务状态失败，继续提交:', checkErr)
+      }
+
+      // 7. 提交到后端
       log.info(`📤 向后端提交 ${backendTasks.length} 个生成任务`)
       setStageText(`正在提交 ${backendTasks.length} 个备课任务...`)
       setPendingCount(backendTasks.length)
@@ -403,7 +421,7 @@ export function usePreGeneration(
         return
       }
 
-      // 7. 启动轮询
+      // 8. 启动轮询
       startPolling(numChildId)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)

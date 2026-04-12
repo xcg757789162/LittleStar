@@ -33,3 +33,29 @@
 - 配置与脚本已统一：`playwright.config.ts`、`e2e/config/env.ts`、`.env.e2e.example` 统一到 `5173` 基准地址；`package.json` 补齐 `test:e2e`、`test:e2e:smoke`、`test:e2e:feature`、`test:e2e:full`、`test:e2e:legacy`、`test:e2e:ui`、`test:e2e:report`、`test:e2e:install`。
 - 最终验证结果：`npm run test:e2e:smoke` 通过，结果 `1 passed (7.9s)`；额外校验 `package.json ok`。
 - 关注项：当前 Node `20.18.0` 下 `npm install` 出现多条 `EBADENGINE` warning，但本次安装和 smoke / feature 执行均成功；若团队后续统一升级 Node，可顺手清理。
+
+---
+
+# pregeneration-fix-team
+
+- 状态: 已完成
+- 当前任务: 修复 PreGeneration 后端与 OpenMAIC upstream 契约漂移
+- 工作区: `/Users/chenguoxie/CodeBuddy/OpenMAIC`
+- 流程: Plan -> Review -> Execute -> Accept
+- 基线情况: 首页课程卡片在预生成 5% 后落入“备课失败了，点这里再试试”；数据库 `generation_tasks` 真实进入 `failed`，失败阶段锁定在 `outlines`
+
+## 任务拆分
+- [x] Task 1: 核对预生成流水线与 upstream 契约
+- [x] Task 2: 修复预生成请求体与响应解析
+- [x] Task 3: 补充验证覆盖关键失败链路
+- [x] Task 4: 运行校验并更新索引文档
+
+## 当前进展
+- `planner` 已完成本仓预生成链路盘点，确认真正入口为 `task-processor -> PipelineExecutor.runFullPipeline()`，并指出当前后端对 `scene-outlines-stream`、`scene-content`、`scene-actions`、`tts` 的请求体/响应解析均停留在旧契约。
+- `upstream-checker` 已完成 upstream 路由核对，确认 `scene-outlines-stream` 现要求 `{ requirements }` 包裹且返回 SSE；`scene-content` 现要求 `allOutlines + stageId` 并返回 `{ success, content, effectiveOutline }`；`scene-actions` 现要求 `allOutlines + stageId` 并返回 `{ success, scene, previousSpeeches }`；`tts` 现要求 `audioId + ttsProviderId + ttsVoice` 并返回 `{ success, audioId, base64, format }`。
+- 已新增 `src/server/services/__tests__/pipeline-executor.test.ts`，用回归测试锁定 4 个子接口的请求体与响应适配；测试先红后绿，验证修复确实命中了根因。
+- 已重写 `src/server/services/pipeline-executor.ts`：补齐 outlines 的 `requirements` 包裹、content/actions 的 `allOutlines/stageInfo/stageId`、跨场景 `previousSpeeches` 传递、以及 TTS 的 provider 参数映射与 `base64` 响应解析。
+- 已完成本地验证：`pipeline-executor.test.ts` 通过、`npm run build:server` 通过。
+- 已完成部署验证：执行 `bash docker/deploy/update-app.sh --full`，`littlestar-app` 重建成功，7 项端到端验证全部通过。
+- 已完成知识沉淀：`.codebuddy/project-index.md` 已记录本次 upstream 契约漂移根因、修复方式，以及 `update-app.sh` auto 模式不会识别 `src/server/services/` 变更的注意点。
+- 当前结论：本次预生成失败的主根因已经修复并完成部署验证；后续若页面仍出现异常，应优先转向真实业务数据验收或独立排查新的运行态问题，而不再是这条已定位的旧契约断链。

@@ -23,3 +23,23 @@
 - Node PATH 需包含 `/Users/chenguoxie/.workbuddy/binaries/node/versions/20.18.0/bin`
 - 仅允许修改 worktree 内文件
 - 本次仅做搜索/阅读与进度记录，未改业务代码
+
+---
+
+## pregeneration-fix-team / planner
+
+- 状态: 已完成
+- 负责任务: 盘点本仓预生成流水线现状、测试入口与可复用实现
+- 工作区: `/Users/chenguoxie/CodeBuddy/OpenMAIC`
+
+### 本次 TODO
+- [x] 盘点 `task-processor.ts` 到 `pipeline-executor.ts` 的真实调用链
+- [x] 确认仓内是否已有可复用的 pipeline 测试或实现参考
+- [x] 汇总请求体/响应解析与 checkpoint 机制的旧契约位置
+- [x] 向主控汇报最小修复边界与验证重点
+
+### 本次工作内容
+- 确认真正后端入口为 `src/server/services/task-processor.ts`，由其调用 `PipelineExecutor.runFullPipeline()` 执行 `agent-profiles -> outlines -> content -> actions -> tts`。
+- 明确旧实现的 4 个关键偏差：`outlines` 发送 `{ ...requirements, agents }`；`scene-content` 缺 `allOutlines + stageId`；`scene-actions` 缺 `allOutlines + stageId` 且错误期待 `{ actions }`；`tts` 只发 `{ text }` 且错误期待 `{ audio, durationMs }`。
+- 盘点现有测试后确认：仓内没有直接覆盖后端 `PipelineExecutor` 的测试，最接近的是前端侧 `src/services/openmaic/__tests__/pipeline-client.test.ts`，可作为回归测试结构参考但不是权威契约来源。
+- 补充提醒：当前仓内 `pipeline-client.ts` / `pipeline-types.ts` 也保留了较多早期简化契约认知，修复时应以 upstream route 为准，而不是仅对齐本仓前端测试。

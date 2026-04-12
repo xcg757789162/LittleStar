@@ -62,7 +62,36 @@ app.post('/api/pre-generate', async (req, res) => {
     const taskIds: number[] = []
     try {
       await client.query('BEGIN')
+
+      // 1. 清理该 child 所有失败/取消的旧任务（避免数字无限累积）
+      await client.query(
+        `DELETE FROM api.generation_tasks
+         WHERE child_id = $1
+           AND status IN ('failed', 'cancelled')`,
+        [childId],
+      )
+
+      // 2. 检查已有的 pending/running 任务，用于去重
+      const { rows: existingTasks } = await client.query(
+        `SELECT knowledge_node_id, date
+         FROM api.generation_tasks
+         WHERE child_id = $1
+           AND status IN ('pending', 'running')`,
+        [childId],
+      )
+      const existingSet = new Set(
+        existingTasks.map((r: { knowledge_node_id: string; date: string }) =>
+          `${r.knowledge_node_id}|${r.date}`,
+        ),
+      )
+
+      // 3. 只插入不重复的任务
       for (const task of tasks) {
+        const key = `${task.knowledgeNodeId}|${task.date}`
+        if (existingSet.has(key)) {
+          console.log(`[API] 跳过重复任务: ${key}`)
+          continue
+        }
         const result = await client.query(
           `INSERT INTO api.generation_tasks
              (child_id, knowledge_node_id, date, requirement, language, settings, status)
@@ -78,6 +107,7 @@ app.post('/api/pre-generate', async (req, res) => {
           ],
         )
         taskIds.push(result.rows[0].id)
+        existingSet.add(key)
       }
       await client.query('COMMIT')
     } catch (txError) {
@@ -85,6 +115,15 @@ app.post('/api/pre-generate', async (req, res) => {
       throw txError
     } finally {
       client.release()
+    }
+
+    // 如果所有任务都被去重跳过了
+    if (taskIds.length === 0) {
+      res.json({
+        taskIds: [],
+        message: '所有任务已在队列中，无需重复提交',
+      })
+      return
     }
 
     // 触发处理
@@ -111,17 +150,31 @@ app.get('/api/pre-generate/status', async (req, res) => {
       return
     }
 
+    // 只查询真正活跃的任务（pending / running）
     const { rows } = await pool.query(
       `SELECT id, status, progress, current_step, knowledge_node_id, date, error,
               retry_count, created_at, updated_at
        FROM api.generation_tasks
        WHERE child_id = $1
-         AND status IN ('pending', 'running', 'failed')
+         AND status IN ('pending', 'running')
        ORDER BY created_at ASC`,
       [childId],
     )
 
-    // 也统计已完成的（最近 1 小时内）
+    // 统计最近失败的任务（只返回最新一轮的，用于 UI 提示）
+    const { rows: failedRows } = await pool.query(
+      `SELECT id, status, progress, current_step, knowledge_node_id, date, error,
+              retry_count, created_at, updated_at
+       FROM api.generation_tasks
+       WHERE child_id = $1
+         AND status = 'failed'
+         AND updated_at > NOW() - INTERVAL '10 minutes'
+       ORDER BY updated_at DESC
+       LIMIT 10`,
+      [childId],
+    )
+
+    // 统计已完成的（最近 1 小时内）
     const { rows: completedRows } = await pool.query(
       `SELECT COUNT(*) as count
        FROM api.generation_tasks
@@ -131,12 +184,27 @@ app.get('/api/pre-generate/status', async (req, res) => {
       [childId],
     )
 
+    // 自动清理超过 1 小时的失败任务（避免无限累积）
+    await pool.query(
+      `DELETE FROM api.generation_tasks
+       WHERE child_id = $1
+         AND status = 'failed'
+         AND updated_at < NOW() - INTERVAL '1 hour'`,
+      [childId],
+    ).catch((cleanErr: unknown) => {
+      console.warn('[API] 清理失败任务出错:', cleanErr)
+    })
+
     const completedCount = parseInt(completedRows[0]?.count || '0', 10)
-    const totalActive = rows.length
-    const totalCount = totalActive + completedCount
+    const activeCount = rows.length
+    const failedCount = failedRows.length
+    // totalCount = 活跃 + 已完成（不包含失败的，避免数字只增不减）
+    const totalCount = activeCount + completedCount
+
+    const allTasks = [...rows, ...failedRows]
 
     res.json({
-      tasks: rows.map((r) => ({
+      tasks: allTasks.map((r) => ({
         id: r.id,
         status: r.status,
         progress: r.progress,
@@ -148,7 +216,8 @@ app.get('/api/pre-generate/status', async (req, res) => {
       })),
       completedCount,
       totalCount,
-      activeCount: totalActive,
+      activeCount,
+      failedCount,
     })
   } catch (error) {
     console.error('[API] GET /api/pre-generate/status 错误:', error)

@@ -38,6 +38,10 @@ export interface PipelineCheckpoint {
   lastSceneIndex?: number
   /** Agent profiles（auto 模式） */
   agentProfiles?: AgentInfo[]
+  /** 课堂 stageId（供 scene-content / scene-actions 复用） */
+  stageId?: string
+  /** 跨场景累积的 speech 文本 */
+  previousSpeeches?: string[]
 }
 
 /** Pipeline 执行进度回调 */
@@ -87,6 +91,34 @@ export interface GeneratedClassroom {
   }
 }
 
+interface SceneContentApiResponse {
+  success?: boolean
+  content?: GeneratedContent
+  effectiveOutline?: SceneOutline
+}
+
+interface SceneActionsApiResponse {
+  success?: boolean
+  actions?: SceneAction[]
+  scene?: GeneratedScene & { actions?: SceneAction[] }
+  previousSpeeches?: string[]
+}
+
+interface TTSApiResponse {
+  success?: boolean
+  audio?: string
+  durationMs?: number
+  audioId?: string
+  base64?: string
+  format?: string
+}
+
+interface SceneActionsResult {
+  actions: SceneAction[]
+  previousSpeeches: string[]
+  scene?: GeneratedScene
+}
+
 // ============================================================
 // 配置
 // ============================================================
@@ -108,6 +140,8 @@ export class PipelineExecutor {
     const { requirements, headers, checkpoint, onProgress, onCheckpoint } = input
 
     const cp: PipelineCheckpoint = checkpoint ? { ...checkpoint } : {}
+    cp.previousSpeeches = cp.previousSpeeches ? [...cp.previousSpeeches] : []
+    cp.stageId = cp.stageId || `pipeline-${Date.now()}`
 
     // Step 0: 解析/生成 Agent profiles
     // 注意：x-agent-profiles header 包含中文会导致 Node.js fetch ByteString 错误
@@ -151,6 +185,9 @@ export class PipelineExecutor {
       onProgress?.('outlines', 20, `大纲生成完成，共 ${outlines.length} 个场景`)
     }
 
+    const stageId = cp.stageId
+    const stageInfo = this.buildStageInfo(requirements, outlines)
+
     // Step 2: 对每个大纲生成内容、动作、TTS
     const totalScenes = outlines.length
     if (!cp.sceneContents) cp.sceneContents = {}
@@ -169,20 +206,39 @@ export class PipelineExecutor {
       } else {
         const contentPercent = 20 + (i / totalScenes) * 30
         onProgress?.('scene-content', contentPercent, `正在生成场景 ${i + 1}/${totalScenes} 的内容...`)
-        content = await this.generateSceneContent(outline, headers, agentProfiles)
+        content = await this.generateSceneContent(
+          outline,
+          outlines,
+          stageId,
+          stageInfo,
+          headers,
+          agentProfiles,
+        )
         cp.sceneContents[i] = content
         await onCheckpoint?.(cp, 'scene-content', Math.round(contentPercent))
       }
 
       // 2b: 生成动作（检查 checkpoint）
       let actions: SceneAction[]
+      let generatedScene: GeneratedScene | undefined
       if (cp.sceneActions[i]) {
         actions = cp.sceneActions[i]
       } else {
         const actionsPercent = 50 + (i / totalScenes) * 20
         onProgress?.('scene-actions', actionsPercent, `正在生成场景 ${i + 1}/${totalScenes} 的动作...`)
-        actions = await this.generateSceneActions(outline, content, headers, agentProfiles)
+        const sceneActionsResult = await this.generateSceneActions(
+          outline,
+          outlines,
+          content,
+          stageId,
+          cp.previousSpeeches,
+          headers,
+          agentProfiles,
+        )
+        actions = sceneActionsResult.actions
+        generatedScene = sceneActionsResult.scene
         cp.sceneActions[i] = actions
+        cp.previousSpeeches = sceneActionsResult.previousSpeeches
         await onCheckpoint?.(cp, 'scene-actions', Math.round(actionsPercent))
       }
 
@@ -196,9 +252,17 @@ export class PipelineExecutor {
         onProgress?.('tts', ttsPercent, `正在生成场景 ${i + 1} 的语音 ${j + 1}/${speechActions.length}...`)
 
         try {
-          const ttsResult = await this.generateTTS(speechActions[j].text!, headers)
-          speechActions[j].audioBase64 = ttsResult.audio
-          speechActions[j].audioDurationMs = ttsResult.durationMs
+          const ttsResult = await this.generateTTS(
+            speechActions[j].text!,
+            headers,
+            `scene-${i}-speech-${j}`,
+          )
+          if (ttsResult.audio) {
+            speechActions[j].audioBase64 = ttsResult.audio
+          }
+          if (ttsResult.durationMs > 0) {
+            speechActions[j].audioDurationMs = ttsResult.durationMs
+          }
           cp.completedTTS[ttsKey] = true
           await onCheckpoint?.(cp, 'tts', Math.round(ttsPercent))
         } catch (error) {
@@ -208,23 +272,24 @@ export class PipelineExecutor {
       }
 
       // 组装 Scene
-      const scene = this.assembleScene(outline, content, actions)
+      const scene = generatedScene
+        ? this.normalizeScene(generatedScene, outline, content, actions)
+        : this.assembleScene(outline, content, actions)
       scenes.push(scene)
     }
 
     // Step 3: 组装 Classroom
     onProgress?.('assembly', 95, '正在组装课堂数据...')
 
-    const classroomId = `pipeline-${Date.now()}`
     const classroom: GeneratedClassroom = {
-      id: classroomId,
+      id: stageId,
       title: outlines[0]?.title || 'Generated Classroom',
       status: 'completed',
       scenes,
       language: requirements.language,
       createdAt: new Date().toISOString(),
       stage: {
-        id: classroomId,
+        id: stageId,
         name: outlines[0]?.title || 'Generated Classroom',
         description: outlines.map((o) => o.description).join('; '),
         createdAt: Date.now(),
@@ -266,7 +331,7 @@ export class PipelineExecutor {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({ ...requirements, agents }),
+        body: JSON.stringify({ requirements, agents }),
       },
     )
 
@@ -279,48 +344,124 @@ export class PipelineExecutor {
 
   private async generateSceneContent(
     outline: SceneOutline,
+    allOutlines: SceneOutline[],
+    stageId: string,
+    stageInfo: { name: string; description: string; language: string },
     headers: Record<string, string>,
     agents?: AgentInfo[],
   ): Promise<GeneratedContent> {
-    return this.fetchWithRetry<GeneratedContent>(
+    const data = await this.fetchWithRetry<GeneratedContent | SceneContentApiResponse>(
       `${OPENMAIC_BASE_URL}/api/generate/scene-content`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({ outline, agents }),
+        body: JSON.stringify({
+          outline,
+          allOutlines,
+          stageInfo,
+          stageId,
+          agents,
+        }),
       },
     )
+
+    if (this.isGeneratedContent(data)) {
+      return data
+    }
+
+    if (this.isGeneratedContent(data.content)) {
+      return data.content
+    }
+
+    throw new Error('Invalid scene-content response: missing content payload')
   }
 
   private async generateSceneActions(
     outline: SceneOutline,
+    allOutlines: SceneOutline[],
     content: GeneratedContent,
+    stageId: string,
+    previousSpeeches: string[],
     headers: Record<string, string>,
     agents?: AgentInfo[],
-  ): Promise<SceneAction[]> {
-    const data = await this.fetchWithRetry<{ actions: SceneAction[] }>(
+  ): Promise<SceneActionsResult> {
+    const data = await this.fetchWithRetry<SceneActionsApiResponse>(
       `${OPENMAIC_BASE_URL}/api/generate/scene-actions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({ outline, content, agents }),
+        body: JSON.stringify({
+          outline,
+          allOutlines,
+          content,
+          stageId,
+          previousSpeeches,
+          agents,
+        }),
       },
     )
-    return data.actions ?? []
+
+    const actions = Array.isArray(data.actions)
+      ? data.actions
+      : Array.isArray(data.scene?.actions)
+        ? data.scene.actions
+        : []
+
+    const nextPreviousSpeeches = Array.isArray(data.previousSpeeches)
+      ? data.previousSpeeches.filter((item): item is string => typeof item === 'string')
+      : previousSpeeches
+
+    return {
+      actions,
+      previousSpeeches: nextPreviousSpeeches,
+      scene: data.scene,
+    }
   }
 
   private async generateTTS(
     text: string,
     headers: Record<string, string>,
+    audioId: string,
   ): Promise<{ audio: string; durationMs: number }> {
-    return this.fetchWithRetry<{ audio: string; durationMs: number }>(
+    const ttsEnabled = headers['x-tts-enabled'] !== 'false'
+    const ttsProviderId = headers['x-tts-provider']
+    const ttsVoice = headers['x-tts-voice']
+
+    if (!ttsEnabled || !ttsProviderId || !ttsVoice || ttsProviderId === 'browser-native-tts') {
+      return { audio: '', durationMs: 0 }
+    }
+
+    const body: Record<string, unknown> = {
+      text,
+      audioId,
+      ttsProviderId,
+      ttsVoice,
+    }
+
+    const ttsSpeed = this.parseNumberHeader(headers['x-tts-speed'])
+    if (ttsSpeed !== undefined) {
+      body.ttsSpeed = ttsSpeed
+    }
+    if (headers['x-tts-api-key']) {
+      body.ttsApiKey = headers['x-tts-api-key']
+    }
+    if (headers['x-tts-base-url']) {
+      body.ttsBaseUrl = headers['x-tts-base-url']
+    }
+
+    const data = await this.fetchWithRetry<TTSApiResponse>(
       `${OPENMAIC_BASE_URL}/api/generate/tts`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify(body),
       },
     )
+
+    return {
+      audio: data.audio ?? data.base64 ?? '',
+      durationMs: data.durationMs ?? 0,
+    }
   }
 
   // ============================================================
@@ -373,24 +514,27 @@ export class PipelineExecutor {
     for (const event of events) {
       const lines = event.trim().split('\n')
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6)) as Record<string, unknown>
-            if (data.type === 'outline' && isSceneOutline(data.data)) {
-              outlines.push(data.data as SceneOutline)
-            } else if (data.type === 'done') {
-              const doneOutlines = data.outlines as unknown[]
-              if (Array.isArray(doneOutlines)) {
-                return doneOutlines.filter(isSceneOutline)
-              }
-              return outlines
-            } else if (data.type === 'error') {
-              throw new Error((data.error as string) || 'SSE stream error')
-            }
-          } catch (parseError) {
-            // I6 fix: 记录 SSE 解析失败，方便排查空大纲
-            console.warn('[PipelineExecutor] SSE JSON 解析失败:', line.slice(6, 100), parseError)
+        if (!line.startsWith('data: ')) continue
+
+        let data: Record<string, unknown>
+        try {
+          data = JSON.parse(line.slice(6)) as Record<string, unknown>
+        } catch (parseError) {
+          // I6 fix: 记录 SSE 解析失败，方便排查空大纲
+          console.warn('[PipelineExecutor] SSE JSON 解析失败:', line.slice(6, 100), parseError)
+          continue
+        }
+
+        if (data.type === 'outline' && isSceneOutline(data.data)) {
+          outlines.push(data.data as SceneOutline)
+        } else if (data.type === 'done') {
+          const doneOutlines = data.outlines as unknown[]
+          if (Array.isArray(doneOutlines)) {
+            return doneOutlines.filter(isSceneOutline)
           }
+          return outlines
+        } else if (data.type === 'error') {
+          throw new Error((data.error as string) || 'SSE stream error')
         }
       }
     }
@@ -445,6 +589,49 @@ export class PipelineExecutor {
       content: sceneContent,
       actions: nativeActions,
     }
+  }
+
+  private normalizeScene(
+    scene: GeneratedScene,
+    outline: SceneOutline,
+    content: GeneratedContent,
+    actions: SceneAction[],
+  ): GeneratedScene {
+    const fallbackScene = this.assembleScene(outline, content, actions)
+
+    return {
+      id: typeof scene.id === 'string' ? scene.id : fallbackScene.id,
+      title: typeof scene.title === 'string' ? scene.title : fallbackScene.title,
+      type: typeof scene.type === 'string' ? scene.type : fallbackScene.type,
+      order: typeof scene.order === 'number' ? scene.order : fallbackScene.order,
+      content: scene.content ?? fallbackScene.content,
+      actions: Array.isArray(scene.actions) ? scene.actions : fallbackScene.actions,
+    }
+  }
+
+  private buildStageInfo(
+    requirements: UserRequirements,
+    outlines: SceneOutline[],
+  ): { name: string; description: string; language: string } {
+    return {
+      name: outlines[0]?.title || 'Generated Classroom',
+      description: requirements.requirement,
+      language: requirements.language,
+    }
+  }
+
+  private isGeneratedContent(value: unknown): value is GeneratedContent {
+    if (value === null || value === undefined || typeof value !== 'object') {
+      return false
+    }
+    const obj = value as Record<string, unknown>
+    return obj.type === 'slide' || obj.type === 'quiz'
+  }
+
+  private parseNumberHeader(value: string | undefined): number | undefined {
+    if (!value) return undefined
+    const num = Number(value)
+    return Number.isFinite(num) ? num : undefined
   }
 
   private mapSceneType(type?: string): string {
