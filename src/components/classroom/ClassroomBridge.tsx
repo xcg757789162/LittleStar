@@ -12,6 +12,7 @@ import { useEffect, useCallback } from 'react';
 import { Stage } from '@/components/openmaic/stage';
 import { useClassroomBridgeStore } from '@/stores/openmaic/classroom-bridge';
 import { useStageStore } from '@/lib/openmaic/store/stage';
+import { ThemeProvider } from '@/lib/openmaic/hooks/use-theme';
 import { motion } from 'motion/react';
 
 interface ClassroomBridgeProps {
@@ -23,7 +24,7 @@ interface ClassroomBridgeProps {
   onExit?: () => void;
 }
 
-export function ClassroomBridge({ onComplete, onAnswer: _onAnswer, onExit }: ClassroomBridgeProps) {
+export function ClassroomBridge({ onComplete, onAnswer, onExit }: ClassroomBridgeProps) {
   const status = useClassroomBridgeStore((s) => s.status);
   const error = useClassroomBridgeStore((s) => s.error);
   const completeClassroom = useClassroomBridgeStore((s) => s.completeClassroom);
@@ -36,6 +37,27 @@ export function ClassroomBridge({ onComplete, onAnswer: _onAnswer, onExit }: Cla
     completeClassroom();
     onComplete?.();
   }, [completeClassroom, onComplete]);
+
+  // 监听 QuizView 的判分结果事件，逐个调用 onAnswer 以更新 learningStore 统计
+  useEffect(() => {
+    if (!onAnswer) return;
+
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as {
+        sceneId: string;
+        results: { questionId: string; isCorrect: boolean }[];
+      };
+      if (detail?.results) {
+        for (const result of detail.results) {
+          onAnswer(result.isCorrect);
+        }
+        console.log('[ClassroomBridge] Relayed', detail.results.length, 'quiz answers to learningStore');
+      }
+    };
+
+    window.addEventListener('quiz-answer-results', handler);
+    return () => window.removeEventListener('quiz-answer-results', handler);
+  }, [onAnswer]);
 
   // 如果播放到最后一个场景并完成，触发课堂完成
   useEffect(() => {
@@ -101,9 +123,13 @@ export function ClassroomBridge({ onComplete, onAnswer: _onAnswer, onExit }: Cla
 
   // status === 'ready' || status === 'playing'
   return (
-    <div className="openmaic-classroom h-full w-full relative">
+    <div className="openmaic-classroom relative flex h-full w-full min-h-0 overflow-hidden">
       {/* OpenMAIC 原生 Stage 组件 */}
-      <Stage />
+      <ThemeProvider>
+        <div className="flex-1 min-h-0 w-full">
+          <Stage />
+        </div>
+      </ThemeProvider>
 
       {/* 完成课堂按钮 */}
       <div className="absolute bottom-4 right-4 z-50">
