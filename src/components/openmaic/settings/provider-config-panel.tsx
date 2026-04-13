@@ -285,6 +285,7 @@ export function ProviderConfigPanel({
             </Button>
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">{t('settings.modelSelectorHint')}</p>
         <div className="space-y-2">
           {models.map((model, index) => {
             const isActive = activeProviderId === provider.id && activeModelId === model.id;
@@ -292,38 +293,27 @@ export function ProviderConfigPanel({
               <div
                 key={model.id}
                 className={cn(
-                  'rounded-2xl border p-4 transition-all duration-200',
+                  'rounded-2xl border p-4 transition-all duration-200 cursor-pointer',
                   isActive
-                    ? 'border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-emerald-50/30 shadow-[0_4px_16px_rgba(16,185,129,0.08)] ring-1 ring-emerald-100'
-                    : 'border-slate-100 bg-white hover:border-orange-100 hover:shadow-sm',
+                    ? 'border-orange-300 bg-orange-50/80 shadow-[0_4px_12px_rgba(249,115,22,0.10)]'
+                    : 'border-slate-100 bg-white hover:border-orange-200 hover:shadow-sm',
                 )}
+                onClick={() => { if (!isActive) onSetActiveModel(model.id); }}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <div className="truncate text-sm font-semibold text-slate-800">{model.name}</div>
                       {isActive && (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          {t('settings.currentlyUsing')}
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-orange-100 px-2.5 py-1 text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
+                          ✓ {t('settings.currentlyUsing')}
                         </span>
                       )}
                     </div>
-
+                    <div className="text-xs text-muted-foreground font-mono mt-0.5">{model.id}</div>
                   </div>
 
-                  {/* Actions - larger click targets */}
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {!isActive && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 rounded-xl border-orange-200 bg-gradient-to-r from-orange-50 to-white px-4 text-xs font-semibold text-orange-600 shadow-sm hover:bg-orange-100 hover:text-orange-700 hover:shadow-md transition-all"
-                        onClick={() => onSetActiveModel(model.id)}
-                      >
-                        {t('settings.setAsActiveModel')}
-                      </Button>
-                    )}
+                  <div className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                     <Button
                       variant="outline"
                       size="sm"

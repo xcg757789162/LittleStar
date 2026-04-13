@@ -400,7 +400,7 @@
     "activeProviderStatus": "現在有効",
     "viewingProvider": "表示中",
     "activeProviderManaged": "現在有効なプロバイダーを管理しています。緑のラベルは教室で実際に使われているモデルです。",
-    "providerSwitchHelper": "このプロバイダーを表示していますが、教室ではまだ {{provider}} / {{model}} を使用中です。「現在のモデルに設定」を押すと切り替わります。",
+    "providerSwitchHelper": "このプロバイダーを表示していますが、教室ではまだ {{provider}} / {{model}} を使用中です。モデルカードをクリックすると切り替わります。",
     "providers": "LLM",
     "addProviderDescription": "カスタムモデルプロバイダーを追加して利用可能なAIモデルを拡張",
     "providerNames": {

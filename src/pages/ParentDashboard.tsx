@@ -452,6 +452,23 @@ export function ParentDashboard() {
         <span style={{ color: T.sunOrange }}>→</span>
       </motion.button>
 
+      {/* 系统日志入口 */}
+      <motion.button
+        data-testid="logs-btn"
+        whileTap={{ scale: 0.97 }}
+        onClick={() => navigate('/parent/logs')}
+        style={{
+          width: '100%', padding: '16px', borderRadius: '18px',
+          border: '2px solid #FFE8D6', backgroundColor: T.cardBg,
+          cursor: 'pointer', display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', fontSize: '16px', color: T.textDark,
+          fontFamily: T.fontBody, fontWeight: 600, marginBottom: '12px',
+        }}
+      >
+        <span>📋 系统日志</span>
+        <span style={{ color: T.sunOrange }}>→</span>
+      </motion.button>
+
       {/* 高级设置入口 - 解锁后导航到设置页面 */}
       <motion.button
         data-testid="advanced-settings-btn"

@@ -9,7 +9,7 @@ import { useLocation } from 'react-router-dom'
 import { BottomNav } from './BottomNav'
 
 /** 需要隐藏底部导航的路径（精确匹配或路径段前缀匹配） */
-const HIDDEN_NAV_PATHS = ['/classroom', '/preview', '/parent/settings']
+const HIDDEN_NAV_PATHS = ['/classroom', '/preview', '/parent/settings', '/parent/logs']
 
 interface AppLayoutProps {
   children: ReactNode

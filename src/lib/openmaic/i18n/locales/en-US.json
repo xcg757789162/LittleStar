@@ -400,7 +400,7 @@
     "activeProviderStatus": "Live",
     "viewingProvider": "Viewing",
     "activeProviderManaged": "You are managing the provider that is currently live. Green labels mark the model the classroom is actually using.",
-    "providerSwitchHelper": "You are viewing this provider, but the classroom is still using {{provider}} / {{model}}. Click \"Set as active model\" to switch.",
+    "providerSwitchHelper": "You are viewing this provider, but the classroom is still using {{provider}} / {{model}}. Click a model card to switch.",
     "providers": "LLM",
     "addProviderDescription": "Add custom model providers to extend available AI models",
     "providerNames": {

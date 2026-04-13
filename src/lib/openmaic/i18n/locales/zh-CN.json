@@ -400,7 +400,7 @@
     "activeProviderStatus": "当前生效",
     "viewingProvider": "正在查看",
     "activeProviderManaged": "你正在管理当前生效的服务商，绿色标签代表课堂现在真正使用的模型。",
-    "providerSwitchHelper": "你正在查看这个服务商，但课堂当前仍在使用 {{provider}} / {{model}}。点击“设为当前模型”后才会切换。",
+    "providerSwitchHelper": "你正在查看这个服务商，但课堂当前仍在使用 {{provider}} / {{model}}。点击模型卡片即可切换。",
     "providers": "语言模型",
     "addProviderDescription": "添加自定义模型提供方以扩展可用的AI模型",
     "providerNames": {

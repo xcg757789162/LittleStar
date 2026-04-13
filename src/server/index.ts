@@ -12,7 +12,7 @@
  */
 
 import express from 'express'
-import { generateObject } from 'ai'
+import { generateText } from 'ai'
 import { aiQuestionSchema, validateAIQuestion } from '../engine/ai-question-schema.js'
 import { pool } from './db.js'
 import { createQuestionModel, type QuestionGenerationSettings } from './question-model.js'
@@ -70,7 +70,22 @@ function buildQuestionSystemPrompt(
 3. 正确答案的位置要随机（不总是第一个或最后一个）
 4. 干扰项合理，不要太离谱
 5. 难度 1-5（1=基本认知, 3=理解应用, 5=综合能力）
-6. 只输出 JSON，不要其他文字`
+6. 只输出 JSON，不要其他文字
+
+## 输出格式（严格遵守）
+\`\`\`json
+{
+  "stem": "题干文字",
+  "options": [
+    {"text": "选项A", "emoji": "🍎"},
+    {"text": "选项B", "emoji": "🍌"},
+    {"text": "选项C", "emoji": "🍇"},
+    {"text": "选项D", "emoji": "🍊"}
+  ],
+  "correctIndex": 0,
+  "difficulty": 2
+}
+\`\`\``
 }
 
 // ============================================================
@@ -122,18 +137,43 @@ app.post('/api/pre-generate/question', async (req, res) => {
         subject,
       )
 
-      const { object } = await generateObject({
+      const t0 = Date.now()
+      const { text } = await generateText({
         model,
-        schema: aiQuestionSchema,
         system: systemPrompt,
-        prompt: `请为知识点「${node.name}」生成一道评测选择题。`,
+        prompt: `请为知识点「${node.name}」生成一道评测选择题。只输出 JSON，不要其他文字。`,
         abortSignal: controller.signal,
-        maxRetries: 1,
+        maxRetries: 0,
       })
+      const elapsed = Date.now() - t0
+      console.log(`[API] LLM 响应耗时 ${elapsed}ms, 长度 ${text.length} 字符`)
 
-      const validated = validateAIQuestion(object)
+      const jsonMatch = text.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        console.error('[API] LLM 返回中未找到 JSON:', text.slice(0, 200))
+        res.status(502).json({ error: 'LLM response contains no JSON object', retryable: true })
+        return
+      }
+
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(jsonMatch[0])
+      } catch {
+        console.error('[API] JSON 解析失败:', jsonMatch[0].slice(0, 200))
+        res.status(502).json({ error: 'Failed to parse JSON from LLM response', retryable: true })
+        return
+      }
+
+      const zodResult = aiQuestionSchema.safeParse(parsed)
+      if (!zodResult.success) {
+        console.error('[API] Schema 校验失败:', zodResult.error.message)
+        res.status(502).json({ error: 'Generated question failed schema validation', retryable: true })
+        return
+      }
+
+      const validated = validateAIQuestion(zodResult.data)
       if (!validated) {
-        res.status(502).json({ error: 'generated question failed validation' })
+        res.status(502).json({ error: 'Generated question failed business validation' })
         return
       }
 
