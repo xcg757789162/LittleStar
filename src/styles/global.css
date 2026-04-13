@@ -83,8 +83,12 @@
   --ls-font-xl: 24px;
   --ls-font-2xl: 32px;
 
-  /* 向后兼容别名（LittleStar 组件仍在使用） */
-  --color-primary: var(--ls-color-primary);
+  /*
+   * LittleStar 短别名 — 仅限 LittleStar 自有 UI 使用。
+   * ⚠️ 不可定义 --color-primary：Tailwind @theme 已将其映射到 var(--primary)，
+   *   覆盖会导致 bg-primary / text-primary 等 Tailwind 工具类在暗色模式失效。
+   * 同理 --color-background / --color-foreground / --color-border 等 Tailwind 保留名也不可覆盖。
+   */
   --color-primary-light: var(--ls-color-primary-light);
   --color-primary-dark: var(--ls-color-primary-dark);
   --color-success: var(--ls-color-success);
@@ -96,7 +100,7 @@
   --text-primary: var(--ls-text-primary);
   --text-secondary: var(--ls-text-secondary);
   --text-hint: var(--ls-text-hint);
-  /* Note: --radius-sm/md/lg/full 由 Tailwind @theme 管理，LittleStar 用 --ls-radius-* */
+  /* --radius-sm/md/lg/full 由 Tailwind @theme 管理，LittleStar 用 --ls-radius-* */
   --radius-full: var(--ls-radius-full);
   --font-xs: var(--ls-font-xs);
   --font-sm: var(--ls-font-sm);
@@ -179,85 +183,81 @@
 
 /* ========================================
  * LittleStar 全局基础样式
- * 只影响 LittleStar 自有页面
+ * 必须放在 @layer base 内，否则会覆盖 Tailwind utility 类
+ * （CSS 层级规则：未分层样式 > @layer utilities > @layer base）
  * ======================================== */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+@layer base {
+  body {
+    font-family: 'Nunito', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: var(--font-md);
+    line-height: 1.6;
+  }
 
-body {
-  font-family: 'Nunito', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: var(--font-md);
-  line-height: 1.6;
-}
+  button {
+    font-family: inherit;
+  }
 
-button {
-  font-family: inherit;
-}
+  /* 大按钮基础样式（适合幼儿） */
+  .btn-large {
+    padding: 16px 32px;
+    border-radius: var(--ls-radius-lg);
+    border: none;
+    font-size: var(--font-lg);
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
 
-/* 大按钮基础样式（适合幼儿） */
-.btn-large {
-  padding: 16px 32px;
-  border-radius: var(--ls-radius-lg);
-  border: none;
-  font-size: var(--font-lg);
-  font-weight: bold;
-  cursor: pointer;
-  transition: transform 0.1s;
-}
-
-.btn-large:active {
-  transform: scale(0.95);
-}
-
-/* ========================================
- * 课堂样式隔离层
- * .openmaic-classroom 容器内重置 LittleStar 泄漏样式
- * ======================================== */
-.openmaic-classroom {
-  /* 重置 body 继承的 LittleStar 字体/颜色 */
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  color: var(--foreground);
-  font-size: 16px;
-  line-height: 1.5;
-  background-color: transparent;
-}
-
-/* 课堂内卡片：覆盖全局 .card 样式 */
-.openmaic-classroom .card {
-  padding: unset;
-  border-radius: unset;
-  box-shadow: unset;
-  background: unset;
-}
-
-/* ========================================
- * LittleStar 卡片样式（全局 .card 限定在非课堂区域）
- * ======================================== */
-:not(.openmaic-classroom) > .card,
-.ls-card {
-  background: var(--bg-card);
-  border-radius: var(--ls-radius-lg);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  padding: 24px;
-}
-
-/* 安全区适配 */
-@supports (padding-bottom: env(safe-area-inset-bottom)) {
-  .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
+  .btn-large:active {
+    transform: scale(0.95);
   }
 }
 
-/* === OpenMAIC ProseMirror 编辑器样式 === */
-.prosemirror-editor {
-  cursor: text;
+/* ========================================
+ * 课堂样式隔离层 + LittleStar 卡片样式
+ * 放在 @layer components 内，优先级低于 Tailwind utilities
+ * ======================================== */
+@layer components {
+  .openmaic-classroom {
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: var(--foreground);
+    font-size: 16px;
+    line-height: 1.5;
+    background-color: transparent;
+  }
+
+  .openmaic-classroom .card {
+    padding: unset;
+    border-radius: unset;
+    box-shadow: unset;
+    background: unset;
+  }
+
+  :not(.openmaic-classroom) > .card,
+  .ls-card {
+    background: var(--bg-card);
+    border-radius: var(--ls-radius-lg);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    padding: 24px;
+  }
+}
+
+@layer components {
+  /* 安全区适配 */
+  @supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .safe-bottom {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
+
+  /* OpenMAIC ProseMirror 编辑器样式 */
+  .prosemirror-editor {
+    cursor: text;
+  }
 }
 
 /* ========================================

@@ -13,11 +13,6 @@ import { useRef, useCallback } from 'react'
 /** 全局共享的 AudioContext（首次激活后复用） */
 let _sharedAudioContext: AudioContext | null = null
 
-/** 获取已激活的 AudioContext（未激活返回 null） */
-export function getSharedAudioContext(): AudioContext | null {
-  return _sharedAudioContext
-}
-
 /**
  * 预激活音频上下文
  *

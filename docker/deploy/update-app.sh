@@ -406,9 +406,11 @@ case "$MODE" in
     ;;
   --full)
     UPDATE_FULL=true
+    UPDATE_FRONTEND=true
     ;;
   --no-cache)
     UPDATE_FULL=true
+    UPDATE_FRONTEND=true
     NO_CACHE="--no-cache"
     ;;
   auto|"")
@@ -446,10 +448,10 @@ case "$MODE" in
 
     # ---- 判断变更范围 ----
 
-    # 前端源码 → vite build（volume 自动同步）
-    if echo "$ALL_CHANGES" | grep -qE '^(src/|index\.html|vite\.config|tsconfig|package\.json|package-lock\.json|public/)'; then
+    # 前端源码 → 本地 vite build（volume 自动同步到容器 /app/frontend）
+    if echo "$ALL_CHANGES" | grep -vE '^src/server/' | grep -qE '^(src/|index\.html|vite\.config|tsconfig|package\.json|package-lock\.json|public/)'; then
       UPDATE_FRONTEND=true
-      log_info "📦 前端源码变更 → npx vite build（volume 自动同步）"
+      log_info "📦 前端源码变更 → 本地 npx vite build（volume 自动同步到容器）"
     fi
 
     # Pre-generation 后端源码 → 需要重建 app 容器
@@ -521,6 +523,13 @@ DC="docker compose --env-file .env.local"
 if [ "$UPDATE_FULL" = true ]; then
   # ---- 全量重建 ----
   log_section "全量重建"
+
+  # 前端 volume 挂载: 本地 dist/ → 容器 /app/frontend
+  # Docker 内部构建的前端产物会被 volume 覆盖，因此必须在本地也执行 vite build
+  if [ "$UPDATE_FRONTEND" = true ]; then
+    build_frontend
+  fi
+
   log_info "停止容器..."
   $DC stop app
   log_info "重建 app 镜像..."

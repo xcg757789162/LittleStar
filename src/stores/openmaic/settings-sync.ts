@@ -253,8 +253,13 @@ export function syncSettingsToOpenMAIC(settings: ChildSettings, childId?: string
   if (settings.imageModelId) {
     try { store.setImageModelId(settings.imageModelId) } catch { /* */ }
   }
-  if (settings.enableImageGeneration !== undefined) {
-    try { store.setImageGenerationEnabled(settings.enableImageGeneration) } catch { /* */ }
+  {
+    // Auto-enable: if provider + API key are configured but generation is off, enable it.
+    // Users who explicitly configured a provider clearly intend to use it.
+    const hasImageConfig = !!(settings.imageProviderId && settings.imageApiKey)
+    const shouldEnable = hasImageConfig && settings.enableImageGeneration !== true
+    const enabled = shouldEnable ? true : (settings.enableImageGeneration ?? false)
+    try { store.setImageGenerationEnabled(enabled) } catch { /* */ }
   }
 
   // === 6. 视频生成配置 ===
@@ -273,8 +278,11 @@ export function syncSettingsToOpenMAIC(settings: ChildSettings, childId?: string
   if (settings.videoModelId) {
     try { store.setVideoModelId(settings.videoModelId) } catch { /* */ }
   }
-  if (settings.enableVideoGeneration !== undefined) {
-    try { store.setVideoGenerationEnabled(settings.enableVideoGeneration) } catch { /* */ }
+  {
+    const hasVideoConfig = !!(settings.videoProviderId && settings.videoApiKey)
+    const shouldEnable = hasVideoConfig && settings.enableVideoGeneration !== true
+    const enabled = shouldEnable ? true : (settings.enableVideoGeneration ?? false)
+    try { store.setVideoGenerationEnabled(enabled) } catch { /* */ }
   }
 
   // === 7. WebSearch 配置 ===

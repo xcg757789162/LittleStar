@@ -145,15 +145,15 @@ export function extractChildSettingsFromStore(): Partial<ChildSettings> {
     iseApiKey,
     iseApiSecret,
 
-    // Image
-    enableImageGeneration: s.imageGenerationEnabled,
+    // Image — auto-enable when provider + API key are present
+    enableImageGeneration: s.imageGenerationEnabled || !!(s.imageProviderId && imageApiKey),
     imageProviderId: s.imageProviderId,
     imageModelId: s.imageModelId || '',
     imageApiKey,
     imageBaseUrl,
 
-    // Video
-    enableVideoGeneration: s.videoGenerationEnabled,
+    // Video — auto-enable when provider + API key are present
+    enableVideoGeneration: s.videoGenerationEnabled || !!(s.videoProviderId && videoApiKey),
     videoProviderId: s.videoProviderId,
     videoModelId: s.videoModelId || '',
     videoApiKey,
