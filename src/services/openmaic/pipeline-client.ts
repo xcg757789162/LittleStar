@@ -131,6 +131,7 @@ export class OpenMAICPipelineClient {
   async generateSceneContent(
     outline: SceneOutline,
     headers: Record<string, string>,
+    context?: { allOutlines?: SceneOutline[]; stageId?: string },
   ): Promise<GeneratedContent> {
     log.debug('→ 生成场景内容, scene:', outline.index, outline.title)
     const result = await this.fetchWithRetry<GeneratedContent>(
@@ -141,7 +142,11 @@ export class OpenMAICPipelineClient {
           'Content-Type': 'application/json',
           ...headers,
         },
-        body: JSON.stringify({ outline }),
+        body: JSON.stringify({
+          outline,
+          allOutlines: context?.allOutlines ?? [outline],
+          stageId: context?.stageId ?? `pipeline-${Date.now()}`,
+        }),
       },
     )
     log.debug('← 场景内容生成完成, scene:', outline.index)
@@ -162,8 +167,9 @@ export class OpenMAICPipelineClient {
     outline: SceneOutline,
     content: GeneratedContent,
     headers: Record<string, string>,
+    context?: { allOutlines?: SceneOutline[]; stageId?: string },
   ): Promise<SceneAction[]> {
-    const data = await this.fetchWithRetry<{ actions: SceneAction[] }>(
+    const data = await this.fetchWithRetry<{ actions?: SceneAction[]; scene?: { actions?: SceneAction[] } }>(
       `${this.baseUrl}/api/generate/scene-actions`,
       {
         method: 'POST',
@@ -171,10 +177,16 @@ export class OpenMAICPipelineClient {
           'Content-Type': 'application/json',
           ...headers,
         },
-        body: JSON.stringify({ outline, content }),
+        body: JSON.stringify({
+          outline,
+          content,
+          allOutlines: context?.allOutlines ?? [outline],
+          stageId: context?.stageId ?? `pipeline-${Date.now()}`,
+        }),
       },
     )
-    return data.actions ?? []
+    // Upstream may return { scene: { actions } } or { actions } depending on version
+    return data.actions ?? data.scene?.actions ?? []
   }
 
   /**
@@ -189,8 +201,13 @@ export class OpenMAICPipelineClient {
   async generateTTS(
     text: string,
     headers: Record<string, string>,
+    audioId?: string,
   ): Promise<TTSResult> {
-    const data = await this.fetchWithRetry<{ audio: string; durationMs: number }>(
+    // Send TTS config both in body (upstream expects it) and headers (legacy path).
+    // Upstream reads ttsProviderId/ttsVoice/ttsApiKey from the request body.
+    const data = await this.fetchWithRetry<{
+      audio?: string; base64?: string; durationMs?: number; audioId?: string; format?: string;
+    }>(
       `${this.baseUrl}/api/generate/tts`,
       {
         method: 'POST',
@@ -198,12 +215,21 @@ export class OpenMAICPipelineClient {
           'Content-Type': 'application/json',
           ...headers,
         },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({
+          text,
+          audioId: audioId ?? `tts-${Date.now()}`,
+          ttsProviderId: headers['x-tts-provider'] || undefined,
+          ttsVoice: headers['x-tts-voice'] || undefined,
+          ttsModelId: headers['x-tts-model'] || undefined,
+          ttsSpeed: headers['x-tts-speed'] ? parseFloat(headers['x-tts-speed']) : undefined,
+          ttsApiKey: headers['x-tts-api-key'] || undefined,
+          ttsBaseUrl: headers['x-tts-base-url'] || undefined,
+        }),
       },
     )
     return {
-      audioBase64: data.audio,
-      durationMs: data.durationMs,
+      audioBase64: data.audio ?? data.base64 ?? '',
+      durationMs: data.durationMs ?? 0,
     }
   }
 
@@ -283,7 +309,8 @@ export class OpenMAICPipelineClient {
         i, totalScenes,
       )
 
-      const content = await this.generateSceneContent(outline, headers)
+      const pipelineContext = { allOutlines: outlines, stageId: `pipeline-${Date.now()}` }
+      const content = await this.generateSceneContent(outline, headers, pipelineContext)
       callbacks?.onSceneContentReady?.(i, content)
 
       // 2b: 生成动作
@@ -294,7 +321,7 @@ export class OpenMAICPipelineClient {
         i, totalScenes,
       )
 
-      const actions = await this.generateSceneActions(outline, content, headers)
+      const actions = await this.generateSceneActions(outline, content, headers, pipelineContext)
       callbacks?.onSceneActionsReady?.(i, actions)
 
       // 2c: 为每个 speech action 生成 TTS（串行，D5 决策）
@@ -310,12 +337,12 @@ export class OpenMAICPipelineClient {
 
         try {
           const audioId = `scene-${i}-speech-${j}`
-          const ttsResult = await this.generateTTS(action.text!, headers)
+          const ttsResult = await this.generateTTS(action.text!, headers, audioId)
           attachGeneratedSpeechAudio(action, {
             audioId,
             audioBase64: ttsResult.audioBase64,
             durationMs: ttsResult.durationMs,
-            format: ttsResult.format,
+            format: 'mp3',
           })
           callbacks?.onTTSReady?.(i, j, ttsResult.audioBase64)
         } catch (error) {

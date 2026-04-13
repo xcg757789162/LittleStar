@@ -159,21 +159,22 @@ export function ParentDashboard() {
           try {
             const child = useChildStore.getState().currentChild
             if (!child) return
-            const masteryData: SubjectMastery[] = []
-            for (const config of SUBJECT_CONFIG) {
-              const nodes = await apiClient.get<KnowledgeNode>('/knowledge_nodes', {
-                filters: [{ column: 'subject', operator: 'eq', value: config.subject }],
-              })
-              const nodeIds = nodes.map((n) => n.id).filter(Boolean) as string[]
-              if (nodeIds.length === 0) { masteryData.push({ ...config, mastery: 0 }); continue }
-              const records = await apiClient.get<MasteryRecord>('/mastery_records', {
+            // 一次性拉取所有科目的 knowledge_nodes 和 mastery_records
+            const [allNodes, allRecords] = await Promise.all([
+              apiClient.get<KnowledgeNode>('/knowledge_nodes', { select: 'id,subject' }),
+              apiClient.get<MasteryRecord>('/mastery_records', {
                 filters: [{ column: 'childId', operator: 'eq', value: Number(child.id) }],
-              })
-              const subjectRecords = records.filter((r) => nodeIds.includes(r.knowledgeNodeId))
-              if (subjectRecords.length === 0) { masteryData.push({ ...config, mastery: 0 }); continue }
-              const avgMastery = Math.round(subjectRecords.reduce((sum, r) => sum + r.masteryLevel, 0) / subjectRecords.length)
-              masteryData.push({ ...config, mastery: avgMastery })
-            }
+                select: 'knowledge_node_id,mastery_level',
+              }),
+            ])
+            const recordMap = new Map(allRecords.map((r) => [r.knowledgeNodeId, r.masteryLevel]))
+            const masteryData: SubjectMastery[] = SUBJECT_CONFIG.map((config) => {
+              const nodeIds = allNodes.filter((n) => n.subject === config.subject).map((n) => n.id).filter(Boolean) as string[]
+              if (nodeIds.length === 0) return { ...config, mastery: 0 }
+              const levels = nodeIds.map((id) => recordMap.get(id)).filter((v): v is number => v !== undefined)
+              if (levels.length === 0) return { ...config, mastery: 0 }
+              return { ...config, mastery: Math.round(levels.reduce((a, b) => a + b, 0) / levels.length) }
+            })
             setSubjectMasteries(masteryData)
           } catch { /* ignore */ }
         }
@@ -238,21 +239,22 @@ export function ParentDashboard() {
       try {
         const child = useChildStore.getState().currentChild
         if (!child) return
-        const masteryData: SubjectMastery[] = []
-        for (const config of SUBJECT_CONFIG) {
-          const nodes = await apiClient.get<KnowledgeNode>('/knowledge_nodes', {
-            filters: [{ column: 'subject', operator: 'eq', value: config.subject }],
-          })
-          const nodeIds = nodes.map((n) => n.id).filter(Boolean) as string[]
-          if (nodeIds.length === 0) { masteryData.push({ ...config, mastery: 0 }); continue }
-          const records = await apiClient.get<MasteryRecord>('/mastery_records', {
+        // 一次性拉取（而非每科目重复 3 次），只查必要列
+        const [allNodes, allRecords] = await Promise.all([
+          apiClient.get<KnowledgeNode>('/knowledge_nodes', { select: 'id,subject' }),
+          apiClient.get<MasteryRecord>('/mastery_records', {
             filters: [{ column: 'childId', operator: 'eq', value: Number(child.id) }],
-          })
-          const subjectRecords = records.filter((r) => nodeIds.includes(r.knowledgeNodeId))
-          if (subjectRecords.length === 0) { masteryData.push({ ...config, mastery: 0 }); continue }
-          const avgMastery = Math.round(subjectRecords.reduce((sum, r) => sum + r.masteryLevel, 0) / subjectRecords.length)
-          masteryData.push({ ...config, mastery: avgMastery })
-        }
+            select: 'knowledge_node_id,mastery_level',
+          }),
+        ])
+        const recordMap = new Map(allRecords.map((r) => [r.knowledgeNodeId, r.masteryLevel]))
+        const masteryData: SubjectMastery[] = SUBJECT_CONFIG.map((config) => {
+          const nodeIds = allNodes.filter((n) => n.subject === config.subject).map((n) => n.id).filter(Boolean) as string[]
+          if (nodeIds.length === 0) return { ...config, mastery: 0 }
+          const levels = nodeIds.map((id) => recordMap.get(id)).filter((v): v is number => v !== undefined)
+          if (levels.length === 0) return { ...config, mastery: 0 }
+          return { ...config, mastery: Math.round(levels.reduce((a, b) => a + b, 0) / levels.length) }
+        })
         setSubjectMasteries(masteryData)
       } catch { /* ignore */ }
     }

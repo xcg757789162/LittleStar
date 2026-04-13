@@ -358,9 +358,10 @@ export function usePreGeneration(
         hasLlmApiKey: Boolean(effectiveSettings?.llmApiKey),
       }))
 
-      // 1. 检查是否有已完成的评测
+      // 1. 检查是否有已完成的评测（只查 subject，避免拉庞大的 questions/result JSON）
       const tests = await apiClient.get<PlacementTest>('/placement_tests', {
         filters: [{ column: 'childId', operator: 'eq', value: numChildId }],
+        select: 'subject',
       })
       const completedSubjects = [...new Set(tests.map((t) => t.subject as Subject))]
       log.info('已完成评测科目:', completedSubjects)
@@ -422,9 +423,10 @@ export function usePreGeneration(
       const planner = new LessonPlanner()
       const reqGenerator = new RequirementGenerator()
 
-      // 获取掌握率
+      // 获取掌握率（只查规划所需的两列）
       const masteryRecords = await apiClient.get<MasteryRecord>('/mastery_records', {
         filters: [{ column: 'childId', operator: 'eq', value: numChildId }],
+        select: 'knowledge_node_id,mastery_level',
       })
       const masteryMap = new Map<string, number>()
       for (const record of masteryRecords) {

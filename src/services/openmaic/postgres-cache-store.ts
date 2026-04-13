@@ -9,7 +9,7 @@
  */
 
 import { apiClient } from '@/services/api'
-import type { CacheStore, CacheEntry } from './cache'
+import type { CacheStore, CacheEntry, CacheEntryMetadata } from './cache'
 import type { Classroom } from './types'
 import { createLogger } from '@/lib/openmaic/logger'
 
@@ -122,5 +122,67 @@ export class PostgresCacheStore implements CacheStore {
     })
     log.debug('DB size:', rows.length)
     return rows.length
+  }
+
+  /**
+   * Lightweight count that avoids fetching the large classroomData column.
+   * Optionally filters by subject prefix on knowledge_node_id.
+   */
+  async countBySubject(subject?: string): Promise<number> {
+    const filters: Array<{ column: string; operator: string; value: unknown }> = [
+      { column: 'childId', operator: 'eq', value: this.childId },
+    ]
+    if (subject) {
+      filters.push({ column: 'knowledgeNodeId', operator: 'like', value: `${subject}*` })
+    }
+    const rows = await apiClient.get<{ id: number }>('/classroom_cache', {
+      filters,
+      select: 'id',
+    })
+    log.debug('DB countBySubject:', subject ?? 'all', rows.length)
+    return rows.length
+  }
+
+  /**
+   * Lightweight metadata listing — excludes the large classroomData column.
+   * Used for list views and cleanup operations.
+   */
+  async metadataEntries(): Promise<CacheEntryMetadata[]> {
+    log.debug('DB metadataEntries, childId:', this.childId)
+    const rows = await apiClient.get<DbCacheRow>('/classroom_cache', {
+      filters: [
+        { column: 'childId', operator: 'eq', value: this.childId },
+      ],
+      select: 'cache_key,knowledge_node_id,date,cached_at',
+    })
+    return rows.map((r) => ({
+      cacheKey: r.cacheKey,
+      knowledgeNodeId: r.knowledgeNodeId,
+      date: r.date,
+      cachedAt: new Date(r.cachedAt).getTime(),
+    }))
+  }
+
+  /**
+   * Delete expired entries directly in DB without fetching data.
+   */
+  async deleteExpired(cutoffDate: string): Promise<number> {
+    log.info('DB deleteExpired, cutoff:', cutoffDate)
+    const expired = await apiClient.get<{ id: number }>('/classroom_cache', {
+      filters: [
+        { column: 'childId', operator: 'eq', value: this.childId },
+        { column: 'date', operator: 'lt', value: cutoffDate },
+      ],
+      select: 'id',
+    })
+    if (expired.length === 0) return 0
+
+    await apiClient.delete('/classroom_cache', {
+      filters: [
+        { column: 'childId', operator: 'eq', value: this.childId },
+        { column: 'date', operator: 'lt', value: cutoffDate },
+      ],
+    })
+    return expired.length
   }
 }

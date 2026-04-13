@@ -62,6 +62,8 @@ export interface SessionConfig {
   currentTurn: number;
   triggerAgentId?: string; // For discussion: first agent to speak
   defaultAgentId?: string; // For QA: the responding agent
+  discussionTopic?: string; // For discussion: persisted topic for multi-turn context
+  discussionPrompt?: string; // For discussion: persisted prompt for multi-turn context
 }
 
 /**

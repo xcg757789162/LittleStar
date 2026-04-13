@@ -470,7 +470,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         requestTemplate.config.agentConfigs = generatedConfigs;
       }
 
-      const defaultMaxTurns = requestTemplate.config.agentIds.length <= 1 ? 1 : 10;
+      const isDiscussion = sessionType === 'discussion';
+      const defaultMaxTurns = isDiscussion ? 10 : (requestTemplate.config.agentIds.length <= 1 ? 1 : 10);
       const maxTurns = settingsState.maxTurns
         ? parseInt(settingsState.maxTurns, 10) || defaultMaxTurns
         : defaultMaxTurns;
@@ -487,20 +488,50 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         loopDoneDataRef.current = null;
 
         // Refresh store state each iteration — agent actions may have changed
-        // whiteboard, scene, or mode between turns
+        // whiteboard, scene, or mode between turns.
+        // Strip base64-encoded image data from scenes to reduce request payload
+        // (a classroom with 3-4 images can push the body well over 10MB otherwise).
+        // The server's prompt-builder already summarizes images as "[embedded]".
         const freshState = useStageStore.getState();
+        const strippedScenes = freshState.scenes.map((scene) => {
+          if (scene.content?.type !== 'slide' || !scene.content.canvas?.elements) return scene;
+          return {
+            ...scene,
+            content: {
+              ...scene.content,
+              canvas: {
+                ...scene.content.canvas,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                elements: scene.content.canvas.elements.map((el: any) => {
+                  if (el.type === 'image' && typeof el.src === 'string' && el.src.startsWith('data:')) {
+                    return { ...el, src: '[embedded-image]' };
+                  }
+                  return el;
+                }),
+              },
+            },
+          };
+        });
         const freshStoreState = {
           stage: freshState.stage,
-          scenes: freshState.scenes,
+          scenes: strippedScenes,
           currentSceneId: freshState.currentSceneId,
           mode: freshState.mode,
           whiteboardOpen: useCanvasStore.getState().whiteboardOpen,
         };
 
+        // Sliding window: limit messages sent to the server to avoid unbounded
+        // payload growth.  The server's director summary already only uses the
+        // last 10 messages; sending full history wastes bandwidth and risks 413.
+        const MAX_CHAT_MESSAGES = 20;
+        const truncatedMessages = currentMessages.length > MAX_CHAT_MESSAGES
+          ? currentMessages.slice(-MAX_CHAT_MESSAGES)
+          : currentMessages;
+
         modelLog.info(`[chat] 调用模型 turn=${turnCount + 1}`, {
           model: requestTemplate.model,
           agents: requestTemplate.config.agentIds.length,
-          messagesCount: currentMessages.length,
+          messagesCount: truncatedMessages.length,
         });
 
         const response = await fetch('/api/chat', {
@@ -508,7 +539,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...requestTemplate,
-            messages: currentMessages,
+            messages: truncatedMessages,
             storeState: freshStoreState,
             directorState,
           }),
@@ -584,22 +615,30 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       const doneData = loopDoneDataRef.current;
       if (!controller.signal.aborted) {
         const wasCueUser = doneData?.cueUserReceived ?? false;
+        const directorSaidEnd = doneData?.totalAgents === 0;
         if (!wasCueUser) {
-          // Session completed normally (END or maxTurns reached)
-          setSessions((prev) =>
-            prev.map((s) =>
-              s.id === sessionId
-                ? {
-                    ...s,
-                    status: 'completed' as SessionStatus,
-                    updatedAt: Date.now(),
-                  }
-                : s,
-            ),
-          );
-          onStopSessionRef.current?.();
+          if (isDiscussion && !directorSaidEnd) {
+            // Discussion loop completed (agent spoke, no cue_user) — keep session
+            // active and wait for user input instead of ending.  This treats
+            // maxTurns/single-agent completion as an implicit "cue user" for
+            // discussions, matching the expected multi-turn conversation flow.
+            onCueUserRef.current?.();
+          } else {
+            // QA session completed normally, or director explicitly said END
+            setSessions((prev) =>
+              prev.map((s) =>
+                s.id === sessionId
+                  ? {
+                      ...s,
+                      status: 'completed' as SessionStatus,
+                      updatedAt: Date.now(),
+                    }
+                  : s,
+              ),
+            );
+            onStopSessionRef.current?.();
+          }
         }
-        // If maxTurns reached, log it
         if (turnCount >= maxTurns && doneData && doneData.totalAgents > 0) {
           log.info(`[AgentLoop] Max turns (${maxTurns}) reached for session ${sessionId}`);
         }
@@ -858,6 +897,15 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             ? useSettingsStore.getState().selectedAgentIds
             : session.config.agentIds;
 
+        const resumeDiscussionConfig: Record<string, unknown> =
+          session.type === 'discussion' && session.config
+            ? {
+                discussionTopic: session.config.discussionTopic ?? session.title,
+                discussionPrompt: session.config.discussionPrompt,
+                triggerAgentId: session.config.triggerAgentId,
+              }
+            : {};
+
         await runAgentLoop(
           sessionId,
           {
@@ -872,6 +920,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             config: {
               agentIds,
               sessionType: session.type,
+              ...resumeDiscussionConfig,
             },
             userProfile: {
               nickname: userProfileState.nickname || undefined,
@@ -1069,6 +1118,18 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         const userProfileState = useUserProfileStore.getState();
         const mc = getCurrentModelConfig();
 
+        // Forward discussion metadata (topic/prompt/triggerAgentId) when the active
+        // session is a discussion so the server continues the multi-turn conversation
+        // instead of treating this as a standalone QA exchange.
+        const discussionConfig: Record<string, unknown> =
+          sessionType === 'discussion' && existingSession?.config
+            ? {
+                discussionTopic: existingSession.config.discussionTopic ?? existingSession.title,
+                discussionPrompt: existingSession.config.discussionPrompt,
+                triggerAgentId: existingSession.config.triggerAgentId,
+              }
+            : {};
+
         await runAgentLoop(
           sessionId!,
           {
@@ -1083,6 +1144,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             config: {
               agentIds,
               sessionType,
+              ...discussionConfig,
             },
             userProfile: {
               nickname: userProfileState.nickname || undefined,
@@ -1186,6 +1248,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
           maxTurns: 0, // Not used for runtime — frontend loop manages maxTurns
           currentTurn: 0,
           triggerAgentId: agentId,
+          discussionTopic: request.topic,
+          discussionPrompt: request.prompt,
         },
         toolCalls: [],
         pendingToolCalls: [],

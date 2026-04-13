@@ -1067,14 +1067,8 @@ export function Stage({
               isCueUser={isCueUser}
               isTopicPending={isTopicPending}
               onMessageSend={async (msg) => {
-                // Always clear Level-1 pause state — the closure may hold a stale
-                // isDiscussionPaused value (e.g. voice input's onTranscription callback
-                // captures onMessageSend before React re-renders with the updated state).
+                // Always clear Level-1 pause state
                 setIsDiscussionPaused(false);
-                // Clear the sticky livePausedRef so the next agent-loop buffer
-                // starts unpaused. (pauseActiveLiveBuffer sets a ref that new
-                // buffers inherit — must be cleared before sendMessage creates one.)
-                chatAreaRef.current?.resumeActiveLiveBuffer();
                 // Flush any buffered / in-flight TTS audio from the previous
                 // agent turn so it doesn't leak into the next round.
                 discussionTTS.cleanup();
@@ -1087,9 +1081,6 @@ export function Stage({
                 // User interrupts during playback — handleUserInterrupt triggers
                 // onUserInterrupt callback which already calls sendMessage, so skip
                 // the direct sendMessage below to avoid sending twice.
-                // Include 'paused' because onInputActivate pauses the engine before
-                // the user finishes typing — without this the interrupt position
-                // would never be saved and resuming after QA skips to the next sentence.
                 if (
                   engineRef.current &&
                   (engineMode === 'playing' || engineMode === 'live' || engineMode === 'paused')
@@ -1098,15 +1089,17 @@ export function Stage({
                 } else {
                   chatAreaRef.current?.sendMessage(msg);
                 }
+                // Resume the live buffer AFTER sendMessage/handleUserInterrupt to
+                // avoid a race where resuming drains the old buffer before the
+                // abort signal from sendMessage arrives.
+                chatAreaRef.current?.resumeActiveLiveBuffer();
                 // Auto-switch to chat tab when user sends a message
                 chatAreaRef.current?.switchToTab('chat');
                 setIsCueUser(false);
                 // Immediately mark streaming for synchronized stop button
                 setChatIsStreaming(true);
                 setChatSessionType(chatSessionType || 'qa');
-                // Optimistic thinking: show thinking dots immediately so there's
-                // no blank gap between userMessage expiry and the SSE thinking event.
-                // The real SSE event will overwrite this with the same or updated value.
+                // Optimistic thinking: show thinking dots immediately
                 setThinkingState({ stage: 'director' });
               }}
               onDiscussionStart={() => {

@@ -118,12 +118,13 @@ export class ReviewLearningService {
 
     log.info('保存课堂历史:', { childId, knowledgeNodeId, subject, isReview })
 
-    // 计算学习轮次：查询该孩子在该知识点上已有多少条记录
-    const existingRecords = await apiClient.get<ClassroomHistoryRecord>('/classroom_history', {
+    // 计算学习轮次：只查 id 列来计数，避免拉取庞大的 classroomData JSON
+    const existingRecords = await apiClient.get<{ id: string }>('/classroom_history', {
       filters: [
         { column: 'childId', operator: 'eq', value: childId },
         { column: 'knowledgeNodeId', operator: 'eq', value: knowledgeNodeId },
       ],
+      select: 'id',
     })
 
     const round = existingRecords.length + 1
@@ -193,10 +194,12 @@ export class ReviewLearningService {
       filters.push({ column: 'subject', operator: 'eq', value: subject })
     }
 
+    // 排除 classroomData 大列，列表视图只需要元数据
     const records = await apiClient.get<ClassroomHistoryRecord>('/classroom_history', {
       filters,
       order: [{ column: 'completedAt', ascending: false }],
       limit,
+      select: 'id,child_id,knowledge_node_id,knowledge_node_name,subject,classroom_id,classroom_title,date,completed_at,round,is_review,questions_completed,correct_count,accuracy',
     })
 
     return records.map((r: ClassroomHistoryRecord) => ({
@@ -226,6 +229,7 @@ export class ReviewLearningService {
     log.info('加载历史课堂:', historyId)
     const records = await apiClient.get<ClassroomHistoryRecord>('/classroom_history', {
       filters: [{ column: 'id', operator: 'eq', value: historyId }],
+      select: 'id,classroom_data',
     })
     if (records.length === 0) {
       log.warn('历史课堂未找到:', historyId)
@@ -254,6 +258,7 @@ export class ReviewLearningService {
       ],
       order: [{ column: 'completedAt', ascending: false }],
       limit: 1,
+      select: 'id,classroom_data',
     })
 
     if (records.length === 0) return null
@@ -270,11 +275,15 @@ export class ReviewLearningService {
    * 获取重学统计信息
    */
   async getReLearnStats(childId: string): Promise<ReLearnStats> {
-    const allRecords = await apiClient.get<ClassroomHistoryRecord>('/classroom_history', {
-      filters: [{ column: 'childId', operator: 'eq', value: childId }],
+    // 只查元数据列，排除庞大的 classroom_data JSON
+    const reviewRecords = await apiClient.get<ClassroomHistoryRecord>('/classroom_history', {
+      filters: [
+        { column: 'childId', operator: 'eq', value: childId },
+        { column: 'isReview', operator: 'eq', value: true },
+      ],
+      select: 'id,child_id,knowledge_node_id,knowledge_node_name,subject,classroom_id,classroom_title,date,completed_at,round,is_review,questions_completed,correct_count,accuracy',
+      order: [{ column: 'completedAt', ascending: false }],
     })
-
-    const reviewRecords = allRecords.filter((r: ClassroomHistoryRecord) => r.isReview)
 
     const subjectRelearns: Record<Subject, number> = {
       math: 0,
@@ -286,11 +295,8 @@ export class ReviewLearningService {
       subjectRelearns[record.subject]++
     }
 
-    // 最近 5 条重学记录
+    // 最近 5 条重学记录（已按 completedAt desc 排序）
     const recentRelearns = reviewRecords
-      .sort((a: ClassroomHistoryRecord, b: ClassroomHistoryRecord) =>
-        new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
-      )
       .slice(0, 5)
       .map((r: ClassroomHistoryRecord) => ({
         id: String(r.id),

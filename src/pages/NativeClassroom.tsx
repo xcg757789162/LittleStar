@@ -328,10 +328,6 @@ export function NativeClassroom() {
         detail: { subject, knowledgeNodeId: nodeId },
       }));
 
-      // 检查成就（先预查 mastery_records，后续可用于成就判定扩展）
-      await apiClient.get<MasteryRecord>('/mastery_records', {
-        filters: [{ column: 'childId', operator: 'eq', value: numChildId }],
-      });
       const existingAchievements = await apiClient.get<Achievement>('/achievements', {
         filters: [{ column: 'childId', operator: 'eq', value: numChildId }],
       });

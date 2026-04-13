@@ -68,6 +68,20 @@ export interface CacheStore {
   entries(): Promise<[string, CacheEntry][]>
   clear(): Promise<void>
   size(): Promise<number>
+  /** Optional lightweight count that avoids fetching full classroom data */
+  countBySubject?(subject?: string): Promise<number>
+  /** Optional lightweight metadata query (excludes classroomData) for list/cleanup ops */
+  metadataEntries?(): Promise<CacheEntryMetadata[]>
+  /** Optional: delete entries matching a filter without fetching data first */
+  deleteExpired?(cutoffDate: string): Promise<number>
+}
+
+/** Lightweight metadata for cache entries (no classroom payload) */
+export interface CacheEntryMetadata {
+  cacheKey: string
+  knowledgeNodeId: string
+  date: string
+  cachedAt: number
 }
 
 /**
@@ -363,11 +377,33 @@ export class ClassroomCache {
    * @param cutoffDate 截止日期 YYYY-MM-DD，该日期之前的缓存将被删除
    */
   async clearExpiredCache(cutoffDate: string): Promise<void> {
+    // Fast path: DB-side delete without fetching data
+    if (this.store.deleteExpired) {
+      const cleared = await this.store.deleteExpired(cutoffDate)
+      log.info('清理过期缓存, cutoff:', cutoffDate, '清除:', cleared, '条')
+      return
+    }
+
+    // Lightweight path: use metadata only (no classroomData download)
+    if (this.store.metadataEntries) {
+      const metas = await this.store.metadataEntries()
+      let cleared = 0
+      for (const meta of metas) {
+        if (meta.date < cutoffDate) {
+          await this.store.delete(meta.cacheKey)
+          cleared++
+        }
+      }
+      log.info('清理过期缓存, cutoff:', cutoffDate, '清除:', cleared, '条')
+      return
+    }
+
+    // Fallback: full entries (in-memory store)
     const entries = await this.store.entries()
     let cleared = 0
-
-    for (const [key, entry] of entries) {
+    for (const [, entry] of entries) {
       if (entry.date < cutoffDate) {
+        const key = `${entry.knowledgeNodeId}::${entry.date}`
         await this.store.delete(key)
         cleared++
       }
@@ -388,6 +424,12 @@ export class ClassroomCache {
    * @param subject 可选，按科目统计缓存数量
    */
   async getCacheSize(subject?: string): Promise<number> {
+    // Fast path: use lightweight DB count when available (avoids fetching
+    // the large classroomData JSON column — can be 30+ MB per row).
+    if (this.store.countBySubject) {
+      return this.store.countBySubject(subject)
+    }
+
     const entries = await this.store.entries()
     let validCount = 0
 

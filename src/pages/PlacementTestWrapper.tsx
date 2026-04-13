@@ -44,9 +44,10 @@ export function PlacementTestWrapper() {
       const child = useChildStore.getState().currentChild
       const childId = child?.id ?? 'default'
 
-      // 查询已完成的科目
+      // 只查 subject 列，避免拉取庞大的 questions/result JSON
       const tests = await apiClient.get<PlacementTest>('/placement_tests', {
         filters: [{ column: 'childId', operator: 'eq', value: Number(childId) }],
+        select: 'subject',
       })
       const completedSubjects = new Set(tests.map((t) => t.subject))
 
