@@ -1,16 +1,25 @@
 /**
  * AI 评测题目生成器
  *
- * 改为通过同源后端代理生成评测题目，避免浏览器直连第三方模型导致 CORS。
+ * 通过同源后端代理生成评测题目，避免浏览器直连第三方模型导致 CORS。
  *
- * 降级策略：超时 10 秒或代理生成失败 → 返回 null，由调用方降级到预设题库。
+ * 降级策略：所有重试耗尽或不可重试错误 → 返回 null，由调用方降级到预设题库。
+ *
+ * 超时 / 重试设计：
+ *   - 单次请求超时 35s（服务端 30s 上限 + 5s 网络裕量）
+ *   - 可重试错误（超时 / 过载 / 限流）最多重试 2 次，指数退避
+ *   - 不可重试错误（400 参数错误、校验失败）立即放弃
  */
 
 import type { ChildSettings, QuestionBankItem } from '@/types/models'
 import { validateAIQuestion } from './ai-question-schema'
+import { createLogger } from '@/lib/openmaic/logger'
 
-/** AI 生成题目的超时时间（毫秒） */
-const AI_GENERATION_TIMEOUT = 10_000
+const log = createLogger('AIQuestionGen')
+
+const REQUEST_TIMEOUT_MS = 35_000
+const MAX_RETRIES = 2
+const BASE_BACKOFF_MS = 2_000
 
 interface BackendQuestionResponse {
   question?: {
@@ -20,6 +29,7 @@ interface BackendQuestionResponse {
     difficulty: number
   }
   error?: string
+  retryable?: boolean
 }
 
 function pickQuestionGenerationSettings(settings: ChildSettings) {
@@ -31,28 +41,18 @@ function pickQuestionGenerationSettings(settings: ChildSettings) {
   }
 }
 
-/**
- * 生成评测选择题
- *
- * @param node 知识点信息（name + description）
- * @param gradeLevel 年级
- * @param subject 科目
- * @param settings 孩子设置（包含 LLM 配置）
- * @returns 生成的题目，失败返回 null（由调用方降级到预设题库）
- */
-export async function generateQuestion(
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function attemptGenerate(
   node: { id: string; name: string; description: string },
   gradeLevel: string,
   subject: string,
   settings: ChildSettings,
-): Promise<QuestionBankItem | null> {
-  if (!settings.llmModel || !settings.llmApiKey) {
-    console.warn('[AIQuestionGenerator] LLM 未配置，跳过 AI 生成')
-    return null
-  }
-
+): Promise<{ result: QuestionBankItem | null; retryable: boolean; error?: string }> {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), AI_GENERATION_TIMEOUT)
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
   try {
     const response = await fetch('/api/pre-generate/question', {
@@ -68,37 +68,85 @@ export async function generateQuestion(
     })
 
     if (!response.ok) {
-      const errorPayload = await response.json().catch(() => ({})) as BackendQuestionResponse
-      console.warn(
-        '[AIQuestionGenerator] 后端代理生成失败，将使用预设题库',
-        errorPayload.error || response.status,
-      )
-      return null
+      const payload = await response.json().catch(() => ({})) as BackendQuestionResponse
+      const retryable = payload.retryable ?? (response.status >= 500)
+      return { result: null, retryable, error: payload.error || `HTTP ${response.status}` }
     }
 
     const payload = await response.json() as BackendQuestionResponse
     const validated = payload.question ? validateAIQuestion(payload.question) : null
 
     if (!validated) {
-      console.warn('[AIQuestionGenerator] 后端代理返回的题目未通过校验')
-      return null
+      return { result: null, retryable: false, error: '题目未通过校验' }
     }
 
     return {
-      knowledgeNodeId: node.id,
-      stem: validated.stem,
-      options: validated.options,
-      correctIndex: validated.correctIndex,
-      difficulty: validated.difficulty,
+      result: {
+        knowledgeNodeId: node.id,
+        stem: validated.stem,
+        options: validated.options,
+        correctIndex: validated.correctIndex,
+        difficulty: validated.difficulty,
+      },
+      retryable: false,
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.warn('[AIQuestionGenerator] AI 生成超时（10s），将使用预设题库')
-    } else {
-      console.warn('[AIQuestionGenerator] AI 生成失败，将使用预设题库', error)
+      return { result: null, retryable: true, error: `请求超时 (${REQUEST_TIMEOUT_MS / 1000}s)` }
     }
-    return null
+    const message = error instanceof Error ? error.message : String(error)
+    return { result: null, retryable: true, error: message }
   } finally {
     clearTimeout(timeout)
   }
+}
+
+/**
+ * 生成评测选择题（带重试）
+ *
+ * @returns 生成的题目，失败返回 null（由调用方降级到预设题库）
+ */
+export async function generateQuestion(
+  node: { id: string; name: string; description: string },
+  gradeLevel: string,
+  subject: string,
+  settings: ChildSettings,
+): Promise<QuestionBankItem | null> {
+  if (!settings.llmModel || !settings.llmApiKey) {
+    log.warn('LLM 未配置，跳过 AI 生成')
+    return null
+  }
+
+  let lastError = ''
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      const backoff = BASE_BACKOFF_MS * Math.pow(2, attempt - 1)
+      log.info(`第 ${attempt + 1} 次重试 (${node.name})，等待 ${backoff}ms...`)
+      await sleep(backoff)
+    }
+
+    const { result, retryable, error } = await attemptGenerate(node, gradeLevel, subject, settings)
+
+    if (result) {
+      if (attempt > 0) {
+        log.info(`重试成功 (${node.name})，第 ${attempt + 1} 次尝试`)
+      }
+      return result
+    }
+
+    lastError = error || '未知错误'
+
+    if (!retryable) {
+      log.warn(`不可重试错误 (${node.name}): ${lastError}，降级到预设题库`)
+      return null
+    }
+
+    if (attempt < MAX_RETRIES) {
+      log.warn(`可重试错误 (${node.name}): ${lastError}`)
+    }
+  }
+
+  log.warn(`${MAX_RETRIES + 1} 次尝试均失败 (${node.name}): ${lastError}，降级到预设题库`)
+  return null
 }

@@ -25,8 +25,8 @@ const PORT = parseInt(process.env.PREGEN_PORT || '3003', 10)
 
 /** 单次提交的最大任务数 */
 const MAX_TASKS_PER_SUBMIT = 50
-/** 评测题目 AI 超时 */
-const QUESTION_TIMEOUT_MS = 10_000
+/** 评测题目 AI 超时（给 LLM 充足的生成时间，尤其是 structured output 场景） */
+const QUESTION_TIMEOUT_MS = 30_000
 
 function buildQuestionSystemPrompt(
   nodeName: string,
@@ -128,6 +128,7 @@ app.post('/api/pre-generate/question', async (req, res) => {
         system: systemPrompt,
         prompt: `请为知识点「${node.name}」生成一道评测选择题。`,
         abortSignal: controller.signal,
+        maxRetries: 1,
       })
 
       const validated = validateAIQuestion(object)
@@ -142,9 +143,13 @@ app.post('/api/pre-generate/question', async (req, res) => {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    const status = error instanceof Error && error.name === 'AbortError' ? 504 : 502
-    console.error('[API] POST /api/pre-generate/question 错误:', error)
-    res.status(status).json({ error: message || 'question generation failed' })
+    const isTimeout = error instanceof Error && error.name === 'AbortError'
+    const isOverloaded = message.includes('overloaded') || message.includes('529')
+    const isRateLimit = message.includes('rate_limit') || message.includes('429')
+    const status = isTimeout ? 504 : 502
+    const retryable = isTimeout || isOverloaded || isRateLimit
+    console.error('[API] POST /api/pre-generate/question 错误:', message)
+    res.status(status).json({ error: message || 'question generation failed', retryable })
   }
 })
 

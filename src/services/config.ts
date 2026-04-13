@@ -526,6 +526,48 @@ export const BACKEND_VIDEO_PROVIDERS: BackendVideoProviderDef[] = [
   },
 ]
 
+// ===== 清理所有 provider 配置（登出时调用） =====
+
+/**
+ * 清除所有与 AI 服务提供商相关的 localStorage 数据。
+ * 在用户登出时调用，防止切换账号后读到前一个用户的 API Key。
+ */
+export function clearAllProviderConfig(): void {
+  try {
+    const keysToRemove: string[] = []
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (!key) continue
+      if (
+        key.startsWith('littlestar_provider_') ||
+        key.startsWith('littlestar_llm_') ||
+        key.startsWith('littlestar_tts_') ||
+        key.startsWith('littlestar_stt_') ||
+        key.startsWith('littlestar_ise_') ||
+        key === 'littlestar_openmaic_url' ||
+        key === 'littlestar_openmaic_api_key' ||
+        key === 'littlestar_parent_pin_fallback' ||
+        // legacy keys
+        key.startsWith('littlestar_qwen_') ||
+        key.startsWith('littlestar_cosyvoice_') ||
+        key.startsWith('littlestar_paraformer_') ||
+        key.startsWith('littlestar_iflytek_')
+      ) {
+        keysToRemove.push(key)
+      }
+    }
+
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key)
+    }
+
+    // Zustand persisted stores (OpenMAIC settings / user profile)
+    localStorage.removeItem('settings-storage')
+    localStorage.removeItem('user-profile-storage')
+  } catch { /* ignore in SSR / restricted contexts */ }
+}
+
 // ===== 旧数据迁移（首次运行时自动执行） =====
 
 /**

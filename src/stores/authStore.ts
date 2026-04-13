@@ -15,6 +15,8 @@ import { authApi } from '@/services/api/auth'
 import { TOKEN_STORAGE_KEY } from '@/services/api/types'
 import { queryClient } from '@/lib/queryClient'
 import type { AuthUser, LoginRequest, RegisterRequest } from '@/services/api/types'
+import { clearAllProviderConfig } from '@/services/config'
+import { useChildStore } from '@/stores/childStore'
 import { createLogger } from '@/lib/openmaic/logger'
 
 const log = createLogger('AuthStore')
@@ -112,11 +114,13 @@ export const useAuthStore = create<AuthState & AuthActions>()((set) => ({
   },
 
   logout: () => {
-    log.info('用户登出')
-    // 清除 JWT token
+    log.info('用户登出，清理所有会话数据')
     localStorage.removeItem(TOKEN_STORAGE_KEY)
-    // 清除所有 React Query 缓存（防止用户切换后看到旧数据）
+    clearAllProviderConfig()
     queryClient.clear()
+
+    useChildStore.getState().reset()
+
     set({
       user: null,
       isAuthenticated: false,
