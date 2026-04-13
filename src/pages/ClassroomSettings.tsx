@@ -82,10 +82,10 @@ function mapBackendTTSProviderId(providerId: string): TTSProviderId | null {
   }
 }
 
-function getChildSnapshot(childId: string | null | undefined): Child | null {
+function getChildSnapshot(childId: string | number | null | undefined): Child | null {
   if (!childId) return null
   const state = useChildStore.getState()
-  return state.children.find((child) => child.id === childId) ?? null
+  return state.children.find((child) => String(child.id) === String(childId)) ?? null
 }
 
 export function buildPersistedClassroomSettings(

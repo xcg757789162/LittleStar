@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import type { Child, ChildSettings } from '@/types/models'
 
+/** PostgreSQL returns numeric IDs; callers may pass strings. Normalize both sides. */
+const idEq = (a: unknown, b: unknown): boolean =>
+  a != null && b != null && String(a) === String(b)
+
 /** childStore 状态接口 */
 export interface ChildState {
   /** 当前选中的孩子 */
@@ -43,7 +47,7 @@ export const useChildStore = create<ChildState & ChildActions>()((set) => ({
   addChild: (child) =>
     set((state) => {
       // 去重：如果已存在相同 id 的孩子，跳过添加
-      if (child.id && state.children.some((c) => c.id === child.id)) {
+      if (child.id && state.children.some((c) => idEq(c.id, child.id))) {
         return state
       }
       const newChildren = [...state.children, child]
@@ -57,20 +61,20 @@ export const useChildStore = create<ChildState & ChildActions>()((set) => ({
   updateChild: (id, updates) =>
     set((state) => {
       const children = state.children.map((c) =>
-        c.id === id ? { ...c, ...updates } : c,
+        idEq(c.id, id) ? { ...c, ...updates } : c,
       )
       const currentChild =
-        state.currentChild?.id === id
-          ? { ...state.currentChild, ...updates }
+        idEq(state.currentChild?.id, id)
+          ? { ...state.currentChild!, ...updates }
           : state.currentChild
       return { children, currentChild }
     }),
 
   removeChild: (id) =>
     set((state) => {
-      const children = state.children.filter((c) => c.id !== id)
+      const children = state.children.filter((c) => !idEq(c.id, id))
       const currentChild =
-        state.currentChild?.id === id
+        idEq(state.currentChild?.id, id)
           ? (children[0] ?? null)
           : state.currentChild
       return { children, currentChild }
@@ -79,17 +83,17 @@ export const useChildStore = create<ChildState & ChildActions>()((set) => ({
   updateChildSettings: (id, settingsUpdate) =>
     set((state) => {
       const children = state.children.map((c) => {
-        if (c.id !== id) return c
+        if (!idEq(c.id, id)) return c
         return {
           ...c,
           settings: { ...c.settings, ...settingsUpdate },
         }
       })
       const currentChild =
-        state.currentChild?.id === id
+        idEq(state.currentChild?.id, id)
           ? {
-              ...state.currentChild,
-              settings: { ...state.currentChild.settings, ...settingsUpdate },
+              ...state.currentChild!,
+              settings: { ...state.currentChild!.settings, ...settingsUpdate },
             }
           : state.currentChild
       return { children, currentChild }
