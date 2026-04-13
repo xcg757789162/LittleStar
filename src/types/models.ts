@@ -459,8 +459,39 @@ export interface QuestionBankItem {
   difficulty: number
 }
 
+/**
+ * 评测场景类型（核心引擎根据场景调整出题策略和 AI prompt 语境）
+ * - placement: 入学/初始水平测评
+ * - exam: 课后/阶段性考试
+ * - practice: 针对性练习（根据薄弱点出题加强）
+ */
+export type AssessmentType = 'placement' | 'exam' | 'practice'
+
 /** 阶段二模式 */
 export type Phase2Mode = 'verify' | 'challenge' | 'mixed'
+
+/** Phase 1 单题作答摘要（供 Phase 2 自适应出题使用） */
+export interface Phase1AnswerSummary {
+  nodeId: string
+  nodeName: string
+  moduleId: string
+  isCorrect: boolean
+  timeSpent: number
+  timedOut: boolean
+}
+
+/** Phase 2 出题上下文（传给 AI，让 LLM 根据学生表现出针对性题目） */
+export interface Phase2QuestionContext {
+  assessmentType: AssessmentType
+  phase2Mode: Phase2Mode
+  overallPhase1Score: number
+  sameModulePerformance?: {
+    nodeName: string
+    isCorrect: boolean
+    difficulty: number
+  }[]
+  purpose: string
+}
 
 /** 阶段一分析结果 */
 export interface Phase1Analysis {
@@ -481,6 +512,8 @@ export interface Phase1Analysis {
    * - 'mixed'：阶段一表现一般（60-80%），验证+挑战混合
    */
   phase2Mode: Phase2Mode
+  /** Phase 1 每道题的作答摘要（传给 Phase 2 AI 出题用） */
+  answerSummaries: Phase1AnswerSummary[]
 }
 
 /** 测评结果 */

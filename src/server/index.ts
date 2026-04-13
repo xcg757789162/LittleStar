@@ -12,10 +12,9 @@
  */
 
 import express from 'express'
-import { generateText } from 'ai'
 import { aiQuestionSchema, validateAIQuestion } from '../engine/ai-question-schema.js'
 import { pool } from './db.js'
-import { createQuestionModel, type QuestionGenerationSettings } from './question-model.js'
+import { resolveLLMBaseUrl, type QuestionGenerationSettings } from './question-model.js'
 import { startTaskProcessor, stopTaskProcessor, triggerProcessing } from './services/task-processor.js'
 
 const app = express()
@@ -25,14 +24,35 @@ const PORT = parseInt(process.env.PREGEN_PORT || '3003', 10)
 
 /** 单次提交的最大任务数 */
 const MAX_TASKS_PER_SUBMIT = 50
-/** 评测题目 AI 超时（给 LLM 充足的生成时间，尤其是 structured output 场景） */
-const QUESTION_TIMEOUT_MS = 30_000
+/** 评测题目 AI 超时 */
+const QUESTION_TIMEOUT_MS = 45_000
+
+interface Phase2Ctx {
+  assessmentType?: 'placement' | 'exam' | 'practice'
+  phase2Mode: 'verify' | 'challenge' | 'mixed'
+  overallPhase1Score: number
+  sameModulePerformance?: { nodeName: string; isCorrect: boolean; difficulty: number }[]
+  purpose: string
+}
+
+const ASSESSMENT_SCENE_LABELS: Record<string, string> = {
+  placement: '入学水平测评',
+  exam: '课后/阶段性考试',
+  practice: '针对性强化练习',
+}
+
+const PHASE2_MODE_LABELS: Record<string, string> = {
+  challenge: '挑战模式（找到真实能力上限）',
+  verify: '验证模式（确认薄弱环节）',
+  mixed: '混合模式（验证+挑战）',
+}
 
 function buildQuestionSystemPrompt(
   nodeName: string,
   nodeDescription: string,
   gradeLevel: string,
   subject: string,
+  phase2Context?: Phase2Ctx,
 ): string {
   const gradeAgeMap: Record<string, string> = {
     'middle-kindergarten': '中班（4-5岁）',
@@ -53,7 +73,7 @@ function buildQuestionSystemPrompt(
   const ageDescription = gradeAgeMap[gradeLevel] || gradeLevel
   const subjectName = subjectNameMap[subject] || subject
 
-  return `你是一个面向幼儿的教育评测出题专家。
+  let prompt = `你是一个面向幼儿的教育评测出题专家。
 
 ## 任务
 根据给定的知识点，生成一道四选一选择题，用于评估 ${ageDescription} 孩子对 ${subjectName} 科目中「${nodeName}」知识点的掌握程度。
@@ -63,7 +83,38 @@ function buildQuestionSystemPrompt(
 - 描述：${nodeDescription}
 - 科目：${subjectName}
 - 年龄段：${ageDescription}
+`
 
+  if (phase2Context) {
+    const sceneLabel = ASSESSMENT_SCENE_LABELS[phase2Context.assessmentType || 'placement'] || '评测'
+    const modeLabel = PHASE2_MODE_LABELS[phase2Context.phase2Mode] || phase2Context.phase2Mode
+    prompt += `
+## 评测背景
+- 评测类型：${sceneLabel}
+- 前一轮得分：${phase2Context.overallPhase1Score}/100
+- 当前出题模式：${modeLabel}
+`
+    if (phase2Context.sameModulePerformance?.length) {
+      prompt += '- 同模块已答知识点表现：\n'
+      for (const p of phase2Context.sameModulePerformance) {
+        const status = p.isCorrect ? '答对' : '答错'
+        prompt += `  - 「${p.nodeName}」(难度${p.difficulty}): ${status}\n`
+      }
+    }
+    prompt += `- 出题目的：${phase2Context.purpose}
+
+## 难度调整要求
+`
+    if (phase2Context.phase2Mode === 'challenge') {
+      prompt += '- 难度 3-5，重点考察理解应用和综合能力，题目应比前一轮更有挑战性\n'
+    } else if (phase2Context.phase2Mode === 'verify') {
+      prompt += '- 难度 1-3，用于确认学生是否真的不掌握，不要出太难的题\n'
+    } else {
+      prompt += '- 根据上述出题目的自行调整难度\n'
+    }
+  }
+
+  prompt += `
 ## 要求
 1. 题干使用简单口语化中文${subject === 'english' ? '（可中英混合）' : ''}，不超过 30 字，可用 emoji
 2. 恰好 4 个选项，每个选项含 text（≤8 字）和 emoji
@@ -86,23 +137,28 @@ function buildQuestionSystemPrompt(
   "difficulty": 2
 }
 \`\`\``
+
+  return prompt
 }
 
 // ============================================================
 // POST /api/pre-generate/question — 评测题目同源代理
 // ============================================================
 app.post('/api/pre-generate/question', async (req, res) => {
+  const t0 = Date.now()
   try {
     const {
       node,
       gradeLevel,
       subject,
       settings,
+      phase2Context,
     } = req.body as {
       node?: { id: string; name: string; description: string }
       gradeLevel?: string
       subject?: string
       settings?: QuestionGenerationSettings
+      phase2Context?: Phase2Ctx
     }
 
     if (!node?.id || !node.name || typeof node.description !== 'string') {
@@ -120,37 +176,59 @@ app.post('/api/pre-generate/question', async (req, res) => {
       return
     }
 
-    const model = createQuestionModel(settings)
-    if (!model) {
-      res.status(400).json({ error: 'invalid llm settings' })
+    const { modelId } = (() => {
+      const m = settings.llmModel.trim()
+      const idx = m.indexOf(':')
+      return idx > 0 ? { modelId: m.substring(idx + 1).trim() } : { modelId: m }
+    })()
+    const baseUrl = (settings.llmBaseUrl?.trim() || resolveLLMBaseUrl(settings) || '').replace(/\/+$/, '')
+    if (!baseUrl) {
+      res.status(400).json({ error: 'cannot resolve LLM base URL' })
       return
     }
 
+    console.log(`[API] question 请求: model=${modelId}, baseUrl=${baseUrl}, node=${node.name}, phase2=${phase2Context?.phase2Mode ?? 'none'}`)
+
+    const systemPrompt = buildQuestionSystemPrompt(node.name, node.description, gradeLevel, subject, phase2Context)
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), QUESTION_TIMEOUT_MS)
 
     try {
-      const systemPrompt = buildQuestionSystemPrompt(
-        node.name,
-        node.description,
-        gradeLevel,
-        subject,
-      )
-
-      const t0 = Date.now()
-      const { text } = await generateText({
-        model,
-        system: systemPrompt,
-        prompt: `请为知识点「${node.name}」生成一道评测选择题。只输出 JSON，不要其他文字。`,
-        abortSignal: controller.signal,
-        maxRetries: 0,
+      const llmResp = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${settings.llmApiKey}`,
+        },
+        body: JSON.stringify({
+          model: modelId,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `请为知识点「${node.name}」生成一道评测选择题。只输出 JSON，不要其他文字。` },
+          ],
+          temperature: 0.7,
+          max_tokens: 800,
+          enable_thinking: false,
+        }),
+        signal: controller.signal,
       })
-      const elapsed = Date.now() - t0
-      console.log(`[API] LLM 响应耗时 ${elapsed}ms, 长度 ${text.length} 字符`)
 
-      const jsonMatch = text.match(/\{[\s\S]*\}/)
+      const elapsed = Date.now() - t0
+      if (!llmResp.ok) {
+        const errBody = await llmResp.text().catch(() => '')
+        console.error(`[API] LLM HTTP ${llmResp.status} (${elapsed}ms): ${errBody.slice(0, 200)}`)
+        const retryable = llmResp.status >= 500 || llmResp.status === 429
+        res.status(502).json({ error: `LLM returned HTTP ${llmResp.status}`, retryable })
+        return
+      }
+
+      const llmBody = await llmResp.json() as { choices?: Array<{ message?: { content?: string } }> }
+      const content = llmBody.choices?.[0]?.message?.content || ''
+      console.log(`[API] ✅ LLM 响应: ${elapsed}ms, ${content.length} 字符`)
+
+      const jsonMatch = content.match(/\{[\s\S]*\}/)
       if (!jsonMatch) {
-        console.error('[API] LLM 返回中未找到 JSON:', text.slice(0, 200))
+        console.error('[API] LLM 返回中未找到 JSON:', content.slice(0, 200))
         res.status(502).json({ error: 'LLM response contains no JSON object', retryable: true })
         return
       }
@@ -182,13 +260,15 @@ app.post('/api/pre-generate/question', async (req, res) => {
       clearTimeout(timeout)
     }
   } catch (error) {
+    const elapsed = Date.now() - t0
     const message = error instanceof Error ? error.message : String(error)
+    const errorName = error instanceof Error ? error.name : 'Unknown'
     const isTimeout = error instanceof Error && error.name === 'AbortError'
     const isOverloaded = message.includes('overloaded') || message.includes('529')
     const isRateLimit = message.includes('rate_limit') || message.includes('429')
     const status = isTimeout ? 504 : 502
     const retryable = isTimeout || isOverloaded || isRateLimit
-    console.error('[API] POST /api/pre-generate/question 错误:', message)
+    console.error(`[API] ❌ question 错误 (${elapsed}ms): [${errorName}] ${message}`)
     res.status(status).json({ error: message || 'question generation failed', retryable })
   }
 })
@@ -327,7 +407,7 @@ app.get('/api/pre-generate/status', async (req, res) => {
        FROM api.generation_tasks
        WHERE child_id = $1
          AND status IN ('pending', 'running')
-       ORDER BY created_at ASC`,
+       ORDER BY created_at ASC, id ASC`,
       [childId],
     )
 

@@ -1,24 +1,27 @@
 /**
- * 入学测评引擎
+ * 自适应评测引擎（Adaptive Assessment Engine）
  *
- * 支持两种模式：
- * - 旧版单阶段（'single'）：兼容旧记录
- * - 新版两阶段（'phase1' + 'phase2'）：摸底 → 分析 → 挑战/验证
+ * 可用于多种评测场景：
+ * - 入学/初始水平测评（placement）
+ * - 课后/阶段性考试（exam）
+ * - 针对性练习：根据薄弱点强化训练（practice）
  *
+ * 两阶段流程：摸底 → 分析 → 挑战/验证
  * 核心原则：阶段二永远触发！
  * - 阶段一表现好 → 阶段二出更难的题，找到真实上限
  * - 阶段一表现差 → 阶段二验证薄弱点
  * - 阶段一表现一般 → 阶段二混合模式（验证+挑战）
- *
- * 生成自适应测评题目、提交答案、完成测评、应用结果
  */
 
 import type { CurriculumModule, CurriculumKnowledgeNode } from '@/curriculum/types'
 import type {
   PlacementResult,
   QuestionBankItem,
+  AssessmentType,
   Phase1Analysis,
+  Phase1AnswerSummary,
   Phase2Mode,
+  Phase2QuestionContext,
   ChildSettings,
 } from '@/types/models'
 import { loadQuestionBank, getQuestionFromBank } from '@/data/question-bank/loader'
@@ -116,10 +119,31 @@ const MIXED_THRESHOLD = 0.6           // 正确率 >= 60% 进入混合模式（�
 /** 超时时间（毫秒） */
 const QUESTION_TIMEOUT_MS = 30_000
 
+/** 根据评测场景生成各模式下的 purpose 文案 */
+function buildPurposeText(type: AssessmentType) {
+  const sceneLabel: Record<AssessmentType, string> = {
+    placement: '入学摸底',
+    exam: '考试',
+    practice: '针对性练习',
+  }
+  const scene = sceneLabel[type]
+  return {
+    challengeBase: `${scene}中学生基础扎实，请出更有挑战性的题来探测真实能力上限`,
+    verifyWeak: `${scene}中该模块表现薄弱，请出确认题验证是否真的不掌握`,
+    verifyUncertain: `${scene}中学生在该知识点虽然答对但犹豫较久，请出题验证是否真正掌握`,
+    verifyOverall: `${scene}中学生整体表现较弱，请出确认题验证该知识点的真实掌握程度`,
+    mixedStrong: `${scene}中该模块表现优秀，适当出更难的题探测上限`,
+  }
+}
+
 /**
- * 入学测评引擎
+ * 自适应评测引擎
+ *
+ * 适用于入学测评、课后考试、针对性练习等场景。
+ * 调用方通过 assessmentType 参数告知引擎当前场景，
+ * 引擎据此调整选题策略和 AI prompt 语境。
  */
-export class PlacementTestEngine {
+export class AdaptiveAssessmentEngine {
   // ===================================================================
   // 旧版单阶段接口（保留兼容）
   // ===================================================================
@@ -485,13 +509,26 @@ export class PlacementTestEngine {
       phase2Mode = 'verify'
     }
 
+    const answerSummaries: Phase1AnswerSummary[] = session.answers.map(answer => {
+      const question = session.choiceQuestions.find(q => q.nodeId === answer.nodeId)
+      return {
+        nodeId: answer.nodeId,
+        nodeName: question?.nodeName ?? answer.nodeId,
+        moduleId: question?.moduleId ?? '',
+        isCorrect: answer.isCorrect,
+        timeSpent: answer.timeSpent,
+        timedOut: answer.timedOut ?? false,
+      }
+    })
+
     return {
       weakModules,
       uncertainNodes,
       overallPhase1Score,
       moduleScores,
-      needsPhase2: true, // 永远需要阶段二！
+      needsPhase2: true,
       phase2Mode,
+      answerSummaries,
     }
   }
 
@@ -511,6 +548,7 @@ export class PlacementTestEngine {
    * @param subject 科目
    * @param gradeLevel 年级
    * @param settings 孩子设置（用于 AI 生成）
+   * @param assessmentType 评测场景（默认 placement），影响 AI prompt 语境
    * @returns 选择题列表
    */
   async generatePhase2Plan(
@@ -519,6 +557,7 @@ export class PlacementTestEngine {
     subject: string,
     gradeLevel: string,
     settings?: ChildSettings,
+    assessmentType: AssessmentType = 'placement',
   ): Promise<ChoiceQuestion[]> {
     const plan: ChoiceQuestion[] = []
     const mode = phase1Analysis.phase2Mode || 'verify'
@@ -529,73 +568,97 @@ export class PlacementTestEngine {
       gradeLevel as Parameters<typeof loadQuestionBank>[1],
     )
 
+    const phase1AnsweredNodeIds = new Set(
+      phase1Analysis.answerSummaries.map(s => s.nodeId),
+    )
+
+    const purposeText = buildPurposeText(assessmentType)
+
     if (mode === 'challenge') {
       // ========== 挑战模式 ==========
-      // 阶段一表现优秀，需要出更难的题来找到真实上限
-      // 策略：从所有模块中选更高难度的知识点，优先选阶段一未覆盖的高难度节点
-      const phase1NodeIds = new Set(phase1Analysis.uncertainNodes)
-      // 也收集阶段一已答过的所有 nodeId（避免出同一个知识点的题）
-      // uncertainNodes 只是其中一部分，我们需要从 moduleScores 推断覆盖的模块
+      // Phase 1 表现优秀，从已答模块中选更高难度的未答节点来探测上限
+      // 优先级：uncertain 模块 > 全对模块 > 其余模块
+      const uncertainModuleIds = new Set(
+        phase1Analysis.answerSummaries
+          .filter(s => phase1Analysis.uncertainNodes.includes(s.nodeId))
+          .map(s => s.moduleId),
+      )
+      const usedModuleIds = new Set<string>()
 
-      const allCandidates: Array<{ node: CurriculumKnowledgeNode; mod: CurriculumModule; difficulty: number }> = []
-      const sortedModules = [...modules].sort((a, b) => a.order - b.order)
+      type Candidate = { node: CurriculumKnowledgeNode; mod: CurriculumModule; priority: number }
+      const candidates: Candidate[] = []
 
-      for (const mod of sortedModules) {
-        // 按难度从高到低排序知识点
-        const nodesByDifficulty = [...mod.knowledgeNodes].sort((a, b) => b.difficulty - a.difficulty)
-        for (const node of nodesByDifficulty) {
-          allCandidates.push({ node, mod, difficulty: node.difficulty })
-        }
+      for (const mod of modules) {
+        const hardestFirst = [...mod.knowledgeNodes]
+          .filter(n => !phase1AnsweredNodeIds.has(n.id))
+          .sort((a, b) => b.difficulty - a.difficulty)
+        if (hardestFirst.length === 0) continue
+
+        const node = hardestFirst[0]
+        const priority = uncertainModuleIds.has(mod.id) ? 0
+          : (phase1Analysis.moduleScores[mod.id] ?? 0) >= 80 ? 1
+          : 2
+        candidates.push({ node, mod, priority })
       }
 
-      // 优先选高难度节点，但避免和阶段一重复
-      const sortedCandidates = allCandidates.sort((a, b) => b.difficulty - a.difficulty)
+      candidates.sort((a, b) => a.priority - b.priority || b.node.difficulty - a.node.difficulty)
 
-      for (const { node, mod } of sortedCandidates) {
+      const p2Ctx: Phase2QuestionContext = {
+        assessmentType,
+        phase2Mode: 'challenge',
+        overallPhase1Score: phase1Analysis.overallPhase1Score,
+        purpose: purposeText.challengeBase,
+      }
+
+      for (const { node, mod } of candidates) {
         if (plan.length >= PHASE2_MAX_QUESTIONS) break
+        if (usedModuleIds.has(mod.id)) continue
+        usedModuleIds.add(mod.id)
 
-        let question: ChoiceQuestion | null = null
+        const modPerf = phase1Analysis.answerSummaries
+          .filter(s => s.moduleId === mod.id)
+          .map(s => ({
+            nodeName: s.nodeName,
+            isCorrect: s.isCorrect,
+            difficulty: mod.knowledgeNodes.find(n => n.id === s.nodeId)?.difficulty ?? 1,
+          }))
+        const ctx: Phase2QuestionContext = { ...p2Ctx, sameModulePerformance: modPerf }
 
-        // AI 优先生成高难度题
-        if (settings?.llmApiKey && settings?.llmModel) {
-          const aiResult = await generateQuestion(
-            { id: node.id, name: node.name, description: node.description },
-            gradeLevel,
-            subject,
-            settings,
-          )
-          if (aiResult) {
-            question = this.bankItemToChoiceQuestion(aiResult, node, mod, 'ai')
-          }
-        }
-
-        // 降级到预设题库最难的题
-        if (!question) {
-          const bankItem = getQuestionFromBank(questionBank, node.id, 'hard')
-          if (bankItem) {
-            question = this.bankItemToChoiceQuestion(bankItem, node, mod, 'preset')
-          }
-        }
-
-        if (question) {
-          plan.push(question)
-        }
+        const question = await this.generateSingleQuestion(
+          node, mod, questionBank, 'hard', gradeLevel, subject, settings, ctx,
+        )
+        if (question) plan.push(question)
       }
     } else if (mode === 'mixed') {
       // ========== 混合模式 ==========
-      // 先给薄弱模块出验证题，再给强项模块出挑战题
       const weakNodeIds = new Set<string>()
+      const buildModPerf = (mod: CurriculumModule) =>
+        phase1Analysis.answerSummaries
+          .filter(s => s.moduleId === mod.id)
+          .map(s => ({
+            nodeName: s.nodeName,
+            isCorrect: s.isCorrect,
+            difficulty: mod.knowledgeNodes.find(n => n.id === s.nodeId)?.difficulty ?? 1,
+          }))
 
       // 1) 薄弱模块验证题（1-2题）
       for (const weakModId of phase1Analysis.weakModules) {
         if (plan.length >= Math.min(2, PHASE2_MAX_QUESTIONS)) break
         const mod = modules.find(m => m.id === weakModId)
         if (!mod) continue
-        for (const node of mod.knowledgeNodes) {
+        const nodes = mod.knowledgeNodes.filter(n => !phase1AnsweredNodeIds.has(n.id))
+        for (const node of nodes) {
           if (plan.length >= 2) break
           weakNodeIds.add(node.id)
+          const ctx: Phase2QuestionContext = {
+            assessmentType,
+            phase2Mode: 'mixed',
+            overallPhase1Score: phase1Analysis.overallPhase1Score,
+            sameModulePerformance: buildModPerf(mod),
+            purpose: purposeText.verifyWeak,
+          }
           const question = await this.generateSingleQuestion(
-            node, mod, questionBank, 'hard', gradeLevel, subject, settings,
+            node, mod, questionBank, 'hard', gradeLevel, subject, settings, ctx,
           )
           if (question) plan.push(question)
         }
@@ -603,13 +666,20 @@ export class PlacementTestEngine {
 
       // 2) 不确定知识点验证题
       for (const nodeId of phase1Analysis.uncertainNodes) {
-        if (plan.length >= PHASE2_MAX_QUESTIONS - 1) break // 至少留1题给挑战
+        if (plan.length >= PHASE2_MAX_QUESTIONS - 1) break
         if (weakNodeIds.has(nodeId)) continue
         for (const mod of modules) {
           const node = mod.knowledgeNodes.find(n => n.id === nodeId)
           if (node) {
+            const ctx: Phase2QuestionContext = {
+              assessmentType,
+              phase2Mode: 'mixed',
+              overallPhase1Score: phase1Analysis.overallPhase1Score,
+              sameModulePerformance: buildModPerf(mod),
+              purpose: purposeText.verifyUncertain,
+            }
             const question = await this.generateSingleQuestion(
-              node, mod, questionBank, 'hard', gradeLevel, subject, settings,
+              node, mod, questionBank, 'hard', gradeLevel, subject, settings, ctx,
             )
             if (question) plan.push(question)
             break
@@ -625,12 +695,20 @@ export class PlacementTestEngine {
       )
       for (const mod of strongModules) {
         if (plan.length >= PHASE2_MAX_QUESTIONS) break
-        const hardNodes = [...mod.knowledgeNodes].sort((a, b) => b.difficulty - a.difficulty)
+        const hardNodes = [...mod.knowledgeNodes]
+          .filter(n => !phase1AnsweredNodeIds.has(n.id) && !usedNodeIds.has(n.id))
+          .sort((a, b) => b.difficulty - a.difficulty)
         for (const node of hardNodes) {
           if (plan.length >= PHASE2_MAX_QUESTIONS) break
-          if (usedNodeIds.has(node.id)) continue
+          const ctx: Phase2QuestionContext = {
+            assessmentType,
+            phase2Mode: 'mixed',
+            overallPhase1Score: phase1Analysis.overallPhase1Score,
+            sameModulePerformance: buildModPerf(mod),
+            purpose: purposeText.mixedStrong,
+          }
           const question = await this.generateSingleQuestion(
-            node, mod, questionBank, 'hard', gradeLevel, subject, settings,
+            node, mod, questionBank, 'hard', gradeLevel, subject, settings, ctx,
           )
           if (question) {
             plan.push(question)
@@ -639,25 +717,22 @@ export class PlacementTestEngine {
         }
       }
     } else {
-      // ========== 验证模式（原逻辑） ==========
-      // 收集需要验证的知识点
+      // ========== 验证模式 ==========
       const targetNodes: Array<{ node: CurriculumKnowledgeNode; mod: CurriculumModule }> = []
 
-      // 优先：薄弱模块中的知识点
       for (const weakModId of phase1Analysis.weakModules) {
         const mod = modules.find(m => m.id === weakModId)
         if (!mod) continue
         for (const node of mod.knowledgeNodes) {
           if (plan.length + targetNodes.length >= PHASE2_MAX_QUESTIONS) break
+          if (phase1AnsweredNodeIds.has(node.id)) continue
           targetNodes.push({ node, mod })
         }
       }
 
-      // 补充：不确定的知识点
       for (const nodeId of phase1Analysis.uncertainNodes) {
         if (plan.length + targetNodes.length >= PHASE2_MAX_QUESTIONS) break
         if (targetNodes.some(t => t.node.id === nodeId)) continue
-
         for (const mod of modules) {
           const node = mod.knowledgeNodes.find(n => n.id === nodeId)
           if (node) {
@@ -667,11 +742,24 @@ export class PlacementTestEngine {
         }
       }
 
-      // 为每个目标知识点生成验证题
       for (const { node, mod } of targetNodes) {
         if (plan.length >= PHASE2_MAX_QUESTIONS) break
+        const modPerf = phase1Analysis.answerSummaries
+          .filter(s => s.moduleId === mod.id)
+          .map(s => ({
+            nodeName: s.nodeName,
+            isCorrect: s.isCorrect,
+            difficulty: mod.knowledgeNodes.find(n => n.id === s.nodeId)?.difficulty ?? 1,
+          }))
+        const ctx: Phase2QuestionContext = {
+          assessmentType,
+          phase2Mode: 'verify',
+          overallPhase1Score: phase1Analysis.overallPhase1Score,
+          sameModulePerformance: modPerf,
+          purpose: purposeText.verifyOverall,
+        }
         const question = await this.generateSingleQuestion(
-          node, mod, questionBank, 'hard', gradeLevel, subject, settings,
+          node, mod, questionBank, 'hard', gradeLevel, subject, settings, ctx,
         )
         if (question) plan.push(question)
       }
@@ -890,21 +978,21 @@ export class PlacementTestEngine {
     gradeLevel: string,
     subject: string,
     settings?: ChildSettings,
+    phase2Context?: Phase2QuestionContext,
   ): Promise<ChoiceQuestion | null> {
-    // AI 优先
     if (settings?.llmApiKey && settings?.llmModel) {
       const aiResult = await generateQuestion(
         { id: node.id, name: node.name, description: node.description },
         gradeLevel,
         subject,
         settings,
+        phase2Context,
       )
       if (aiResult) {
         return this.bankItemToChoiceQuestion(aiResult, node, mod, 'ai')
       }
     }
 
-    // 降级到预设题库
     const bankItem = getQuestionFromBank(questionBank, node.id, difficulty)
     if (bankItem) {
       return this.bankItemToChoiceQuestion(bankItem, node, mod, 'preset')
@@ -927,3 +1015,6 @@ export class PlacementTestEngine {
     return QUESTION_TIMEOUT_MS
   }
 }
+
+/** @deprecated 使用 AdaptiveAssessmentEngine 代替 */
+export const PlacementTestEngine = AdaptiveAssessmentEngine

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, Play, Square, Volume2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/openmaic/ui/popover'
 import {
   Select,
@@ -167,10 +168,14 @@ export function VoicePicker({
           signal: controller.signal,
         })
         if (previewRequestIdRef.current !== requestId) return
-        if (!res.ok) throw new Error('TTS error')
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          const errMsg = errData?.error || `TTS 服务返回错误 (${res.status})`
+          throw new Error(errMsg)
+        }
         const data = await res.json()
         if (previewRequestIdRef.current !== requestId) return
-        if (!data.base64) throw new Error('No audio')
+        if (!data.base64) throw new Error('TTS 未返回音频数据')
         const audio = new Audio(`data:audio/${data.format || 'mp3'};base64,${data.base64}`)
         previewAudioRef.current = audio
         audio.addEventListener('ended', () => finishPreview(requestId), { once: true })
@@ -183,8 +188,11 @@ export function VoicePicker({
             previewAudioRef.current = null
           }
         }
-      } catch {
+      } catch (err) {
         finishPreview(requestId)
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        const message = err instanceof Error ? err.message : '试听失败'
+        toast.error(`语音试听失败: ${message}`)
       }
     },
     [finishPreview, previewingKey, stopPreview, ttsProvidersConfig],

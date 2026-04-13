@@ -305,9 +305,15 @@ export async function callLLM<T extends GenerateTextParams>(
       // Wrap in thinkingContext so the custom fetch wrapper in providers.ts
       // can read the config and inject vendor-specific body params for
       // OpenAI-compatible providers.
+      const modelId = getModelId(injectedParams);
+      const reqInfo = _extractRequestInfo(injectedParams);
+      log.info(`[${source}] callLLM start`, { model: modelId, messagesCount: reqInfo.messages?.length ?? 0, tools: reqInfo.tools });
+
       const result = await thinkingContext.run(effectiveThinking, () =>
         generateText(injectedParams),
       );
+
+      log.info(`[${source}] callLLM done`, { model: modelId, textLength: result.text.length });
 
       // Validate result (only when retries are configured)
       if (validate && !validate(result.text)) {
@@ -352,6 +358,9 @@ export function streamLLM<T extends StreamTextParams>(
   // Resolve effective thinking config and wrap in thinkingContext
   const effectiveThinking = thinking ?? getGlobalThinkingConfig();
   const injectedParams = injectProviderOptions(params, effectiveThinking);
+  const modelId = getModelId(injectedParams);
+  log.info(`[${source}] streamLLM start`, { model: modelId });
+
   const result = thinkingContext.run(effectiveThinking, () => streamText(injectedParams));
 
   return result;

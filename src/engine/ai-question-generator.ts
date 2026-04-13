@@ -11,13 +11,13 @@
  *   - 不可重试错误（400 参数错误、校验失败）立即放弃
  */
 
-import type { ChildSettings, QuestionBankItem } from '@/types/models'
+import type { ChildSettings, QuestionBankItem, Phase2QuestionContext } from '@/types/models'
 import { validateAIQuestion } from './ai-question-schema'
 import { createLogger } from '@/lib/openmaic/logger'
 
 const log = createLogger('AIQuestionGen')
 
-const REQUEST_TIMEOUT_MS = 35_000
+const REQUEST_TIMEOUT_MS = 50_000
 const MAX_RETRIES = 2
 const BASE_BACKOFF_MS = 2_000
 
@@ -50,6 +50,7 @@ async function attemptGenerate(
   gradeLevel: string,
   subject: string,
   settings: ChildSettings,
+  phase2Context?: Phase2QuestionContext,
 ): Promise<{ result: QuestionBankItem | null; retryable: boolean; error?: string }> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
@@ -63,6 +64,7 @@ async function attemptGenerate(
         gradeLevel,
         subject,
         settings: pickQuestionGenerationSettings(settings),
+        ...(phase2Context ? { phase2Context } : {}),
       }),
       signal: controller.signal,
     })
@@ -111,6 +113,7 @@ export async function generateQuestion(
   gradeLevel: string,
   subject: string,
   settings: ChildSettings,
+  phase2Context?: Phase2QuestionContext,
 ): Promise<QuestionBankItem | null> {
   if (!settings.llmModel || !settings.llmApiKey) {
     log.warn('LLM 未配置，跳过 AI 生成')
@@ -126,7 +129,7 @@ export async function generateQuestion(
       await sleep(backoff)
     }
 
-    const { result, retryable, error } = await attemptGenerate(node, gradeLevel, subject, settings)
+    const { result, retryable, error } = await attemptGenerate(node, gradeLevel, subject, settings, phase2Context)
 
     if (result) {
       if (attempt > 0) {

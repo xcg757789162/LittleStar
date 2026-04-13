@@ -192,7 +192,7 @@ async function processNextTask(): Promise<void> {
      WHERE id = (
        SELECT id FROM api.generation_tasks
        WHERE status = 'pending'
-       ORDER BY created_at ASC
+       ORDER BY created_at ASC, id ASC
        LIMIT 1
        FOR UPDATE SKIP LOCKED
      )

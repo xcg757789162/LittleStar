@@ -204,6 +204,7 @@ export async function syncOpenMAICToChild(): Promise<boolean> {
   const settingsToSync = extractChildSettingsFromStore()
   log.info('反向同步开始, child_id:', child.id,
     'llmProvider:', settingsToSync.llmProviderId,
+    'ttsProvider:', settingsToSync.ttsProviderId,
     'imageProvider:', settingsToSync.imageProviderId,
     'videoProvider:', settingsToSync.videoProviderId,
   )
@@ -249,14 +250,22 @@ export async function syncOpenMAICToChild(): Promise<boolean> {
 
     const mergedSettings = { ...currentSettings, ...safeSettings }
 
-    // 写入数据库
-    const { apiClient } = await import('@/services/api')
-    await apiClient.patch('/children', { settings: mergedSettings }, {
-      filters: [{ column: 'id', operator: 'eq', value: Number(child.id) }],
-    })
-
-    // 同步更新内存中的 childStore
+    // 先更新内存中的 childStore（乐观更新），防止 Dialog 快速重开时
+    // 正向同步读到旧值导致设置回退
     useChildStore.getState().updateChildSettings(String(child.id), safeSettings)
+
+    // 再异步写入数据库
+    try {
+      const { apiClient } = await import('@/services/api')
+      await apiClient.patch('/children', { settings: mergedSettings }, {
+        filters: [{ column: 'id', operator: 'eq', value: Number(child.id) }],
+      })
+    } catch (dbErr) {
+      // DB 写入失败：回滚乐观更新，恢复原始设置
+      log.error('DB 写入失败，回滚乐观更新:', dbErr)
+      useChildStore.getState().updateChildSettings(String(child.id), currentSettings)
+      throw dbErr
+    }
 
     log.info('反向同步完成 ✅')
     return true

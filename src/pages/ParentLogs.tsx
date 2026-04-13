@@ -50,6 +50,7 @@ const MODEL_TAGS = [
   'LLM', 'AISdkAdapter', 'AIProviders', 'AITeacher', 'AIQuestionGen',
   'DirectorGraph', 'DirectorPrompt', 'SSEStream', 'PipelineClient',
   'MediaOrchestrator', 'MediaGenerationStore',
+  'Generation', 'StatelessGenerate', 'PromptLoader',
 ]
 
 const CATEGORIES: CategoryConfig[] = [

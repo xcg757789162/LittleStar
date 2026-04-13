@@ -387,6 +387,17 @@ async function generateMiniMaxTTS(
   }
 
   const data = await response.json();
+
+  const baseResp = data?.base_resp;
+  if (baseResp && baseResp.status_code !== 0) {
+    const msg = baseResp.status_msg || 'unknown error';
+    const code = baseResp.status_code;
+    if (code === 2056 || msg.includes('usage limit') || msg.includes('rate limit') || msg.includes('quota')) {
+      throw new TTSRateLimitError('minimax-tts', `MiniMax TTS quota exceeded: ${msg} (code: ${code})`);
+    }
+    throw new Error(`MiniMax TTS API error: ${msg} (code: ${code})`);
+  }
+
   const hexAudio = data?.data?.audio;
   if (!hexAudio || typeof hexAudio !== 'string') {
     throw new Error(`MiniMax TTS error: No audio returned. Response: ${JSON.stringify(data)}`);
