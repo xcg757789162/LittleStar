@@ -508,6 +508,65 @@ app.post('/api/pre-generate/cancel', async (req, res) => {
 })
 
 // ============================================================
+// POST /api/pre-generate/media-proxy — 媒体文件代理
+// 绕过 OpenMAIC 的 proxy-media hostname 安全限制，
+// 直接代理远程图片/视频 URL（如 MiniMax CDN）
+// ============================================================
+app.post('/api/pre-generate/media-proxy', async (req, res) => {
+  const { url } = req.body as { url?: string }
+  if (!url || typeof url !== 'string') {
+    res.status(400).json({ error: 'url is required' })
+    return
+  }
+
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    res.status(400).json({ error: 'url must be an absolute HTTP(S) URL' })
+    return
+  }
+
+  try {
+    const upstream = await fetch(url, {
+      headers: { 'User-Agent': 'LittleStar-MediaProxy/1.0' },
+      signal: AbortSignal.timeout(30_000),
+    })
+
+    if (!upstream.ok) {
+      res.status(upstream.status).json({ error: `Upstream returned ${upstream.status}` })
+      return
+    }
+
+    const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
+    res.setHeader('Content-Type', contentType)
+
+    const contentLength = upstream.headers.get('content-length')
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength)
+    }
+
+    const body = upstream.body
+    if (body) {
+      const reader = body.getReader()
+      const pump = async () => {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          res.write(Buffer.from(value))
+        }
+        res.end()
+      }
+      await pump()
+    } else {
+      const buffer = Buffer.from(await upstream.arrayBuffer())
+      res.send(buffer)
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error(`[API] media-proxy 错误: ${message}`)
+    res.status(502).json({ error: `Failed to fetch media: ${message}` })
+  }
+})
+
+// ============================================================
 // GET /api/pre-generate/health — 健康检查 (I4 fix: 增加 DB 检查)
 // ============================================================
 app.get('/api/pre-generate/health', async (_req, res) => {

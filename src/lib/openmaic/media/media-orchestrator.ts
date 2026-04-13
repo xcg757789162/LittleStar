@@ -266,18 +266,29 @@ async function fetchAsBlob(url: string): Promise<Blob> {
     const res = await fetch(url);
     return res.blob();
   }
-  // For remote URLs, proxy through our server to bypass CORS restrictions
+  // For remote URLs, proxy through our server to bypass CORS restrictions.
+  // Use LittleStar's own media proxy first (no hostname allowlist restriction),
+  // falling back to OpenMAIC's proxy-media if unavailable.
   if (url.startsWith('http://') || url.startsWith('https://')) {
-    const res = await fetch('/api/proxy-media', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || `Proxy fetch failed: ${res.status}`);
+    const proxyEndpoints = ['/api/pre-generate/media-proxy', '/api/proxy-media'];
+    let lastError: Error | undefined;
+    for (const endpoint of proxyEndpoints) {
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        if (res.ok) return res.blob();
+        const data = await res.json().catch(() => ({}));
+        lastError = new Error(data.error || `Proxy ${endpoint} returned ${res.status}`);
+        log.warn(`${endpoint} failed: ${lastError.message}, trying next...`);
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        log.warn(`${endpoint} error: ${lastError.message}, trying next...`);
+      }
     }
-    return res.blob();
+    throw lastError ?? new Error('All media proxy endpoints failed');
   }
   // Relative URLs (shouldn't happen, but handle gracefully)
   const res = await fetch(url);
