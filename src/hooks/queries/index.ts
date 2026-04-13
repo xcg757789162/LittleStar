@@ -98,6 +98,7 @@ export {
   usePlacementTests,
   usePlacementTestBySubjectGrade,
   useCreatePlacementTest,
+  useResetPlacement,
   placementTestKeys,
 } from './usePlacementTests'
 export type { CreatePlacementTestInput } from './usePlacementTests'

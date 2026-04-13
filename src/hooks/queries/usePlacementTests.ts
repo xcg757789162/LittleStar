@@ -79,3 +79,32 @@ export function useCreatePlacementTest() {
     },
   })
 }
+
+/**
+ * 重置评测 — 删除该孩子的所有评测记录、掌握率记录、课堂缓存，
+ * 然后使相关 React Query 缓存失效，回到初始评测状态。
+ */
+export function useResetPlacement() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (childId: number) => {
+      await Promise.all([
+        apiClient.delete('/placement_tests', {
+          filters: [{ column: 'childId', operator: 'eq', value: childId }],
+        }),
+        apiClient.delete('/mastery_records', {
+          filters: [{ column: 'childId', operator: 'eq', value: childId }],
+        }),
+        apiClient.delete('/classroom_cache', {
+          filters: [{ column: 'childId', operator: 'eq', value: childId }],
+        }),
+      ])
+      return childId
+    },
+    onSuccess: (childId) => {
+      queryClient.invalidateQueries({ queryKey: placementTestKeys.byChild(childId) })
+      queryClient.invalidateQueries({ queryKey: ['masteryRecords', { childId }] })
+      queryClient.invalidateQueries({ queryKey: ['knowledgeNodes'] })
+    },
+  })
+}

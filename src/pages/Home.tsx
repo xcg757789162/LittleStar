@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
-import { usePlacementTests } from '@/hooks/queries'
+import { usePlacementTests, useResetPlacement } from '@/hooks/queries'
 import { useMasteryRecords } from '@/hooks/queries/useMasteryRecords'
 import { useKnowledgeNodes } from '@/hooks/queries/useKnowledgeNodes'
 import { ClassroomCache } from '@/services/openmaic/cache'
@@ -337,6 +337,9 @@ export function Home() {
   const childId = currentChild?.id
   const gradeLevel = currentChild?.gradeLevel ?? 'middle-kindergarten'
   const [cachedCount, setCachedCount] = useState<number>(0)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
+  const resetPlacement = useResetPlacement()
 
   // 缓存初始化
   const cacheInstance = useMemo(() => {
@@ -476,6 +479,21 @@ export function Home() {
   }, [refreshCache])
 
   const greeting = getGreeting(currentChild?.name)
+
+  const handleResetPlacement = useCallback(async () => {
+    if (!childId) return
+    setIsResetting(true)
+    try {
+      await resetPlacement.mutateAsync(Number(childId))
+      await cacheInstance.clearAll()
+      setCachedCount(0)
+      setShowResetConfirm(false)
+    } catch {
+      /* silent — mutation 内部已 invalidate */
+    } finally {
+      setIsResetting(false)
+    }
+  }, [childId, resetPlacement, cacheInstance])
 
   // ═══════════════ 加载中 ═══════════════
   if (childId && isLoadingTests && !isTestsError && hasPlacementTest === null) {
@@ -914,7 +932,6 @@ export function Home() {
               const masteredCount = masteryStats?.mastered ?? 0
               const learningCount = masteryStats?.learning ?? 0
               const totalCount = masteryStats?.total ?? 0
-              // 使用知识点掌握百分比（已掌握/总数），与 SubjectMasteryPage 一致
               const progressPercent = totalCount > 0 ? Math.round((masteredCount / totalCount) * 100) : 0
               const stars = result ? getScoreStars(result.overallScore) : 0
               const label = progressPercent >= 80 ? '太棒啦！' : progressPercent >= 50 ? '很不错！' : progressPercent > 0 ? '继续加油' : '开始学习'
@@ -1033,6 +1050,39 @@ export function Home() {
                 </motion.div>
               )
             })}
+
+            {/* 重新评测按钮 */}
+            <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6 }}
+              whileTap={{ scale: 0.96 }}
+              whileHover={{ scale: 1.02 }}
+              onClick={(e) => { e.stopPropagation(); setShowResetConfirm(true) }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '12px 20px',
+                borderRadius: '16px',
+                border: `1.5px dashed ${T.textLight}`,
+                background: 'transparent',
+                cursor: 'pointer',
+                alignSelf: 'center',
+                marginTop: '4px',
+              }}
+            >
+              <RefreshIcon />
+              <span style={{
+                fontFamily: T.fontBody,
+                fontSize: '14px',
+                color: T.textMedium,
+                fontWeight: 600,
+              }}>
+                重新评测
+              </span>
+            </motion.button>
           </motion.div>
         )}
       </motion.div>
@@ -1428,6 +1478,140 @@ export function Home() {
          底部间距（给 BottomNav 留空间）
          ═══════════════════════════════════ */}
       <div style={{ height: '24px' }} />
+
+      {/* ═══════════════════════════════════
+         重新评测确认弹窗
+         ═══════════════════════════════════ */}
+      <AnimatePresence>
+        {showResetConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => !isResetting && setShowResetConfirm(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(0,0,0,0.35)',
+              backdropFilter: 'blur(6px)',
+              padding: '24px',
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0, y: 30 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.8, opacity: 0, y: 30 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                backgroundColor: T.cardBg,
+                borderRadius: T.cardRadius,
+                boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+                padding: '32px 28px',
+                maxWidth: '340px',
+                width: '100%',
+                textAlign: 'center',
+              }}
+            >
+              <div style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '20px',
+                background: T.warningBg,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 20px',
+                fontSize: '32px',
+              }}>
+                🔄
+              </div>
+              <h3 style={{
+                fontFamily: T.fontDisplay,
+                fontSize: '20px',
+                fontWeight: 700,
+                color: T.textDark,
+                margin: '0 0 10px',
+              }}>
+                确认重新评测？
+              </h3>
+              <p style={{
+                fontFamily: T.fontBody,
+                fontSize: '14px',
+                color: T.textMedium,
+                lineHeight: 1.6,
+                margin: '0 0 24px',
+              }}>
+                重新评测将清除所有科目的评测记录和已缓存的课程内容，需要重新完成入学测评。
+              </p>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowResetConfirm(false)}
+                  disabled={isResetting}
+                  style={{
+                    flex: 1,
+                    padding: '14px',
+                    borderRadius: '16px',
+                    border: `1.5px solid #E2E8F0`,
+                    background: T.cardBg,
+                    fontFamily: T.fontDisplay,
+                    fontSize: '15px',
+                    fontWeight: 600,
+                    color: T.textMedium,
+                    cursor: isResetting ? 'not-allowed' : 'pointer',
+                    opacity: isResetting ? 0.5 : 1,
+                  }}
+                >
+                  取消
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleResetPlacement}
+                  disabled={isResetting}
+                  style={{
+                    flex: 1,
+                    padding: '14px',
+                    borderRadius: '16px',
+                    border: 'none',
+                    background: isResetting
+                      ? T.textLight
+                      : `linear-gradient(135deg, ${T.sunOrange} 0%, ${T.candyPink} 100%)`,
+                    fontFamily: T.fontDisplay,
+                    fontSize: '15px',
+                    fontWeight: 700,
+                    color: T.textWhite,
+                    cursor: isResetting ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    boxShadow: isResetting ? 'none' : `0 6px 20px rgba(255, 140, 66, 0.35)`,
+                  }}
+                >
+                  {isResetting ? (
+                    <>
+                      <motion.span
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                        style={{ display: 'inline-block' }}
+                      >
+                        ⏳
+                      </motion.span>
+                      重置中...
+                    </>
+                  ) : '确认重置'}
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
