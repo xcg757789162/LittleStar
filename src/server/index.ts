@@ -403,16 +403,18 @@ app.get('/api/pre-generate/status', async (req, res) => {
     // 统一查询所有相关任务（活跃 + 已完成 + 最近失败），按创建时间排序
     // 确保 UI 能按正确顺序展示所有课堂（含已完成的），避免标签偏移
     const { rows } = await pool.query(
-      `SELECT id, status, progress, current_step, knowledge_node_id, date, error,
-              retry_count, created_at, updated_at
-       FROM api.generation_tasks
-       WHERE child_id = $1
+      `SELECT t.id, t.status, t.progress, t.current_step, t.knowledge_node_id,
+              t.date, t.error, t.retry_count, t.created_at, t.updated_at,
+              kn.name AS knowledge_node_name
+       FROM api.generation_tasks t
+       LEFT JOIN api.knowledge_nodes kn ON kn.id = t.knowledge_node_id
+       WHERE t.child_id = $1
          AND (
-           status IN ('pending', 'running')
-           OR (status = 'completed' AND completed_at > NOW() - INTERVAL '1 hour')
-           OR (status = 'failed' AND updated_at > NOW() - INTERVAL '10 minutes')
+           t.status IN ('pending', 'running')
+           OR (t.status = 'completed' AND t.completed_at > NOW() - INTERVAL '1 hour')
+           OR (t.status = 'failed' AND t.updated_at > NOW() - INTERVAL '10 minutes')
          )
-       ORDER BY created_at ASC, id ASC`,
+       ORDER BY t.created_at ASC, t.id ASC`,
       [childId],
     )
 
@@ -439,6 +441,7 @@ app.get('/api/pre-generate/status', async (req, res) => {
         progress: r.progress,
         currentStep: r.current_step,
         knowledgeNodeId: r.knowledge_node_id,
+        knowledgeNodeName: r.knowledge_node_name || '',
         date: r.date,
         error: r.error,
         retryCount: r.retry_count,

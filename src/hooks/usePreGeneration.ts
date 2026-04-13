@@ -39,6 +39,7 @@ export type PreGenerationStatus = 'idle' | 'checking' | 'generating' | 'complete
 export interface TaskProgressInfo {
   id: number
   knowledgeNodeId: string
+  knowledgeNodeName: string
   status: string
   progress: number
   currentStep: string | null
@@ -115,6 +116,7 @@ interface BackendStatusTask {
   progress: number
   currentStep: string | null
   knowledgeNodeId: string
+  knowledgeNodeName: string
   date: string
   error: string | null
   retryCount: number
@@ -257,6 +259,7 @@ export function usePreGeneration(
         setTaskDetails(data.tasks.map((t) => ({
           id: t.id,
           knowledgeNodeId: t.knowledgeNodeId,
+          knowledgeNodeName: t.knowledgeNodeName,
           status: t.status,
           progress: t.status === 'completed' ? 100 : t.progress,
           currentStep: t.currentStep,

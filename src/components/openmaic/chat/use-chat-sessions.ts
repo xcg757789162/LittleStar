@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import { createLogger } from '@/lib/openmaic/logger';
 
 const log = createLogger('ChatSessions');
+const modelLog = createLogger('LLM');
 
 interface UseChatSessionsOptions {
   onLiveSpeech?: (text: string | null, agentId?: string | null) => void;
@@ -496,6 +497,12 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
           whiteboardOpen: useCanvasStore.getState().whiteboardOpen,
         };
 
+        modelLog.info(`[chat] 调用模型 turn=${turnCount + 1}`, {
+          model: requestTemplate.model,
+          agents: requestTemplate.config.agentIds.length,
+          messagesCount: currentMessages.length,
+        });
+
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -510,6 +517,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
         if (!response.ok) {
           const errorText = await response.text();
+          modelLog.error(`[chat] 模型调用失败: HTTP ${response.status}`);
           throw new Error(`API error: ${response.status} - ${errorText}`);
         }
 

@@ -443,6 +443,25 @@ export function NativeClassroom() {
     }
   }, [phase, selectedSubject, preGeneration.status, loadLessons]);
 
+  // 当单个任务完成时也刷新缓存列表（不等所有任务完成）
+  useEffect(() => {
+    if (phase === 'lesson-picker' && selectedSubject && preGeneration.completedCount > 0
+      && (preGeneration.status === 'checking' || preGeneration.status === 'generating')) {
+      void loadLessons(selectedSubject);
+    }
+  }, [phase, selectedSubject, preGeneration.completedCount, preGeneration.status, loadLessons]);
+
+  // 正在生成但尚未缓存的任务（排除已完成/已缓存的）
+  const generatingTasks = useMemo(() => {
+    if (preGeneration.status !== 'checking' && preGeneration.status !== 'generating') return [];
+    const cachedNodeIds = new Set(cachedLessons.map((l) => l.knowledgeNodeId));
+    return preGeneration.taskDetails.filter(
+      (t) => (t.status === 'pending' || t.status === 'running') && !cachedNodeIds.has(t.knowledgeNodeId),
+    );
+  }, [preGeneration.status, preGeneration.taskDetails, cachedLessons]);
+
+  const hasAnyContent = cachedLessons.length > 0 || generatingTasks.length > 0;
+
   const isSubjectPending =
     cachedLessons.length === 0 &&
     (preGeneration.status === 'checking' || preGeneration.status === 'generating');
@@ -492,7 +511,7 @@ export function NativeClassroom() {
                 const isSelected = selectedSubject === subject.key;
                 return (
                   <motion.button key={subject.key}
-                    onClick={() => { if (isCompleted) void handleSubjectSelect(subject.key); }}
+                    onClick={() => { if (isCompleted) setSelectedSubject(subject.key); }}
                     whileTap={isCompleted ? { scale: 0.93 } : undefined}
                     whileHover={isCompleted ? { scale: 1.05 } : undefined}
                     style={{
@@ -515,6 +534,35 @@ export function NativeClassroom() {
                 );
               })}
             </div>
+
+            <AnimatePresence>
+              {selectedSubject && completedSubjects.has(selectedSubject) && (
+                <motion.button
+                  key="start-btn"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 12 }}
+                  whileTap={{ scale: 0.95 }}
+                  whileHover={{ scale: 1.03 }}
+                  onClick={() => void handleSubjectSelect(selectedSubject)}
+                  style={{
+                    padding: '14px 48px',
+                    borderRadius: '22px',
+                    border: 'none',
+                    background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,
+                    color: T.textWhite,
+                    fontSize: '18px',
+                    fontWeight: 'bold',
+                    fontFamily: T.fontDisplay,
+                    cursor: 'pointer',
+                    boxShadow: '0 6px 20px rgba(255,140,66,0.35)',
+                    marginTop: '8px',
+                  }}
+                >
+                  🚀 开始学习
+                </motion.button>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       )}
@@ -545,7 +593,7 @@ export function NativeClassroom() {
               <motion.span style={{ fontSize: '48px' }} animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}>🌟</motion.span>
               <p style={{ fontSize: '18px', color: T.textMedium, fontFamily: T.fontDisplay }}>正在加载课程...</p>
             </div>
-          ) : cachedLessons.length > 0 ? (
+          ) : hasAnyContent ? (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
               style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
               <div style={{ textAlign: 'center' }}>
@@ -570,6 +618,105 @@ export function NativeClassroom() {
                     />
                   );
                 })}
+                {/* 正在生成的课堂占位卡片 */}
+                {generatingTasks.map((task, idx) => (
+                  <motion.div
+                    key={`gen-${task.id}`}
+                    layout
+                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ delay: (cachedLessons.length + idx) * 0.08, type: 'spring', stiffness: 300, damping: 24 }}
+                    style={{
+                      position: 'relative',
+                      width: '100%',
+                      maxWidth: 320,
+                      borderRadius: 22,
+                      overflow: 'hidden',
+                      cursor: 'default',
+                      background: '#FFFFFF',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                      border: '3px dashed #E0D6CC',
+                    }}
+                  >
+                    {/* 缩略图区域 — "生成中" */}
+                    <div style={{
+                      width: '100%',
+                      height: 150,
+                      background: 'linear-gradient(135deg, #FFF5EE 0%, #FFF0E6 50%, #FFE8D6 100%)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                    }}>
+                      <motion.span
+                        style={{ fontSize: 28 }}
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+                      >
+                        ⚙️
+                      </motion.span>
+                      <span style={{
+                        fontSize: 16,
+                        fontWeight: 700,
+                        color: T.sunOrange,
+                        fontFamily: T.fontDisplay,
+                        letterSpacing: 2,
+                      }}>
+                        生成中
+                      </span>
+                      {task.status === 'running' && task.progress > 0 && (
+                        <div style={{ width: '60%', height: 4, borderRadius: 999, background: '#F5E6DC', overflow: 'hidden' }}>
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${task.progress}%` }}
+                            transition={{ duration: 0.4 }}
+                            style={{ height: '100%', borderRadius: 999, background: `linear-gradient(90deg, ${T.sunOrange}, ${T.candyPink})` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    {/* 序号徽标 */}
+                    <div style={{
+                      position: 'absolute',
+                      top: 8,
+                      left: 8,
+                      width: 26,
+                      height: 26,
+                      borderRadius: '50%',
+                      background: '#D5D5D5',
+                      color: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      fontFamily: T.fontDisplay,
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                    }}>
+                      {cachedLessons.length + idx + 1}
+                    </div>
+                    {/* 标题区域 */}
+                    <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <p style={{
+                        fontSize: 16,
+                        fontWeight: 700,
+                        fontFamily: "'Nunito', 'PingFang SC', sans-serif",
+                        color: T.textLight,
+                        margin: 0,
+                        lineHeight: 1.35,
+                        overflow: 'hidden',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        minHeight: '2.7em',
+                        flex: 1,
+                      }}>
+                        {task.knowledgeNodeName || `课堂 ${cachedLessons.length + idx + 1}`}
+                      </p>
+                    </div>
+                  </motion.div>
+                ))}
               </div>
             </motion.div>
           ) : (

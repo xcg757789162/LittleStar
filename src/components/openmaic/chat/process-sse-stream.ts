@@ -23,6 +23,11 @@ export async function processSSEStream(
   const decoder = new TextDecoder();
   let sseBuffer = '';
   let currentMessageId: string | null = null;
+  const t0 = Date.now();
+  let agentCount = 0;
+  let actionCount = 0;
+
+  log.info(`[${sessionId}] SSE 流开始`);
 
   try {
     while (true) {
@@ -49,6 +54,8 @@ export async function processSSEStream(
             case 'agent_start': {
               const { messageId, agentId, agentName, agentAvatar, agentColor } = event.data;
               currentMessageId = messageId;
+              agentCount++;
+              log.info(`[${sessionId}] Agent 响应开始: ${agentName ?? agentId}`);
               buffer.pushAgentStart({
                 messageId,
                 agentId,
@@ -78,6 +85,7 @@ export async function processSSEStream(
               const targetId = event.data.messageId ?? currentMessageId;
               if (!targetId) break;
               if (signal?.aborted) break;
+              actionCount++;
               buffer.pushAction({
                 messageId: targetId,
                 actionId: event.data.actionId,
@@ -99,11 +107,15 @@ export async function processSSEStream(
             }
 
             case 'done': {
+              const elapsed = Date.now() - t0;
+              log.info(`[${sessionId}] SSE 流完成`, { elapsed: `${elapsed}ms`, agents: agentCount, actions: actionCount });
               buffer.pushDone(event.data);
               break;
             }
 
             case 'error': {
+              const elapsed = Date.now() - t0;
+              log.error(`[${sessionId}] SSE 流错误 (${elapsed}ms):`, event.data.message);
               sseError = new Error(event.data.message);
               buffer.pushError(event.data.message);
               break;

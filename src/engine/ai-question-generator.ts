@@ -120,7 +120,10 @@ export async function generateQuestion(
     return null
   }
 
+  log.info(`开始生成题目: ${node.name}`, { model: settings.llmModel })
+
   let lastError = ''
+  const t0 = Date.now()
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
@@ -132,9 +135,8 @@ export async function generateQuestion(
     const { result, retryable, error } = await attemptGenerate(node, gradeLevel, subject, settings, phase2Context)
 
     if (result) {
-      if (attempt > 0) {
-        log.info(`重试成功 (${node.name})，第 ${attempt + 1} 次尝试`)
-      }
+      const elapsed = Date.now() - t0
+      log.info(`题目生成成功: ${node.name}`, { elapsed: `${elapsed}ms`, difficulty: result.difficulty, attempt: attempt + 1 })
       return result
     }
 
