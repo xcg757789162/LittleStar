@@ -48,6 +48,12 @@ export interface LessonCardProps {
   index: number
   /** 点击回调（仅未锁定时触发） */
   onTap: () => void
+  /** 是否处于选择模式 */
+  selectable?: boolean
+  /** 是否被选中 */
+  selected?: boolean
+  /** 选中切换回调 */
+  onToggleSelect?: () => void
 }
 
 export function LessonCard({
@@ -58,6 +64,9 @@ export function LessonCard({
   isLocked,
   index,
   onTap,
+  selectable,
+  selected,
+  onToggleSelect,
 }: LessonCardProps) {
   const [imgError, setImgError] = useState(false)
   const thumbRef = useRef<HTMLDivElement>(null)
@@ -80,10 +89,12 @@ export function LessonCard({
   const showEmoji = !slide && (!thumbnailUrl || imgError)
 
   const handleTap = useCallback(() => {
-    if (!isLocked) {
+    if (selectable) {
+      onToggleSelect?.()
+    } else if (!isLocked) {
       onTap()
     }
-  }, [isLocked, onTap])
+  }, [isLocked, onTap, selectable, onToggleSelect])
 
   const emoji = SUBJECT_EMOJI[subject] ?? '📚'
   const gradient = SUBJECT_GRADIENT[subject] ?? 'linear-gradient(135deg, #FFE0C2, #FFECD2)'
@@ -235,7 +246,7 @@ export function LessonCard({
       </div>
 
       {/* 锁定遮罩 */}
-      {isLocked && (
+      {isLocked && !selectable && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -269,6 +280,31 @@ export function LessonCard({
             按顺序解锁
           </span>
         </motion.div>
+      )}
+
+      {/* 选择模式遮罩 */}
+      {selectable && (
+        <div style={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          width: 28,
+          height: 28,
+          borderRadius: '50%',
+          border: selected ? 'none' : '2.5px solid #CCC',
+          background: selected ? accentColor : 'rgba(255,255,255,0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 14,
+          color: '#FFF',
+          fontWeight: 800,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          zIndex: 2,
+          transition: 'all 0.15s ease',
+        }}>
+          {selected && '✓'}
+        </div>
       )}
     </motion.div>
   )

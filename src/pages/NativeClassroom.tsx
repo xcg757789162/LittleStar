@@ -24,7 +24,7 @@ import { syncSettingsToOpenMAIC } from '@/stores/openmaic/settings-sync';
 import { ClassroomCache, type CacheListItem } from '@/services/openmaic/cache';
 import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store';
 import { usePlacementTests } from '@/hooks/queries';
-import { usePreGeneration } from '@/hooks/usePreGeneration';
+import { usePreGeneration, buildPreGenerationChildSettings } from '@/hooks/usePreGeneration';
 import { useChildStore } from '@/stores/childStore';
 import { useLearningStore } from '@/stores/learningStore';
 import { SessionSummary } from '@/components/learning/SessionSummary';
@@ -103,6 +103,11 @@ export function NativeClassroom() {
   const [currentClassroom, setCurrentClassroom] = useState<Classroom | null>(null);
   const [showCompleteCelebration, setShowCompleteCelebration] = useState(false);
   const [sessionSummary, setSessionSummary] = useState<{ questionsCompleted: number; correctCount: number; accuracy: number; subject: Subject } | null>(null);
+
+  // 选择模式（用于重新生成）
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   // Bridge Store
   const loadClassroom = useClassroomBridgeStore((s) => s.loadClassroom);
@@ -356,6 +361,75 @@ export function NativeClassroom() {
     navigate('/');
   }, [phase, endSession, resetBridge, navigate]);
 
+  const toggleSelectMode = useCallback(() => {
+    setSelectMode((prev) => {
+      if (prev) setSelectedKeys(new Set());
+      return !prev;
+    });
+  }, []);
+
+  const toggleSelect = useCallback((key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedKeys.size === cachedLessons.length) {
+      setSelectedKeys(new Set());
+    } else {
+      setSelectedKeys(new Set(cachedLessons.map((l) => `${l.knowledgeNodeId}::${l.date}`)));
+    }
+  }, [cachedLessons, selectedKeys.size]);
+
+  const handleRegenerate = useCallback(async () => {
+    if (selectedKeys.size === 0 || !childId || !currentChild) return;
+    setIsRegenerating(true);
+
+    try {
+      const numChildId = Number(childId);
+      const lessonsToRegen = cachedLessons.filter(
+        (l) => selectedKeys.has(`${l.knowledgeNodeId}::${l.date}`),
+      );
+
+      // 1. Delete selected caches
+      for (const lesson of lessonsToRegen) {
+        await cacheRef.current!.deleteClassroom(lesson.knowledgeNodeId, lesson.date).catch(() => {});
+      }
+
+      // 2. Build backend tasks
+      const tasks = lessonsToRegen.map((lesson) => ({
+        knowledgeNodeId: lesson.knowledgeNodeId,
+        date: lesson.date,
+        requirement: `为一位 ${currentChild.age} 岁的 ${currentChild.gradeLevel} 学生重新生成关于「${lesson.classroomTitle}」的课堂。包含教学和测验环节，以趣味互动为主。`,
+        language: 'zh-CN',
+      }));
+
+      // 3. Submit to backend
+      const childSettings = buildPreGenerationChildSettings(currentChild);
+      await fetch('/api/pre-generate/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childId: numChildId, childSettings, tasks }),
+      });
+
+      // 4. Exit select mode and reload lessons
+      setSelectMode(false);
+      setSelectedKeys(new Set());
+      if (selectedSubject) await loadLessons(selectedSubject);
+
+      // 5. Trigger polling to track progress
+      preGeneration.triggerGeneration();
+    } catch (err) {
+      console.error('[NativeClassroom] 重新生成失败:', err);
+    } finally {
+      setIsRegenerating(false);
+    }
+  }, [selectedKeys, childId, currentChild, cachedLessons, selectedSubject, loadLessons, preGeneration]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -447,15 +521,23 @@ export function NativeClassroom() {
 
       {/* ═══ 课程选择器 ═══ */}
       {phase === 'lesson-picker' && (
-        <div style={{ padding: '24px' }}>
+        <div style={{ padding: '24px', paddingBottom: selectMode ? '100px' : '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
             <span style={{ fontSize: '16px', color: T.textMedium, fontFamily: T.fontDisplay, fontWeight: 600 }}>
               📚 选择课程
             </span>
-            <motion.button whileTap={{ scale: 0.95 }} onClick={handleExit}
-              style={{ padding: '8px 18px', borderRadius: '16px', border: '2px solid #FFE8D6', backgroundColor: T.cardBg, fontSize: '14px', cursor: 'pointer', color: T.textMedium, fontWeight: 600 }}>
-              ← 退出
-            </motion.button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {cachedLessons.length > 0 && (
+                <motion.button whileTap={{ scale: 0.95 }} onClick={toggleSelectMode}
+                  style={{ padding: '8px 18px', borderRadius: '16px', border: selectMode ? `2px solid ${T.sunOrange}` : '2px solid #FFE8D6', backgroundColor: selectMode ? '#FFF3E7' : T.cardBg, fontSize: '14px', cursor: 'pointer', color: selectMode ? T.sunOrange : T.textMedium, fontWeight: 600 }}>
+                  {selectMode ? '✕ 取消' : '🔄 管理'}
+                </motion.button>
+              )}
+              <motion.button whileTap={{ scale: 0.95 }} onClick={handleExit}
+                style={{ padding: '8px 18px', borderRadius: '16px', border: '2px solid #FFE8D6', backgroundColor: T.cardBg, fontSize: '14px', cursor: 'pointer', color: T.textMedium, fontWeight: 600 }}>
+                ← 退出
+              </motion.button>
+            </div>
           </div>
 
           {isLoading ? (
@@ -471,17 +553,23 @@ export function NativeClassroom() {
                 <p style={{ fontSize: '14px', color: T.textMedium }}>选择一节课开始学习 ✨</p>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px', width: '100%', maxWidth: '1080px', justifyItems: 'center' }}>
-                {cachedLessons.map((lesson, idx) => (
-                  <LessonCard key={`${lesson.knowledgeNodeId}::${lesson.date}`}
-                    title={lesson.classroomTitle}
-                    thumbnailUrl={lesson.thumbnailUrl}
-                    slide={lesson.firstSlideCanvas}
-                    subject={selectedSubject ?? 'english'}
-                    isLocked={false}
-                    index={idx}
-                    onTap={() => handleStartLesson(lesson.knowledgeNodeId, lesson.date)}
-                  />
-                ))}
+                {cachedLessons.map((lesson, idx) => {
+                  const key = `${lesson.knowledgeNodeId}::${lesson.date}`;
+                  return (
+                    <LessonCard key={key}
+                      title={lesson.classroomTitle}
+                      thumbnailUrl={lesson.thumbnailUrl}
+                      slide={lesson.firstSlideCanvas}
+                      subject={selectedSubject ?? 'english'}
+                      isLocked={false}
+                      index={idx}
+                      onTap={() => handleStartLesson(lesson.knowledgeNodeId, lesson.date)}
+                      selectable={selectMode}
+                      selected={selectedKeys.has(key)}
+                      onToggleSelect={() => toggleSelect(key)}
+                    />
+                  );
+                })}
               </div>
             </motion.div>
           ) : (
@@ -563,6 +651,63 @@ export function NativeClassroom() {
           )}
         </div>
       )}
+
+      {/* ═══ 选择模式底部操作栏 ═══ */}
+      <AnimatePresence>
+        {phase === 'lesson-picker' && selectMode && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            style={{
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              padding: '16px 24px',
+              background: 'rgba(255,255,255,0.92)',
+              backdropFilter: 'blur(12px)',
+              borderTop: '1px solid #FFE8D6',
+              boxShadow: '0 -4px 20px rgba(0,0,0,0.06)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              zIndex: 50,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <motion.button whileTap={{ scale: 0.95 }} onClick={toggleSelectAll}
+                style={{
+                  padding: '8px 16px', borderRadius: '14px',
+                  border: '2px solid #FFE8D6', backgroundColor: T.cardBg,
+                  fontSize: '13px', cursor: 'pointer', color: T.textMedium, fontWeight: 600,
+                }}>
+                {selectedKeys.size === cachedLessons.length ? '取消全选' : '全选'}
+              </motion.button>
+              <span style={{ fontSize: '13px', color: T.textMedium, fontWeight: 600 }}>
+                已选 {selectedKeys.size} / {cachedLessons.length} 节课
+              </span>
+            </div>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={handleRegenerate}
+              disabled={selectedKeys.size === 0 || isRegenerating}
+              style={{
+                padding: '10px 28px', borderRadius: '18px', border: 'none',
+                background: selectedKeys.size === 0
+                  ? '#DDD'
+                  : `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`,
+                color: T.textWhite, fontSize: '15px', fontWeight: 'bold',
+                fontFamily: T.fontDisplay, cursor: selectedKeys.size === 0 ? 'not-allowed' : 'pointer',
+                opacity: isRegenerating ? 0.7 : 1,
+              }}
+            >
+              {isRegenerating ? '⏳ 提交中...' : `🔄 重新生成 (${selectedKeys.size})`}
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ═══ 课堂播放（OpenMAIC Stage 组件） ═══ */}
       {phase === 'playing' && (
