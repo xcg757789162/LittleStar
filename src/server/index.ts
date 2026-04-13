@@ -12,7 +12,10 @@
  */
 
 import express from 'express'
+import { generateObject } from 'ai'
+import { aiQuestionSchema, validateAIQuestion } from '../engine/ai-question-schema.js'
 import { pool } from './db.js'
+import { createQuestionModel, type QuestionGenerationSettings } from './question-model.js'
 import { startTaskProcessor, stopTaskProcessor, triggerProcessing } from './services/task-processor.js'
 
 const app = express()
@@ -22,6 +25,128 @@ const PORT = parseInt(process.env.PREGEN_PORT || '3003', 10)
 
 /** 单次提交的最大任务数 */
 const MAX_TASKS_PER_SUBMIT = 50
+/** 评测题目 AI 超时 */
+const QUESTION_TIMEOUT_MS = 10_000
+
+function buildQuestionSystemPrompt(
+  nodeName: string,
+  nodeDescription: string,
+  gradeLevel: string,
+  subject: string,
+): string {
+  const gradeAgeMap: Record<string, string> = {
+    'middle-kindergarten': '中班（4-5岁）',
+    'senior-kindergarten': '大班（5-6岁）',
+    'grade-1': '一年级（6-7岁）',
+    'grade-2': '二年级（7-8岁）',
+    'grade-3': '三年级（8-9岁）',
+    'grade-4': '四年级（9-10岁）',
+    'grade-5': '五年级（10-11岁）',
+    'grade-6': '六年级（11-12岁）',
+  }
+  const subjectNameMap: Record<string, string> = {
+    math: '数学',
+    chinese: '语文',
+    english: '英语',
+  }
+
+  const ageDescription = gradeAgeMap[gradeLevel] || gradeLevel
+  const subjectName = subjectNameMap[subject] || subject
+
+  return `你是一个面向幼儿的教育评测出题专家。
+
+## 任务
+根据给定的知识点，生成一道四选一选择题，用于评估 ${ageDescription} 孩子对 ${subjectName} 科目中「${nodeName}」知识点的掌握程度。
+
+## 知识点信息
+- 名称：${nodeName}
+- 描述：${nodeDescription}
+- 科目：${subjectName}
+- 年龄段：${ageDescription}
+
+## 要求
+1. 题干使用简单口语化中文${subject === 'english' ? '（可中英混合）' : ''}，不超过 30 字，可用 emoji
+2. 恰好 4 个选项，每个选项含 text（≤8 字）和 emoji
+3. 正确答案的位置要随机（不总是第一个或最后一个）
+4. 干扰项合理，不要太离谱
+5. 难度 1-5（1=基本认知, 3=理解应用, 5=综合能力）
+6. 只输出 JSON，不要其他文字`
+}
+
+// ============================================================
+// POST /api/pre-generate/question — 评测题目同源代理
+// ============================================================
+app.post('/api/pre-generate/question', async (req, res) => {
+  try {
+    const {
+      node,
+      gradeLevel,
+      subject,
+      settings,
+    } = req.body as {
+      node?: { id: string; name: string; description: string }
+      gradeLevel?: string
+      subject?: string
+      settings?: QuestionGenerationSettings
+    }
+
+    if (!node?.id || !node.name || typeof node.description !== 'string') {
+      res.status(400).json({ error: 'node with id/name/description is required' })
+      return
+    }
+
+    if (!gradeLevel || !subject) {
+      res.status(400).json({ error: 'gradeLevel and subject are required' })
+      return
+    }
+
+    if (!settings?.llmModel || !settings.llmApiKey) {
+      res.status(400).json({ error: 'llmModel and llmApiKey are required' })
+      return
+    }
+
+    const model = createQuestionModel(settings)
+    if (!model) {
+      res.status(400).json({ error: 'invalid llm settings' })
+      return
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), QUESTION_TIMEOUT_MS)
+
+    try {
+      const systemPrompt = buildQuestionSystemPrompt(
+        node.name,
+        node.description,
+        gradeLevel,
+        subject,
+      )
+
+      const { object } = await generateObject({
+        model,
+        schema: aiQuestionSchema,
+        system: systemPrompt,
+        prompt: `请为知识点「${node.name}」生成一道评测选择题。`,
+        abortSignal: controller.signal,
+      })
+
+      const validated = validateAIQuestion(object)
+      if (!validated) {
+        res.status(502).json({ error: 'generated question failed validation' })
+        return
+      }
+
+      res.json({ question: validated })
+    } finally {
+      clearTimeout(timeout)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const status = error instanceof Error && error.name === 'AbortError' ? 504 : 502
+    console.error('[API] POST /api/pre-generate/question 错误:', error)
+    res.status(status).json({ error: message || 'question generation failed' })
+  }
+})
 
 // ============================================================
 // POST /api/pre-generate — 提交生成任务

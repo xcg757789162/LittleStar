@@ -294,6 +294,24 @@ run_deep_verification() {
   # ---- 4. Pre-generation Service（可选） ----
   echo -e "  ${BOLD}▸ Pre-generation Service (可选)${NC}"
   verify_endpoint_optional "Pre-gen health"       "${BASE_URL}/api/pre-generate/health"
+  log_check "Pre-gen question route"
+  local pregen_question_code
+  pregen_question_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -X POST "${BASE_URL}/api/pre-generate/question" \
+    -H 'Content-Type: application/json' \
+    -d '{}' 2>/dev/null || echo "000")
+  if [ "$pregen_question_code" = "400" ]; then
+    echo -e "${GREEN}✓${NC} (400，路由已存在)"
+    VERIFY_PASS=$((VERIFY_PASS + 1))
+  elif [ "$pregen_question_code" = "404" ]; then
+    echo -e "${YELLOW}~ 仍是旧构建（question 路由不存在）${NC}"
+    VERIFY_WARN=$((VERIFY_WARN + 1))
+  elif [ "$pregen_question_code" = "000" ]; then
+    echo -e "${YELLOW}~ 服务未运行（可选）${NC}"
+    VERIFY_WARN=$((VERIFY_WARN + 1))
+  else
+    echo -e "${YELLOW}~ question 路由返回 ${pregen_question_code}${NC}"
+    VERIFY_WARN=$((VERIFY_WARN + 1))
+  fi
   echo ""
 
   # ---- 5. OpenMAIC 服务 ----
@@ -432,6 +450,12 @@ case "$MODE" in
     if echo "$ALL_CHANGES" | grep -qE '^(src/|index\.html|vite\.config|tsconfig|package\.json|package-lock\.json|public/)'; then
       UPDATE_FRONTEND=true
       log_info "📦 前端源码变更 → npx vite build（volume 自动同步）"
+    fi
+
+    # Pre-generation 后端源码 → 需要重建 app 容器
+    if echo "$ALL_CHANGES" | grep -qE '^(src/server/|src/engine/ai-question-schema\.ts|src/types/models\.ts|src/shared/backend-llm-providers\.ts|src/services/openmaic/pipeline-types\.ts|tsconfig\.server\.json|scripts/build-server\.sh)'; then
+      UPDATE_AUTH=true
+      log_info "🧠 Pre-generation 后端源码变更 → 需要重建 app 容器"
     fi
 
     # Auth Service → 需要重建镜像

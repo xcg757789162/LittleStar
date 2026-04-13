@@ -39,7 +39,11 @@ RUN npm ci --ignore-scripts
 # 复制 TypeScript 配置和源码
 COPY tsconfig.server.json ./
 COPY src/server/ ./src/server/
+COPY src/engine/ ./src/engine/
+COPY src/types/ ./src/types/
+COPY src/shared/ ./src/shared/
 COPY src/services/openmaic/pipeline-types.ts ./src/services/openmaic/pipeline-types.ts
+COPY src/lib/openmaic/media/types.ts ./src/lib/openmaic/media/types.ts
 
 # 编译 + 路径别名解析
 RUN npx tsc -p tsconfig.server.json && npx tsc-alias -p tsconfig.server.json

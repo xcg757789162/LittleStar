@@ -136,7 +136,7 @@ function resolveClassroomTitle(classroom: Classroom): string {
   }
 
   const stageName = classroom.stage?.name
-  if (!isPlaceholderTitle(stageName)) {
+  if (typeof stageName === 'string' && !isPlaceholderTitle(stageName)) {
     return stageName
   }
 
@@ -148,7 +148,7 @@ function isRenderableNativeScene(scene: Scene): boolean {
     return false
   }
 
-  const content = scene.content as Record<string, unknown>
+  const content = scene.content as unknown as Record<string, unknown>
 
   if (content.type === 'slide') {
     const canvas = content.canvas as Record<string, unknown> | undefined
@@ -385,8 +385,9 @@ export class ClassroomCache {
 
   /**
    * 获取缓存条目数量
+   * @param subject 可选，按科目统计缓存数量
    */
-  async getCacheSize(): Promise<number> {
+  async getCacheSize(subject?: string): Promise<number> {
     const entries = await this.store.entries()
     let validCount = 0
 
@@ -396,6 +397,12 @@ export class ClassroomCache {
         await this.store.delete(key)
         continue
       }
+
+      const inferredSubject = inferSubjectFromNodeId(entry.knowledgeNodeId)
+      if (subject && inferredSubject !== subject) {
+        continue
+      }
+
       validCount++
     }
 

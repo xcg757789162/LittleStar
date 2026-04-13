@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { ClassroomCache } from '../cache'
 import type { Classroom } from '../types'
 
@@ -15,9 +15,9 @@ function createMockClassroom(overrides: Partial<Classroom> = {}): Classroom {
         type: 'slide',
         content: {
           type: 'slide',
-          canvas: {
+          canvas: ({
             elements: [{ type: 'text', content: '<p>Let us learn!</p>' }],
-          },
+          } as unknown) as never,
         },
         actions: [],
       },
@@ -211,6 +211,16 @@ describe('ClassroomCache', () => {
       }))
 
       await expect(cache.getCacheSize()).resolves.toBe(1)
+    })
+
+    it('should support counting cache size by subject', async () => {
+      await cache.saveClassroom('math-counting-1', '2026-04-08', createMockClassroom({ id: 'math-1' }))
+      await cache.saveClassroom('english-letter-a', '2026-04-08', createMockClassroom({ id: 'english-1' }))
+      await cache.saveClassroom('english-letter-b', '2026-04-08', createMockClassroom({ id: 'english-2' }))
+
+      await expect(cache.getCacheSize('english')).resolves.toBe(2)
+      await expect(cache.getCacheSize('math')).resolves.toBe(1)
+      await expect(cache.getCacheSize('chinese')).resolves.toBe(0)
     })
   })
 

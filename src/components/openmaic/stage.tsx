@@ -4,7 +4,9 @@ import { useStageStore } from '@/lib/openmaic/store';
 import { PENDING_SCENE_ID } from '@/lib/openmaic/store/stage';
 import { useCanvasStore } from '@/lib/openmaic/store/canvas';
 import { useSettingsStore } from '@/lib/openmaic/store/settings';
+import { useMediaGenerationStore } from '@/lib/openmaic/store/media-generation';
 import { useI18n } from '@/lib/openmaic/hooks/use-i18n';
+import { generateMediaForOutlines } from '@/lib/openmaic/media/media-orchestrator';
 import { SceneSidebar } from './stage/scene-sidebar';
 import { Header } from './header';
 import { CanvasArea } from '@/components/openmaic/canvas/canvas-area';
@@ -47,6 +49,8 @@ export function Stage({
   const { t } = useI18n();
   const { mode, getCurrentScene, scenes, currentSceneId, setCurrentSceneId, generatingOutlines } =
     useStageStore();
+  const stage = useStageStore.use.stage();
+  const outlines = useStageStore.use.outlines();
   const failedOutlines = useStageStore.use.failedOutlines();
 
   const currentScene = getCurrentScene();

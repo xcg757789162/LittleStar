@@ -44,10 +44,32 @@ export interface PreGenerationState {
 }
 
 const SUBJECTS: Subject[] = ['math', 'chinese', 'english']
+const SUBJECT_LABELS: Record<Subject, string> = {
+  math: '数学',
+  chinese: '语文',
+  english: '英语',
+}
+const MIN_CACHE_SIZE_PER_SUBJECT = 1
 
 export function getMinCacheSizeForCompletedSubjects(completedSubjectCount: number): number {
-  if (completedSubjectCount <= 0) return 0
-  return Math.min(SUBJECTS.length, completedSubjectCount)
+  return Math.max(0, Math.min(completedSubjectCount, SUBJECTS.length))
+}
+
+export function getSubjectsMissingCache(
+  completedSubjects: Iterable<Subject>,
+  cacheCounts: Partial<Record<Subject, number>>,
+  minimumPerSubject = MIN_CACHE_SIZE_PER_SUBJECT,
+): Subject[] {
+  const missing: Subject[] = []
+
+  for (const subject of completedSubjects) {
+    const count = cacheCounts[subject] ?? 0
+    if (count < minimumPerSubject) {
+      missing.push(subject)
+    }
+  }
+
+  return missing
 }
 
 /** 轮询间隔（毫秒） */
@@ -109,7 +131,7 @@ export function buildPreGenerationChildSettings(
   )
 
   return {
-    ...(child.settings as Record<string, unknown>),
+    ...(child.settings as unknown as Record<string, unknown>),
     ...(userNickname ? { userNickname } : {}),
     ...(userBio ? { userBio } : {}),
   }
@@ -170,7 +192,6 @@ export function usePreGeneration(
   const currentChild = useChildStore((s) => s.currentChild)
   const llmModel = currentChild?.settings?.llmModel ?? ''
   const llmApiKey = currentChild?.settings?.llmApiKey ?? ''
-  const minCacheSize = getMinCacheSizeForCompletedSubjects(completedSubjectCount)
 
   /**
    * 停止轮询
@@ -273,26 +294,39 @@ export function usePreGeneration(
       const tests = await apiClient.get<PlacementTest>('/placement_tests', {
         filters: [{ column: 'childId', operator: 'eq', value: numChildId }],
       })
-      const completedSubjects = new Set(tests.map((t) => t.subject as Subject))
-      const requiredCacheSize = getMinCacheSizeForCompletedSubjects(completedSubjects.size)
-      log.info('已完成评测科目:', [...completedSubjects])
+      const completedSubjects = [...new Set(tests.map((t) => t.subject as Subject))]
+      log.info('已完成评测科目:', completedSubjects)
 
-      if (completedSubjects.size === 0) {
+      if (completedSubjects.length === 0) {
         log.info('无已完成评测，跳过')
         setStatus('idle')
         isRunningRef.current = false
         return
       }
 
-      // 2. 检查缓存水位线
+      // 2. 按学科检查缓存水位线，至少保证每个已评测学科都有自己的课堂缓存
       const cache = new ClassroomCache(new PostgresCacheStore(numChildId))
-      const existingSize = await cache.getCacheSize()
-      log.info('当前缓存数量:', existingSize, '/ 最小水位线:', requiredCacheSize)
+      const cacheCounts = Object.fromEntries(
+        await Promise.all(
+          SUBJECTS.map(async (subject) => [subject, await cache.getCacheSize(subject)] as const),
+        ),
+      ) as Record<Subject, number>
+      const subjectsNeedingCache = getSubjectsMissingCache(
+        completedSubjects,
+        cacheCounts,
+      )
+      const completedCacheCount = completedSubjects.reduce(
+        (sum, subject) => sum + (cacheCounts[subject] ?? 0),
+        0,
+      )
 
-      if (existingSize >= requiredCacheSize) {
-        log.info('缓存已达水位线，无需生成')
+      log.info('按学科缓存统计:', cacheCounts, '待补学科:', subjectsNeedingCache)
+
+      if (subjectsNeedingCache.length === 0) {
+        log.info('各已评测学科缓存已达最低水位线，无需生成')
         setStatus('completed')
-        setCompletedCount(existingSize)
+        setCompletedCount(completedCacheCount)
+        setStageText('各学科课程缓存已就绪')
         isRunningRef.current = false
         return
       }
@@ -309,7 +343,7 @@ export function usePreGeneration(
 
       // 4. 课程规划（纯算法，前端即可完成）
       setStatus('generating')
-      setStageText('正在规划课程...')
+      setStageText(`正在为 ${subjectsNeedingCache.map((subject) => SUBJECT_LABELS[subject]).join(' / ')} 准备课程...`)
 
       const planner = new LessonPlanner()
       const reqGenerator = new RequirementGenerator()
@@ -323,13 +357,12 @@ export function usePreGeneration(
         masteryMap.set(record.knowledgeNodeId, record.masteryLevel)
       }
 
-      // 5. 为每个科目生成任务列表
+      // 5. 仅为缺课学科生成任务列表
       const backendTasks: BackendTask[] = []
       const today = new Date()
       const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
-      for (const subject of SUBJECTS) {
-        if (!completedSubjects.has(subject)) continue
+      for (const subject of subjectsNeedingCache) {
 
         try {
           const nodes = await apiClient.get<KnowledgeNode>('/knowledge_nodes', {
@@ -389,8 +422,7 @@ export function usePreGeneration(
           english: '英语字母乐园',
         }
 
-        for (const subject of SUBJECTS) {
-          if (!completedSubjects.has(subject)) continue
+        for (const subject of subjectsNeedingCache) {
           backendTasks.push({
             knowledgeNodeId: `default-${subject}`,
             date: dateStr,
@@ -484,16 +516,15 @@ export function usePreGeneration(
     if (
       childId &&
       hasPlacementTest === true &&
-      minCacheSize > 0 &&
-      cachedCount < minCacheSize &&
+      completedSubjectCount > 0 &&
       !hasTriggeredRef.current &&
       !isRunningRef.current
     ) {
-      log.info('✅ 条件满足，自动触发预生成')
+      log.info('✅ 条件满足，自动触发预生成检查')
       hasTriggeredRef.current = true
       void runPreGeneration()
     }
-  }, [childId, hasPlacementTest, cachedCount, minCacheSize, runPreGeneration])
+  }, [childId, hasPlacementTest, completedSubjectCount, runPreGeneration, cachedCount])
 
   /**
    * 监听课堂完成事件
@@ -501,26 +532,12 @@ export function usePreGeneration(
   useEffect(() => {
     const handleClassroomCompleted = () => {
       hasTriggeredRef.current = false
-      setTimeout(async () => {
-        if (childId) {
-          try {
-            const cache = new ClassroomCache(new PostgresCacheStore(Number(childId)))
-            const currentSize = await cache.getCacheSize()
-            if (minCacheSize > 0 && currentSize < minCacheSize) {
-              void runPreGeneration()
-            }
-          } catch {
-            void runPreGeneration()
-          }
-        } else {
-          void runPreGeneration()
-        }
-      }, 2000)
+      setTimeout(() => void runPreGeneration(), 2000)
     }
 
     window.addEventListener('classroom-completed', handleClassroomCompleted)
     return () => window.removeEventListener('classroom-completed', handleClassroomCompleted)
-  }, [runPreGeneration, childId, minCacheSize])
+  }, [runPreGeneration, childId])
 
   /**
    * 监听评测完成事件

@@ -24,6 +24,7 @@ import { syncSettingsToOpenMAIC } from '@/stores/openmaic/settings-sync';
 import { ClassroomCache, type CacheListItem } from '@/services/openmaic/cache';
 import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store';
 import { usePlacementTests } from '@/hooks/queries';
+import { usePreGeneration } from '@/hooks/usePreGeneration';
 import { useChildStore } from '@/stores/childStore';
 import { useLearningStore } from '@/stores/learningStore';
 import { SessionSummary } from '@/components/learning/SessionSummary';
@@ -92,6 +93,7 @@ export function NativeClassroom() {
     if (!placementTests) return new Set<Subject>();
     return new Set(placementTests.map((t) => t.subject as Subject));
   }, [placementTests]);
+  const hasPlacementTest = placementTests ? placementTests.length > 0 : null;
 
   // 页面状态
   const [phase, setPhase] = useState<Phase>(locationState?.subject ? 'lesson-picker' : 'subject-select');
@@ -121,6 +123,13 @@ export function NativeClassroom() {
       ? new ClassroomCache(new PostgresCacheStore(Number(childId)))
       : new ClassroomCache();
   }
+
+  const preGeneration = usePreGeneration(
+    childId,
+    hasPlacementTest,
+    cachedLessons.length,
+    completedSubjects.size,
+  );
 
   // 追踪当前课堂
   const currentNodeIdRef = useRef<string>('');
@@ -354,6 +363,31 @@ export function NativeClassroom() {
     };
   }, [resetBridge]);
 
+  useEffect(() => {
+    if (phase === 'lesson-picker' && selectedSubject && preGeneration.status === 'completed') {
+      void loadLessons(selectedSubject);
+    }
+  }, [phase, selectedSubject, preGeneration.status, loadLessons]);
+
+  const isSubjectPending =
+    cachedLessons.length === 0 &&
+    (preGeneration.status === 'checking' || preGeneration.status === 'generating');
+  const emptyStateTitle = preGeneration.status === 'failed'
+    ? '课程准备出了点小问题'
+    : isSubjectPending
+      ? '正在检查这门课的课堂缓存...'
+      : '课程准备中...';
+  const emptyStateDescription = preGeneration.error
+    ? preGeneration.error
+    : isSubjectPending
+      ? preGeneration.stageText || 'AI 老师正在为你准备课程，请稍等片刻'
+      : 'AI 老师正在为你准备课程，请稍等片刻再试';
+  const emptyStateActionLabel = preGeneration.status === 'failed'
+    ? '🔁 重新生成'
+    : isSubjectPending
+      ? '🔄 刷新列表'
+      : '🚀 检查课程';
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -452,15 +486,39 @@ export function NativeClassroom() {
             </motion.div>
           ) : (
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '48px 32px', background: T.cardBg, borderRadius: T.cardRadius, boxShadow: T.cardShadow, maxWidth: '400px', width: '100%', margin: '0 auto' }}>
-              <span style={{ fontSize: '56px' }}>🌱</span>
-              <p style={{ fontSize: '18px', fontWeight: 700, color: T.textDark, fontFamily: T.fontDisplay, textAlign: 'center' }}>课程准备中...</p>
-              <p style={{ fontSize: '14px', color: T.textLight, textAlign: 'center' }}>AI 老师正在为你准备课程，请稍等片刻再试</p>
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '48px 32px', background: T.cardBg, borderRadius: T.cardRadius, boxShadow: T.cardShadow, maxWidth: '420px', width: '100%', margin: '0 auto' }}>
+              <span style={{ fontSize: '56px' }}>{preGeneration.status === 'failed' ? '⚠️' : isSubjectPending ? '🛠️' : '🌱'}</span>
+              <p style={{ fontSize: '18px', fontWeight: 700, color: T.textDark, fontFamily: T.fontDisplay, textAlign: 'center' }}>{emptyStateTitle}</p>
+              <p style={{ fontSize: '14px', color: T.textLight, textAlign: 'center', lineHeight: 1.6 }}>{emptyStateDescription}</p>
+              {(preGeneration.status === 'checking' || preGeneration.status === 'generating') && (
+                <div style={{ width: '100%', marginTop: '4px' }}>
+                  <div style={{ height: '10px', width: '100%', borderRadius: '999px', background: '#F5E6DC', overflow: 'hidden' }}>
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.max(preGeneration.generationProgress, 8)}%` }}
+                      transition={{ duration: 0.4 }}
+                      style={{ height: '100%', borderRadius: '999px', background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})` }}
+                    />
+                  </div>
+                  <p style={{ marginTop: '8px', fontSize: '12px', color: T.textMedium, textAlign: 'center' }}>
+                    {preGeneration.pendingCount > 0
+                      ? `后台还有 ${preGeneration.pendingCount}/${Math.max(preGeneration.totalCount, preGeneration.pendingCount)} 个任务在处理`
+                      : '正在等待最新课程进入列表'}
+                  </p>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
                 <motion.button whileTap={{ scale: 0.95 }}
-                  onClick={() => selectedSubject && loadLessons(selectedSubject)}
+                  onClick={() => {
+                    if (preGeneration.status === 'failed' || preGeneration.status === 'idle' || preGeneration.status === 'completed') {
+                      preGeneration.triggerGeneration();
+                    }
+                    if (selectedSubject) {
+                      void loadLessons(selectedSubject);
+                    }
+                  }}
                   style={{ padding: '12px 32px', borderRadius: T.btnRadius, border: 'none', background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})`, color: T.textWhite, fontSize: '16px', fontWeight: 'bold', fontFamily: T.fontDisplay, cursor: 'pointer' }}>
-                  🔄 重新加载
+                  {emptyStateActionLabel}
                 </motion.button>
                 <motion.button whileTap={{ scale: 0.95 }} onClick={handleExit}
                   style={{ padding: '12px 32px', borderRadius: '18px', border: '2px solid #FFE8D6', backgroundColor: T.cardBg, fontSize: '16px', cursor: 'pointer', color: T.textMedium }}>

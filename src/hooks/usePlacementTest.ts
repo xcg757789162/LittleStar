@@ -399,7 +399,7 @@ export function usePlacementTest(
         curriculum.modules,
         subject,
         gradeLevel,
-        settings,
+        settings ?? undefined,
       )
 
       if (phase2Plan.length === 0) {
@@ -611,9 +611,8 @@ export function usePlacementTest(
 /**
  * 异步触发课堂预生成
  *
- * 在评测完成后，通过两条路径确保预生成被触发：
- * 1. 发送 API POST 到 /pre_generation_tasks（如有后端处理则命中）
- * 2. 发送 CustomEvent 'placement-test-completed' 通知 usePreGeneration Hook
+ * 在评测完成后，发送 CustomEvent `placement-test-completed`
+ * 通知 `usePreGeneration` 重新执行逐科学科缓存检查与补货。
  *
  * 不 await（不阻塞结果页展示），catch 错误静默处理。
  */
@@ -622,29 +621,11 @@ async function triggerPreGeneration(
   subject: string,
   _result: PlacementResult,
 ): Promise<void> {
-  log.info('[PreGeneration] 触发评测后预生成, childId:', childId, 'subject:', subject)
+  log.info('[PreGeneration] 触发评测后预生成检查, childId:', childId, 'subject:', subject)
 
-  // 路径 1: 通过 API 触发后端预生成任务（如果后端支持）
-  try {
-    await apiClient.post('/pre_generation_tasks', {
-      childId,
-      subject,
-      lessonCount: 3,
-      trigger: 'placement_test',
-      priority: 'high',
-    })
-    log.info('[PreGeneration] 预生成任务已提交（API）')
-  } catch {
-    // API 不存在或失败 → 路径 2 兜底
-    log.debug('[PreGeneration] API 路径不可用，依赖 CustomEvent 兜底')
-  }
-
-  // 路径 2: 通过 CustomEvent 通知 Home 页的 usePreGeneration Hook
-  // usePreGeneration 监听 hasPlacementTest 变化，但可能需要等待 React Query 刷新
-  // 这里发送自定义事件，让 usePreGeneration 能立即感知并触发
   try {
     window.dispatchEvent(new CustomEvent('placement-test-completed', {
-      detail: { childId, subject },
+      detail: { childId, subject, trigger: 'placement_test' },
     }))
     log.info('[PreGeneration] CustomEvent 已分发')
   } catch {

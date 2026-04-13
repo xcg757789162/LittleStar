@@ -1,158 +1,34 @@
 /**
  * AI 评测题目生成器
  *
- * 使用 Vercel AI SDK 调用 LLM 生成评测选择题。
- * 从 ChildSettings 读取 LLM 配置，直接在前端调用。
+ * 改为通过同源后端代理生成评测题目，避免浏览器直连第三方模型导致 CORS。
  *
- * 降级策略：超时 10 秒或生成失败 → 返回 null，由调用方降级到预设题库。
+ * 降级策略：超时 10 秒或代理生成失败 → 返回 null，由调用方降级到预设题库。
  */
 
-import { generateObject } from 'ai'
-import { createOpenAI } from '@ai-sdk/openai'
-import type { LanguageModel } from 'ai'
 import type { ChildSettings, QuestionBankItem } from '@/types/models'
-import { BACKEND_LLM_PROVIDERS } from '@/services/config'
-import { aiQuestionSchema, validateAIQuestion } from './ai-question-schema'
+import { validateAIQuestion } from './ai-question-schema'
 
 /** AI 生成题目的超时时间（毫秒） */
 const AI_GENERATION_TIMEOUT = 10_000
 
-/** 年级对应的年龄描述 */
-const GRADE_AGE_MAP: Record<string, string> = {
-  'middle-kindergarten': '中班（4-5岁）',
-  'senior-kindergarten': '大班（5-6岁）',
-  'grade-1': '一年级（6-7岁）',
-  'grade-2': '二年级（7-8岁）',
-  'grade-3': '三年级（8-9岁）',
-  'grade-4': '四年级（9-10岁）',
-  'grade-5': '五年级（10-11岁）',
-  'grade-6': '六年级（11-12岁）',
+interface BackendQuestionResponse {
+  question?: {
+    stem: string
+    options: Array<{ text: string; emoji?: string }>
+    correctIndex: number
+    difficulty: number
+  }
+  error?: string
 }
 
-/** 科目中文名 */
-const SUBJECT_NAME_MAP: Record<string, string> = {
-  math: '数学',
-  chinese: '语文',
-  english: '英语',
-}
-
-/**
- * 从 ChildSettings 创建 LanguageModel 实例
- *
- * 所有后端 LLM Provider 均通过 OpenAI 兼容接口调用。
- */
-const MODEL_PROVIDER_FALLBACKS: Array<{
-  pattern: RegExp
-  providerId: string
-}> = [
-  { pattern: /^(qwen|qwq)/i, providerId: 'backend-qwen' },
-  { pattern: /^deepseek/i, providerId: 'backend-deepseek' },
-  { pattern: /^doubao/i, providerId: 'backend-doubao' },
-  { pattern: /^(gpt-|o[1-9]|chatgpt-)/i, providerId: 'backend-openai' },
-]
-
-function getBackendLLMProvider(providerId?: string) {
-  if (!providerId) {
-    return undefined
+function pickQuestionGenerationSettings(settings: ChildSettings) {
+  return {
+    llmProviderId: settings.llmProviderId,
+    llmModel: settings.llmModel,
+    llmApiKey: settings.llmApiKey,
+    llmBaseUrl: settings.llmBaseUrl,
   }
-
-  return BACKEND_LLM_PROVIDERS.find(item => item.id === providerId)
-}
-
-function inferProviderIdFromLLMModel(llmModel: string): string | undefined {
-  const normalizedModel = llmModel.trim()
-  if (!normalizedModel) {
-    return undefined
-  }
-
-  const colonIdx = normalizedModel.indexOf(':')
-  const providerHint = colonIdx > 0
-    ? normalizedModel.substring(0, colonIdx).trim().toLowerCase()
-    : ''
-  const modelId = colonIdx > 0
-    ? normalizedModel.substring(colonIdx + 1).trim()
-    : normalizedModel
-
-  const providerFromPrefix = providerHint
-    ? getBackendLLMProvider(`backend-${providerHint}`)
-    : undefined
-  if (providerFromPrefix) {
-    return providerFromPrefix.id
-  }
-
-  const matchedFallback = MODEL_PROVIDER_FALLBACKS.find(
-    item => item.pattern.test(modelId),
-  )
-
-  return matchedFallback?.providerId
-}
-
-function resolveLLMBaseUrl(settings: ChildSettings): string | undefined {
-  if (settings.llmBaseUrl.trim()) {
-    return settings.llmBaseUrl.trim()
-  }
-
-  const provider = getBackendLLMProvider(settings.llmProviderId)
-    ?? getBackendLLMProvider(inferProviderIdFromLLMModel(settings.llmModel))
-
-  return provider?.defaultBaseUrl || undefined
-}
-
-function createModelFromSettings(settings: ChildSettings): LanguageModel | null {
-  if (!settings.llmModel || !settings.llmApiKey) {
-    return null
-  }
-
-  try {
-    // llmModel 格式：'openai:gpt-4o' 或 'qwen:qwen-plus' 等
-    // 解析出 provider prefix 和 model id
-    const colonIdx = settings.llmModel.indexOf(':')
-    const modelId = colonIdx > 0
-      ? settings.llmModel.substring(colonIdx + 1)
-      : settings.llmModel
-
-    const openai = createOpenAI({
-      apiKey: settings.llmApiKey,
-      baseURL: resolveLLMBaseUrl(settings),
-    })
-
-    return openai.chat(modelId)
-  } catch {
-    console.warn('[AIQuestionGenerator] 创建模型实例失败')
-    return null
-  }
-}
-
-/**
- * 构建生成题目的 system prompt
- */
-function buildSystemPrompt(
-  nodeName: string,
-  nodeDescription: string,
-  gradeLevel: string,
-  subject: string,
-): string {
-  const ageDescription = GRADE_AGE_MAP[gradeLevel] || gradeLevel
-  const subjectName = SUBJECT_NAME_MAP[subject] || subject
-
-  return `你是一个面向幼儿的教育评测出题专家。
-
-## 任务
-根据给定的知识点，生成一道四选一选择题，用于评估 ${ageDescription} 孩子对 ${subjectName} 科目中「${nodeName}」知识点的掌握程度。
-
-## 知识点信息
-- 名称：${nodeName}
-- 描述：${nodeDescription}
-- 科目：${subjectName}
-- 年龄段：${ageDescription}
-
-## 要求
-1. 题干使用简单口语化中文${subject === 'english' ? '（可中英混合）' : ''}，不超过 30 字，可用 emoji
-2. 恰好 4 个选项，每个选项含 text（≤8 字）和 emoji
-3. 正确答案的位置要随机（不总是第一个或最后一个）
-4. 干扰项合理，不要太离谱
-5. 难度 1-5（1=基本认知, 3=理解应用, 5=综合能力）
-6. 只输出 JSON，不要其他文字`
 }
 
 /**
@@ -170,41 +46,41 @@ export async function generateQuestion(
   subject: string,
   settings: ChildSettings,
 ): Promise<QuestionBankItem | null> {
-  const model = createModelFromSettings(settings)
-  if (!model) {
+  if (!settings.llmModel || !settings.llmApiKey) {
     console.warn('[AIQuestionGenerator] LLM 未配置，跳过 AI 生成')
     return null
   }
 
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), AI_GENERATION_TIMEOUT)
+
   try {
-    // 使用 AbortController 实现超时
-    const controller = new AbortController()
-    const timeout = setTimeout(
-      () => controller.abort(),
-      AI_GENERATION_TIMEOUT,
-    )
-
-    const systemPrompt = buildSystemPrompt(
-      node.name,
-      node.description,
-      gradeLevel,
-      subject,
-    )
-
-    const { object } = await generateObject({
-      model,
-      schema: aiQuestionSchema,
-      system: systemPrompt,
-      prompt: `请为知识点「${node.name}」生成一道评测选择题。`,
-      abortSignal: controller.signal,
+    const response = await fetch('/api/pre-generate/question', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        node,
+        gradeLevel,
+        subject,
+        settings: pickQuestionGenerationSettings(settings),
+      }),
+      signal: controller.signal,
     })
 
-    clearTimeout(timeout)
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => ({})) as BackendQuestionResponse
+      console.warn(
+        '[AIQuestionGenerator] 后端代理生成失败，将使用预设题库',
+        errorPayload.error || response.status,
+      )
+      return null
+    }
 
-    // 额外校验
-    const validated = validateAIQuestion(object)
+    const payload = await response.json() as BackendQuestionResponse
+    const validated = payload.question ? validateAIQuestion(payload.question) : null
+
     if (!validated) {
-      console.warn('[AIQuestionGenerator] AI 生成的题目未通过校验')
+      console.warn('[AIQuestionGenerator] 后端代理返回的题目未通过校验')
       return null
     }
 
@@ -222,5 +98,7 @@ export async function generateQuestion(
       console.warn('[AIQuestionGenerator] AI 生成失败，将使用预设题库', error)
     }
     return null
+  } finally {
+    clearTimeout(timeout)
   }
 }
