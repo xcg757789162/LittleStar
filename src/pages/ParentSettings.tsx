@@ -105,15 +105,15 @@ export function ParentSettings() {
 
   /* ── 通用样式 ── */
   const sectionStyle: React.CSSProperties = {
-    padding: '22px', borderRadius: T.cardRadius,
+    padding: '16px', borderRadius: '20px',
     backgroundColor: T.cardBg, boxShadow: T.cardShadow,
-    marginBottom: '18px',
+    marginBottom: '12px',
   }
 
   const sectionTitleStyle: React.CSSProperties = {
-    fontSize: '17px', fontWeight: 'bold', color: T.textDark,
-    fontFamily: T.fontDisplay, margin: '0 0 16px',
-    display: 'flex', alignItems: 'center', gap: '8px',
+    fontSize: '15px', fontWeight: 'bold', color: T.textDark,
+    fontFamily: T.fontDisplay, margin: '0 0 10px',
+    display: 'flex', alignItems: 'center', gap: '6px',
   }
 
   return (
@@ -127,49 +127,49 @@ export function ParentSettings() {
     >
       {/* 装饰光斑 */}
       <div style={{
-        position: 'absolute', top: '-60px', right: '-40px',
-        width: '200px', height: '200px', borderRadius: '50%',
+        position: 'absolute', top: '-40px', right: '-30px',
+        width: '140px', height: '140px', borderRadius: '50%',
         background: `radial-gradient(circle, ${T.sunYellow}30 0%, transparent 70%)`,
         pointerEvents: 'none',
       }} />
       <div style={{
-        position: 'absolute', top: '420px', left: '-80px',
-        width: '180px', height: '180px', borderRadius: '50%',
+        position: 'absolute', top: '320px', left: '-60px',
+        width: '120px', height: '120px', borderRadius: '50%',
         background: `radial-gradient(circle, ${T.skyBlue}20 0%, transparent 70%)`,
         pointerEvents: 'none',
       }} />
 
-      <div style={{ maxWidth: '520px', margin: '0 auto', padding: '24px 16px 40px', position: 'relative' }}>
+      <div style={{ maxWidth: '520px', margin: '0 auto', padding: '16px 16px 24px', position: 'relative' }}>
 
         {/* ═══ 顶部导航 ═══ */}
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
-          style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '28px' }}
+          style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}
         >
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
             onClick={() => navigate(-1)}
             style={{
-              width: '44px', height: '44px', borderRadius: '50%',
+              width: '36px', height: '36px', borderRadius: '50%',
               border: 'none', cursor: 'pointer',
               background: `linear-gradient(135deg, ${T.cardBg}, #FFF5EE)`,
               boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '20px', color: T.textDark,
+              fontSize: '18px', color: T.textDark,
             }}
           >
             ←
           </motion.button>
           <div>
             <h1 style={{
-              fontSize: '24px', color: T.textDark, margin: 0,
+              fontSize: '20px', color: T.textDark, margin: 0,
               fontFamily: T.fontDisplay, fontWeight: 'bold',
             }}>
               ⚙️ 高级设置
             </h1>
-            <p style={{ fontSize: '12px', color: T.textLight, margin: '2px 0 0' }}>
+            <p style={{ fontSize: '11px', color: T.textLight, margin: '1px 0 0' }}>
               管理孩子信息 · 年级解锁 · AI 服务
             </p>
           </div>
@@ -208,10 +208,10 @@ export function ParentSettings() {
             <span>👶</span> 孩子信息
           </p>
 
-          <div style={{ display: 'flex', gap: '14px' }}>
+          <div style={{ display: 'flex', gap: '10px' }}>
             {/* 名字卡片 */}
             <div style={{
-              flex: 1, padding: '16px', borderRadius: '18px',
+              flex: 1, padding: '12px', borderRadius: '14px',
               background: 'linear-gradient(135deg, #FFE0C2, #FFECD2)',
               cursor: 'pointer', transition: 'transform 0.15s, box-shadow 0.15s',
               position: 'relative', overflow: 'hidden',
@@ -281,7 +281,7 @@ export function ParentSettings() {
 
             {/* 年龄卡片 */}
             <div style={{
-              flex: 1, padding: '16px', borderRadius: '18px',
+              flex: 1, padding: '12px', borderRadius: '14px',
               background: 'linear-gradient(135deg, #C8E9FA, #E0F2FE)',
               cursor: 'pointer', transition: 'transform 0.15s, box-shadow 0.15s',
               position: 'relative', overflow: 'hidden',
@@ -376,20 +376,20 @@ export function ParentSettings() {
           </p>
 
           {/* 掌握度阈值 */}
-          <div style={{ marginBottom: '20px' }}>
+          <div style={{ marginBottom: '14px' }}>
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              marginBottom: '10px',
+              marginBottom: '6px',
             }}>
               <label htmlFor="mastery-threshold" style={{
-                fontSize: '14px', color: T.textMedium, fontWeight: 600,
+                fontSize: '13px', color: T.textMedium, fontWeight: 600,
               }}>
                 知识点掌握度阈值
               </label>
               <span style={{
-                fontSize: '18px', fontWeight: 'bold', color: T.sunOrange,
+                fontSize: '15px', fontWeight: 'bold', color: T.sunOrange,
                 fontFamily: T.fontDisplay,
-                padding: '2px 12px', borderRadius: '12px',
+                padding: '1px 10px', borderRadius: '10px',
                 background: `${T.sunOrange}12`,
               }}>
                 {unlockConfig.masteryThreshold}%
@@ -418,20 +418,20 @@ export function ParentSettings() {
           </div>
 
           {/* 最少掌握比例 */}
-          <div style={{ marginBottom: '16px' }}>
+          <div style={{ marginBottom: '10px' }}>
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              marginBottom: '10px',
+              marginBottom: '6px',
             }}>
               <label htmlFor="mastered-ratio" style={{
-                fontSize: '14px', color: T.textMedium, fontWeight: 600,
+                fontSize: '13px', color: T.textMedium, fontWeight: 600,
               }}>
                 最少掌握知识点比例
               </label>
               <span style={{
-                fontSize: '18px', fontWeight: 'bold', color: T.grassGreen,
+                fontSize: '15px', fontWeight: 'bold', color: T.grassGreen,
                 fontFamily: T.fontDisplay,
-                padding: '2px 12px', borderRadius: '12px',
+                padding: '1px 10px', borderRadius: '10px',
                 background: `${T.grassGreen}12`,
               }}>
                 {Math.round(unlockConfig.minMasteredRatio * 100)}%
@@ -461,9 +461,9 @@ export function ParentSettings() {
 
           {/* 解锁说明 */}
           <div style={{
-            padding: '14px 16px', borderRadius: '16px',
+            padding: '10px 12px', borderRadius: '12px',
             background: 'linear-gradient(135deg, #FFF3E7, #FFECD2)',
-            fontSize: '13px', color: T.textMedium, lineHeight: 1.6,
+            fontSize: '12px', color: T.textMedium, lineHeight: 1.5,
           }}>
             💡 当孩子的知识点掌握度 ≥{' '}
             <b style={{ color: T.sunOrange }}>{unlockConfig.masteryThreshold}%</b>{' '}
@@ -484,7 +484,7 @@ export function ParentSettings() {
             <span>🤖</span> AI 服务设置
           </p>
           <p style={{
-            fontSize: '13px', color: T.textLight, margin: '-8px 0 16px', lineHeight: 1.6,
+            fontSize: '12px', color: T.textLight, margin: '-4px 0 12px', lineHeight: 1.5,
           }}>
             统一配置大模型对话、语音合成(TTS)、语音识别(ASR)、发音评测、图片/视频生成等所有 AI 服务
           </p>
@@ -494,29 +494,19 @@ export function ParentSettings() {
             whileTap={{ scale: 0.97 }}
             onClick={() => setShowAISettings(true)}
             style={{
-              width: '100%', padding: '16px', borderRadius: '18px',
+              width: '100%', padding: '12px', borderRadius: '14px',
               border: 'none', cursor: 'pointer',
               background: `linear-gradient(135deg, ${T.violet}, ${T.violetSoft})`,
-              color: '#FFFFFF', fontSize: '16px', fontWeight: 'bold',
+              color: '#FFFFFF', fontSize: '15px', fontWeight: 'bold',
               fontFamily: T.fontDisplay,
               boxShadow: '0 4px 16px rgba(124, 77, 255, 0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
             }}
           >
-            <span style={{ fontSize: '18px' }}>⚙️</span>
+            <span style={{ fontSize: '16px' }}>⚙️</span>
             打开 AI 设置面板
           </motion.button>
 
-          {/* ASR 说明 */}
-          <div style={{
-            marginTop: '14px', padding: '12px 14px', borderRadius: '14px',
-            background: '#F8F4FF', border: '1.5px solid #E8D6FF',
-            fontSize: '12px', color: T.textMedium, lineHeight: 1.6,
-          }}>
-            <b style={{ color: T.violet }}>💡 关于语音识别 (ASR)</b>
-            <br />
-            默认使用浏览器原生语音识别（免费，无需配置）。如需更高质量，可在面板中切换到 OpenAI Whisper 或 Qwen ASR，并分别填写对应的 API Key。
-          </div>
         </motion.section>
 
         {/* OpenMAIC SettingsDialog */}
