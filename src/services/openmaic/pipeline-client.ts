@@ -30,7 +30,6 @@ import {
   attachGeneratedSpeechAudio,
 } from './pipeline-types'
 import type { Classroom, Scene, Slide } from './types'
-import { getOpenMAICConfig } from '@/services/config'
 import { createLogger } from '@/lib/openmaic/logger'
 
 const log = createLogger('PipelineClient')
@@ -68,10 +67,8 @@ export class OpenMAICPipelineClient {
 
   constructor(config?: PipelineClientConfig) {
     const isBrowser = typeof window !== 'undefined'
-    // 优先级：传入参数 > getOpenMAICConfig()（localStorage > 默认值）> 硬编码 fallback
-    const openmaicConfig = isBrowser ? getOpenMAICConfig() : null
     const defaultUrl = isBrowser ? '/openmaic' : 'http://localhost:3000'
-    this.baseUrl = (config?.baseUrl || openmaicConfig?.url || defaultUrl).replace(/\/+$/, '')
+    this.baseUrl = (config?.baseUrl || defaultUrl).replace(/\/+$/, '')
     this.timeoutMs = config?.timeoutMs ?? 60000
     this.maxRetries = config?.maxRetries ?? 2
   }

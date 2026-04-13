@@ -21,6 +21,7 @@ import {
   toPresetAgentId,
   toPresetSelectedAgents,
 } from './child-settings-compat'
+import { getSyncedChildId } from './settings-sync'
 
 const log = createLogger('SettingsReverseSync')
 
@@ -188,6 +189,15 @@ export async function syncOpenMAICToChild(): Promise<boolean> {
   const child = useChildStore.getState().currentChild
   if (!child?.id) {
     log.warn('反向同步跳过：没有 currentChild')
+    return false
+  }
+
+  // Guard: only reverse-sync when the Store has been synced for THIS child.
+  // If the Store contains another child's data (e.g. user switched children
+  // but sync hasn't run yet), writing it to DB would corrupt the target child.
+  const syncedId = getSyncedChildId()
+  if (syncedId && syncedId !== String(child.id)) {
+    log.warn('反向同步跳过：Store 数据属于 childId:', syncedId, '而当前 child:', child.id)
     return false
   }
 

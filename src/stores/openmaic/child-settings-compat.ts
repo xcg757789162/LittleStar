@@ -44,12 +44,59 @@ export function normalizeChildSettings(
   } as ChildSettings
 }
 
+/**
+ * All ChildSettings fields that should prefer live Store values over DB values
+ * when the Store has been synced for the current child.
+ *
+ * Covers all provider API keys, URLs, models, toggles, and classroom settings.
+ */
 const LIVE_STORE_PRIORITY_FIELDS: Array<keyof ChildSettings> = [
-  'llmProviderId',
-  'llmModel',
-  'llmApiKey',
-  'llmBaseUrl',
+  // LLM
+  'llmProviderId', 'llmModel', 'llmApiKey', 'llmBaseUrl',
+  // TTS
+  'enableTTS', 'ttsProviderId', 'ttsApiKey', 'ttsVoice', 'ttsSpeed',
+  // ASR
+  'enableASR', 'asrProviderId', 'asrApiKey', 'asrBaseUrl', 'asrLanguage',
+  // ISE
+  'enableISE', 'iseProviderId', 'iseApiKey', 'iseAppId', 'iseApiSecret',
+  // Image
+  'enableImageGeneration', 'imageProviderId', 'imageModelId', 'imageApiKey', 'imageBaseUrl',
+  // Video
+  'enableVideoGeneration', 'videoProviderId', 'videoModelId', 'videoApiKey', 'videoBaseUrl',
+  // PDF
+  'enablePDF', 'pdfProviderId', 'pdfApiKey', 'pdfBaseUrl',
+  // WebSearch
+  'enableWebSearch', 'webSearchProviderId', 'webSearchApiKey',
+  // Classroom
+  'classroomAgentMode', 'selectedAgents', 'teacherVoice', 'maxDiscussionRounds',
 ]
+
+/**
+ * Provider ID fields should only override DB values when the live store
+ * has at least one substantive config field (API key, model, URL) in the
+ * same group. This prevents Settings Store defaults (e.g. 'openai' for LLM)
+ * from overwriting meaningful DB values when the store hasn't been synced.
+ */
+const PROVIDER_ID_SUBSTANCE_FIELDS: Partial<Record<keyof ChildSettings, Array<keyof ChildSettings>>> = {
+  llmProviderId: ['llmModel', 'llmApiKey', 'llmBaseUrl'],
+  ttsProviderId: ['ttsApiKey'],
+  asrProviderId: ['asrApiKey', 'asrBaseUrl'],
+  iseProviderId: ['iseApiKey', 'iseAppId', 'iseApiSecret'],
+  imageProviderId: ['imageApiKey', 'imageBaseUrl', 'imageModelId'],
+  videoProviderId: ['videoApiKey', 'videoBaseUrl', 'videoModelId'],
+  pdfProviderId: ['pdfApiKey', 'pdfBaseUrl'],
+  webSearchProviderId: ['webSearchApiKey'],
+}
+
+function hasSubstantiveLiveConfig(
+  liveSettings: Partial<ChildSettings>,
+  substanceFields: Array<keyof ChildSettings>,
+): boolean {
+  return substanceFields.some((f) => {
+    const v = liveSettings[f]
+    return typeof v === 'string' && v.trim() !== ''
+  })
+}
 
 function shouldPreferLiveValue(value: unknown): boolean {
   if (typeof value === 'string') {
@@ -87,6 +134,16 @@ function cloneConfigValue<T>(value: T): T {
   return value
 }
 
+/**
+ * Merge DB-backed ChildSettings with live Store values.
+ *
+ * When `liveSettings` is provided (i.e. the Store has been synced for this child),
+ * all non-empty live values take priority over DB values. This handles the case
+ * where the user modified settings in the Dialog but hasn't saved to DB yet.
+ *
+ * When `liveSettings` is null (Store not synced for this child), only DB values
+ * are used — preventing cross-child data contamination.
+ */
 export function mergeChildSettingsWithLiveStore(
   settings?: LegacyChildSettings | null,
   liveSettings?: Partial<ChildSettings> | null,
@@ -97,21 +154,15 @@ export function mergeChildSettingsWithLiveStore(
     ...(normalizeChildSettings(settings) ?? {}),
   } as ChildSettings
 
-  const hasEffectiveLiveLLMConfig = Boolean(
-    liveSettings?.llmModel?.trim()
-      || liveSettings?.llmApiKey?.trim()
-      || liveSettings?.llmBaseUrl?.trim(),
-  )
+  if (liveSettings) {
+    for (const field of LIVE_STORE_PRIORITY_FIELDS) {
+      const substanceFields = PROVIDER_ID_SUBSTANCE_FIELDS[field]
+      if (substanceFields && !hasSubstantiveLiveConfig(liveSettings, substanceFields)) continue
 
-  for (const field of LIVE_STORE_PRIORITY_FIELDS) {
-    if (field === 'llmProviderId' && !hasEffectiveLiveLLMConfig) {
-      continue
+      const liveValue = liveSettings[field]
+      if (!shouldPreferLiveValue(liveValue)) continue
+      ;(merged as Record<string, unknown>)[field] = cloneConfigValue(liveValue)
     }
-
-    const liveValue = liveSettings?.[field]
-    if (!shouldPreferLiveValue(liveValue)) continue
-
-    ;(merged as Record<string, unknown>)[field] = cloneConfigValue(liveValue)
   }
 
   merged.selfIntroduction = getSelfIntroductionFromSettings(merged)

@@ -15,9 +15,34 @@ import { authApi } from '@/services/api/auth'
 import { TOKEN_STORAGE_KEY } from '@/services/api/types'
 import { queryClient } from '@/lib/queryClient'
 import type { AuthUser, LoginRequest, RegisterRequest } from '@/services/api/types'
-import { clearAllProviderConfig } from '@/services/config'
 import { useChildStore } from '@/stores/childStore'
+import { clearSyncedChildId } from '@/stores/openmaic/settings-sync'
 import { createLogger } from '@/lib/openmaic/logger'
+
+/**
+ * 登出时清除所有 AI 相关的 localStorage 数据，
+ * 防止下一个用户读到前一个用户的 API Key / 设置。
+ */
+function clearAllSessionStorage(): void {
+  try {
+    // Zustand persisted stores
+    localStorage.removeItem('settings-storage')
+    localStorage.removeItem('user-profile-storage')
+    localStorage.removeItem('agent-registry-storage')
+
+    // Legacy littlestar_* keys (may still exist from older versions)
+    const keysToRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith('littlestar_')) {
+        keysToRemove.push(key)
+      }
+    }
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key)
+    }
+  } catch { /* ignore in SSR / restricted contexts */ }
+}
 
 const log = createLogger('AuthStore')
 
@@ -116,7 +141,8 @@ export const useAuthStore = create<AuthState & AuthActions>()((set) => ({
   logout: () => {
     log.info('用户登出，清理所有会话数据')
     localStorage.removeItem(TOKEN_STORAGE_KEY)
-    clearAllProviderConfig()
+    clearSyncedChildId()
+    clearAllSessionStorage()
     queryClient.clear()
 
     useChildStore.getState().reset()

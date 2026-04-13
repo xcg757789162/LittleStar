@@ -28,13 +28,23 @@ import {
   mergeChildSettingsWithLiveStore,
 } from '@/stores/openmaic/child-settings-compat'
 import { extractChildSettingsFromStore } from '@/stores/openmaic/settings-reverse-sync'
+import { getSyncedChildId } from '@/stores/openmaic/settings-sync'
 
 const log = createLogger('PreGeneration')
 
 /** 预生成状态 */
 export type PreGenerationStatus = 'idle' | 'checking' | 'generating' | 'completed' | 'failed' | 'api-key-missing'
 
-/** Hook 返回值（接口不变，Home.tsx 无需修改） */
+/** 单个任务的进度摘要（供 UI 展示每堂课状态） */
+export interface TaskProgressInfo {
+  id: number
+  knowledgeNodeId: string
+  status: string
+  progress: number
+  currentStep: string | null
+}
+
+/** Hook 返回值 */
 export interface PreGenerationState {
   status: PreGenerationStatus
   pendingCount: number
@@ -44,8 +54,11 @@ export interface PreGenerationState {
   error: string | null
   triggerGeneration: () => void
   generationStep: PipelineStepName | null
+  /** 整体进度（所有任务加权平均，0-100） */
   generationProgress: number
   currentSceneIndex: number
+  /** 每个活跃任务的进度明细 */
+  taskDetails: TaskProgressInfo[]
 }
 
 const SUBJECTS: Subject[] = ['math', 'chinese', 'english']
@@ -195,6 +208,7 @@ export function usePreGeneration(
   const [generationStep, setGenerationStep] = useState<PipelineStepName | null>(null)
   const [generationProgress, setGenerationProgress] = useState(0)
   const [currentSceneIndex, setCurrentSceneIndex] = useState(0)
+  const [taskDetails, setTaskDetails] = useState<TaskProgressInfo[]>([])
 
   const isRunningRef = useRef(false)
   const hasTriggeredRef = useRef(false)
@@ -239,19 +253,34 @@ export function usePreGeneration(
         setPendingCount(active.length)
         setTotalCount(data.totalCount)
 
-        // 更新 Pipeline 进度
+        // 每个活跃任务的进度摘要
+        setTaskDetails(data.tasks.map((t) => ({
+          id: t.id,
+          knowledgeNodeId: t.knowledgeNodeId,
+          status: t.status,
+          progress: t.status === 'completed' ? 100 : t.progress,
+          currentStep: t.currentStep,
+        })))
+
+        // 计算整体进度：已完成任务算 100%，活跃任务按实际进度
+        if (data.totalCount > 0) {
+          const activeProgressSum = active.reduce((sum, t) => sum + (t.progress || 0), 0)
+          const overall = Math.round(
+            (data.completedCount * 100 + activeProgressSum) / data.totalCount,
+          )
+          setGenerationProgress(overall)
+        }
+
+        // 更新 Pipeline 步骤信息
         if (running) {
-          setGenerationProgress(running.progress)
           if (running.currentStep) {
             setGenerationStep(running.currentStep as PipelineStepName)
           }
-          // 从 knowledgeNodeId 推算场景索引（简化映射）
           const runningIdx = data.tasks.indexOf(running)
           setCurrentSceneIndex(runningIdx >= 0 ? runningIdx : 0)
 
-          if (running.progress > 0) {
-            setStageText(`正在生成课堂 (${running.progress}%)...`)
-          }
+          const completedLabel = data.completedCount > 0 ? `${data.completedCount} 堂已完成，` : ''
+          setStageText(`${completedLabel}正在生成第 ${data.completedCount + 1} 堂课 (${running.progress}%)...`)
         }
 
         // 判断是否全部完成
@@ -309,9 +338,15 @@ export function usePreGeneration(
         return
       }
 
+      // Only trust live Store values when the Store has been synced for this child.
+      // Otherwise a stale Store (e.g. from a previous child or session) could
+      // inject wrong API keys into the merge result.
+      const isSyncedForThisChild = getSyncedChildId() === String(child.id)
+      const liveSettings = isSyncedForThisChild ? extractChildSettingsFromStore() : null
+
       const effectiveSettings = mergeChildSettingsWithLiveStore(
         child.settings as Partial<ChildSettings> & { bio?: unknown },
-        extractChildSettingsFromStore(),
+        liveSettings,
       )
 
       log.info('[PreGeneration] 运行时配置解析', JSON.stringify({
@@ -624,5 +659,6 @@ export function usePreGeneration(
     generationStep,
     generationProgress,
     currentSceneIndex,
+    taskDetails,
   }
 }

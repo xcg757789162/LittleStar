@@ -184,7 +184,7 @@ export function NativeClassroom() {
 
       // 同步设置到 OpenMAIC Settings Store
       if (currentChild?.settings) {
-        syncSettingsToOpenMAIC(currentChild.settings);
+        syncSettingsToOpenMAIC(currentChild.settings, currentChild.id ? String(currentChild.id) : undefined);
       }
 
       // 启动学习会话
@@ -492,19 +492,53 @@ export function NativeClassroom() {
               <p style={{ fontSize: '14px', color: T.textLight, textAlign: 'center', lineHeight: 1.6 }}>{emptyStateDescription}</p>
               {(preGeneration.status === 'checking' || preGeneration.status === 'generating') && (
                 <div style={{ width: '100%', marginTop: '4px' }}>
+                  {/* 整体进度条 */}
                   <div style={{ height: '10px', width: '100%', borderRadius: '999px', background: '#F5E6DC', overflow: 'hidden' }}>
                     <motion.div
                       initial={{ width: 0 }}
-                      animate={{ width: `${Math.max(preGeneration.generationProgress, 8)}%` }}
+                      animate={{ width: `${Math.max(preGeneration.generationProgress, 5)}%` }}
                       transition={{ duration: 0.4 }}
                       style={{ height: '100%', borderRadius: '999px', background: `linear-gradient(135deg, ${T.sunOrange}, ${T.candyPink})` }}
                     />
                   </div>
-                  <p style={{ marginTop: '8px', fontSize: '12px', color: T.textMedium, textAlign: 'center' }}>
-                    {preGeneration.pendingCount > 0
-                      ? `后台还有 ${preGeneration.pendingCount}/${Math.max(preGeneration.totalCount, preGeneration.pendingCount)} 个任务在处理`
-                      : '正在等待最新课程进入列表'}
+                  <p style={{ marginTop: '6px', fontSize: '13px', color: T.textDark, textAlign: 'center', fontWeight: 600 }}>
+                    整体进度 {preGeneration.generationProgress}%
                   </p>
+
+                  {/* 每堂课的进度明细 */}
+                  {preGeneration.taskDetails.length > 0 && (
+                    <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {preGeneration.taskDetails.map((task, idx) => {
+                        const statusEmoji = task.status === 'completed' ? '✅'
+                          : task.status === 'running' ? '⚙️'
+                          : task.status === 'failed' ? '❌'
+                          : '⏳';
+                        const barColor = task.status === 'completed' ? T.grassGreen
+                          : task.status === 'running' ? T.skyBlue
+                          : task.status === 'failed' ? '#E74C3C'
+                          : '#D5D5D5';
+                        return (
+                          <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '14px', flexShrink: 0 }}>{statusEmoji}</span>
+                            <span style={{ fontSize: '12px', color: T.textMedium, minWidth: '60px', flexShrink: 0 }}>
+                              课堂 {idx + 1}
+                            </span>
+                            <div style={{ flex: 1, height: '6px', borderRadius: '999px', background: '#F0E8E0', overflow: 'hidden' }}>
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${task.progress}%` }}
+                                transition={{ duration: 0.3 }}
+                                style={{ height: '100%', borderRadius: '999px', background: barColor }}
+                              />
+                            </div>
+                            <span style={{ fontSize: '11px', color: T.textLight, minWidth: '32px', textAlign: 'right', flexShrink: 0 }}>
+                              {task.progress}%
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
               <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>

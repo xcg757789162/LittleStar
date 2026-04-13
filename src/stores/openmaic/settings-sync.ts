@@ -75,6 +75,25 @@ function mapChildASRProviderId(providerId: string): ASRProviderId | null {
 
 const log = createLogger('SettingsSync')
 
+/**
+ * Tracks which child's data is currently loaded in the Settings Store.
+ *
+ * Module-level (not persisted) by design: on fresh page load this is null,
+ * meaning "Store data hasn't been synced yet" — callers should not trust
+ * the persisted Store values until syncSettingsToOpenMAIC is called.
+ */
+let syncedChildId: string | null = null
+
+/** Returns the childId whose settings are currently in the Store, or null. */
+export function getSyncedChildId(): string | null {
+  return syncedChildId
+}
+
+/** Clears the synced childId (e.g. on logout). */
+export function clearSyncedChildId(): void {
+  syncedChildId = null
+}
+
 function getTeacherVoice(settings: ChildSettings): string {
   return settings.teacherVoice || settings.ttsVoice || ''
 }
@@ -115,9 +134,15 @@ function syncAgentRegistry(settings: ChildSettings, mappedTTSProviderId: TTSProv
  * 将 LittleStar ChildSettings 同步到 OpenMAIC Settings Store
  *
  * 逐字段同步当前生效的 provider 配置（apiKey/baseUrl/enabled 等）
+ *
+ * @param settings 孩子的配置
+ * @param childId  可选，记录当前同步的孩子 ID（用于防止跨孩子数据串用）
  */
-export function syncSettingsToOpenMAIC(settings: ChildSettings): void {
-  log.info('开始同步设置到 OpenMAIC, llmModel:',
+export function syncSettingsToOpenMAIC(settings: ChildSettings, childId?: string): void {
+  if (childId) {
+    syncedChildId = childId
+  }
+  log.info('开始同步设置到 OpenMAIC, childId:', childId ?? '(未指定)', 'llmModel:',
     settings.llmModel ?? '(未设置)',
     'imageProvider:', settings.imageProviderId ?? '(未设置)',
     'videoProvider:', settings.videoProviderId ?? '(未设置)',

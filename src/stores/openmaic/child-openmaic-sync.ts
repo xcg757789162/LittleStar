@@ -31,6 +31,6 @@ export function syncChildToOpenMAIC(child: Child | null | undefined): void {
 
   const settings = getSyncedChildSettings(child)
   if (settings) {
-    syncSettingsToOpenMAIC(settings)
+    syncSettingsToOpenMAIC(settings, child.id ? String(child.id) : undefined)
   }
 }
