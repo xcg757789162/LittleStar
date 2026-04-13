@@ -24,7 +24,11 @@ import type {
   PipelineStepName,
   AgentInfo,
 } from './pipeline-types'
-import { isSceneOutline } from './pipeline-types'
+import {
+  normalizeSceneOutline,
+  getSceneOutlineIndex,
+  attachGeneratedSpeechAudio,
+} from './pipeline-types'
 import type { Classroom, Scene, Slide } from './types'
 import { getOpenMAICConfig } from '@/services/config'
 import { createLogger } from '@/lib/openmaic/logger'
@@ -99,7 +103,7 @@ export class OpenMAICPipelineClient {
           'Content-Type': 'application/json',
           ...headers,
         },
-        body: JSON.stringify(requirements),
+        body: JSON.stringify({ requirements }),
       },
     )
 
@@ -111,6 +115,9 @@ export class OpenMAICPipelineClient {
     }
 
     const outlines = await this.parseSSEStream(response)
+    if (outlines.length === 0) {
+      throw new Error('No scene outlines generated from scene-outlines-stream')
+    }
     log.info('← 大纲生成完成, 共', outlines.length, '个场景')
     return outlines
   }
@@ -305,9 +312,14 @@ export class OpenMAICPipelineClient {
         )
 
         try {
+          const audioId = `scene-${i}-speech-${j}`
           const ttsResult = await this.generateTTS(action.text!, headers)
-          action.audioBase64 = ttsResult.audioBase64
-          action.audioDurationMs = ttsResult.durationMs
+          attachGeneratedSpeechAudio(action, {
+            audioId,
+            audioBase64: ttsResult.audioBase64,
+            durationMs: ttsResult.durationMs,
+            format: ttsResult.format,
+          })
           callbacks?.onTTSReady?.(i, j, ttsResult.audioBase64)
         } catch (error) {
           // TTS 失败不中止整个 Pipeline，记录错误
@@ -340,6 +352,7 @@ export class OpenMAICPipelineClient {
         updatedAt: Date.now(),
         language: requirements.language,
       },
+      outlines,
     }
 
     this.reportProgress(callbacks, 'assembly', 100, '课堂生成完成！')
@@ -452,13 +465,18 @@ export class OpenMAICPipelineClient {
           const result = this.parseSSEEvent(event)
           if (!result) continue
 
-          if (result.type === 'outline' && isSceneOutline(result.data)) {
-            outlines.push(result.data)
+          if (result.type === 'outline') {
+            const normalized = normalizeSceneOutline(result.data, outlines.length)
+            if (normalized) {
+              outlines.push(normalized)
+            }
           } else if (result.type === 'done') {
             // done 事件携带完整 outlines 数组，优先使用
             const doneOutlines = result.outlines as unknown[]
             if (Array.isArray(doneOutlines)) {
-              return doneOutlines.filter(isSceneOutline)
+              return doneOutlines
+                .map((outline, index) => normalizeSceneOutline(outline, index))
+                .filter((outline): outline is SceneOutline => outline !== null)
             }
             return outlines
           } else if (result.type === 'error') {
@@ -510,6 +528,8 @@ export class OpenMAICPipelineClient {
     content: GeneratedContent,
     actions: SceneAction[],
   ): Scene {
+    const outlineIndex = getSceneOutlineIndex(outline)
+
     // 映射 outline.type → OpenMAIC SceneType
     const sceneType = this.mapSceneType(outline.type)
 
@@ -527,7 +547,7 @@ export class OpenMAICPipelineClient {
       sceneContent = {
         type: 'quiz' as const,
         questions: content.questions.map((q, idx) => ({
-          id: `q-${outline.index}-${idx}`,
+          id: `q-${outlineIndex}-${idx}`,
           type: 'single' as const,
           question: q.question,
           options: q.options.map((opt) => ({
@@ -554,15 +574,15 @@ export class OpenMAICPipelineClient {
     // 将 Pipeline 的 SceneAction[] 转换为 OpenMAIC 原生 Action[]
     // SceneAction 的字段与 Action 基本兼容（都有 type, text, audioBase64 等）
     const nativeActions = actions.map((a, idx) => ({
-      id: `action-${outline.index}-${idx}`,
+      id: `action-${outlineIndex}-${idx}`,
       ...a,
     }))
 
     return {
-      id: `scene-${outline.index}`,
+      id: `scene-${outlineIndex}`,
       title: outline.title,
       type: sceneType,
-      order: outline.index,
+      order: outlineIndex,
       content: sceneContent,
       actions: nativeActions as Scene['actions'],
     }

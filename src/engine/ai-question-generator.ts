@@ -11,6 +11,7 @@ import { generateObject } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 import type { LanguageModel } from 'ai'
 import type { ChildSettings, QuestionBankItem } from '@/types/models'
+import { BACKEND_LLM_PROVIDERS } from '@/services/config'
 import { aiQuestionSchema, validateAIQuestion } from './ai-question-schema'
 
 /** AI 生成题目的超时时间（毫秒） */
@@ -40,13 +41,70 @@ const SUBJECT_NAME_MAP: Record<string, string> = {
  *
  * 所有后端 LLM Provider 均通过 OpenAI 兼容接口调用。
  */
+const MODEL_PROVIDER_FALLBACKS: Array<{
+  pattern: RegExp
+  providerId: string
+}> = [
+  { pattern: /^(qwen|qwq)/i, providerId: 'backend-qwen' },
+  { pattern: /^deepseek/i, providerId: 'backend-deepseek' },
+  { pattern: /^doubao/i, providerId: 'backend-doubao' },
+  { pattern: /^(gpt-|o[1-9]|chatgpt-)/i, providerId: 'backend-openai' },
+]
+
+function getBackendLLMProvider(providerId?: string) {
+  if (!providerId) {
+    return undefined
+  }
+
+  return BACKEND_LLM_PROVIDERS.find(item => item.id === providerId)
+}
+
+function inferProviderIdFromLLMModel(llmModel: string): string | undefined {
+  const normalizedModel = llmModel.trim()
+  if (!normalizedModel) {
+    return undefined
+  }
+
+  const colonIdx = normalizedModel.indexOf(':')
+  const providerHint = colonIdx > 0
+    ? normalizedModel.substring(0, colonIdx).trim().toLowerCase()
+    : ''
+  const modelId = colonIdx > 0
+    ? normalizedModel.substring(colonIdx + 1).trim()
+    : normalizedModel
+
+  const providerFromPrefix = providerHint
+    ? getBackendLLMProvider(`backend-${providerHint}`)
+    : undefined
+  if (providerFromPrefix) {
+    return providerFromPrefix.id
+  }
+
+  const matchedFallback = MODEL_PROVIDER_FALLBACKS.find(
+    item => item.pattern.test(modelId),
+  )
+
+  return matchedFallback?.providerId
+}
+
+function resolveLLMBaseUrl(settings: ChildSettings): string | undefined {
+  if (settings.llmBaseUrl.trim()) {
+    return settings.llmBaseUrl.trim()
+  }
+
+  const provider = getBackendLLMProvider(settings.llmProviderId)
+    ?? getBackendLLMProvider(inferProviderIdFromLLMModel(settings.llmModel))
+
+  return provider?.defaultBaseUrl || undefined
+}
+
 function createModelFromSettings(settings: ChildSettings): LanguageModel | null {
   if (!settings.llmModel || !settings.llmApiKey) {
     return null
   }
 
   try {
-    // llmModel 格式：'openai:gpt-4o' 或 'qwen-plus' 等
+    // llmModel 格式：'openai:gpt-4o' 或 'qwen:qwen-plus' 等
     // 解析出 provider prefix 和 model id
     const colonIdx = settings.llmModel.indexOf(':')
     const modelId = colonIdx > 0
@@ -55,7 +113,7 @@ function createModelFromSettings(settings: ChildSettings): LanguageModel | null 
 
     const openai = createOpenAI({
       apiKey: settings.llmApiKey,
-      baseURL: settings.llmBaseUrl || undefined,
+      baseURL: resolveLLMBaseUrl(settings),
     })
 
     return openai.chat(modelId)

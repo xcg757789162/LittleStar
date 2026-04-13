@@ -138,6 +138,14 @@ describe('OpenMAICPipelineClient', () => {
           }),
         }),
       )
+
+      const requestBody = JSON.parse(String(mockFetch.mock.calls[0][1]?.body)) as Record<string, unknown>
+      expect(requestBody).toEqual({
+        requirements: {
+          requirement: 'Teach colors',
+          language: 'en',
+        },
+      })
     })
 
     it('should throw on SSE error event', async () => {
@@ -330,7 +338,7 @@ describe('OpenMAICPipelineClient', () => {
     it('should orchestrate full pipeline and return classroom', async () => {
       // 1. SSE outlines
       const sseEvents = [
-        'data: {"type":"done","outlines":[{"index":0,"title":"Scene 1","description":"First scene"}]}',
+        'data: {"type":"done","outlines":[{"index":0,"title":"Scene 1","description":"First scene","mediaGenerations":[{"type":"image","prompt":"cartoon rainbow","elementId":"gen_img_stage_1"}]}]}',
       ]
       mockFetch.mockResolvedValueOnce(createSSEResponse(sseEvents))
 
@@ -361,6 +369,21 @@ describe('OpenMAICPipelineClient', () => {
       expect(result).toBeDefined()
       expect(result.scenes).toHaveLength(1)
       expect(result.status).toBe('completed')
+      expect(result.outlines).toHaveLength(1)
+      expect(result.outlines?.[0].title).toBe('Scene 1')
+      expect(result.outlines?.[0].mediaGenerations).toHaveLength(1)
+      expect(result.outlines?.[0].mediaGenerations?.[0]).toMatchObject({
+        type: 'image',
+        elementId: 'gen_img_stage_1',
+      })
+      expect(result.scenes[0].actions).toHaveLength(1)
+      expect(result.scenes[0].actions?.[0]).toMatchObject({
+        type: 'speech',
+        text: 'Hello children!',
+        audioBase64: 'base64audio',
+        audioId: 'scene-0-speech-0',
+        audioUrl: 'data:audio/mpeg;base64,base64audio',
+      })
     })
 
     it('should invoke progress callbacks', async () => {

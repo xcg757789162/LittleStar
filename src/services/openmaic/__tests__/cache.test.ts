@@ -12,8 +12,39 @@ function createMockClassroom(overrides: Partial<Classroom> = {}): Classroom {
       {
         id: 'scene-1',
         title: 'Introduction',
+        type: 'slide',
+        content: {
+          type: 'slide',
+          canvas: {
+            elements: [{ type: 'text', content: '<p>Let us learn!</p>' }],
+          },
+        },
+        actions: [],
+      },
+    ],
+    ...overrides,
+  }
+}
+
+function createLegacyClassroom(overrides: Partial<Classroom> = {}): Classroom {
+  return {
+    id: 'legacy-classroom-001',
+    title: 'Legacy Numbers 1-5',
+    status: 'completed',
+    scenes: [
+      {
+        id: 'legacy-scene-1',
+        title: 'Legacy Introduction',
         type: 'teaching',
-        slides: [{ type: 'content', title: 'Hello', content: 'Let us learn!' }],
+        slides: [
+          {
+            type: 'content',
+            title: 'Legacy Hello',
+            content: 'Let us learn!',
+            imageUrl: 'https://example.com/legacy.png',
+            audioUrl: 'https://example.com/legacy.mp3',
+          },
+        ],
       },
     ],
     ...overrides,
@@ -102,6 +133,26 @@ describe('ClassroomCache', () => {
       expect(list).toHaveLength(1)
       expect(list[0].knowledgeNodeId).toBe('kn-1')
     })
+
+    it('should hide placeholder classrooms without renderable scenes from the lesson list', async () => {
+      await cache.saveClassroom('kn-valid', '2026-04-08', createMockClassroom({ id: 'valid-1', title: '数字王国' }))
+      await cache.saveClassroom('kn-invalid', '2026-04-08', createMockClassroom({
+        id: 'invalid-1',
+        title: 'Generated Classroom',
+        scenes: [],
+      }))
+
+      const list = await cache.listCachedClassrooms()
+      expect(list).toHaveLength(1)
+      expect(list[0].knowledgeNodeId).toBe('kn-valid')
+    })
+
+    it('should evict legacy classrooms that only contain scene.slides from the lesson list', async () => {
+      await cache.saveClassroom('kn-legacy', '2026-04-08', createLegacyClassroom({ id: 'legacy-1' }))
+
+      await expect(cache.listCachedClassrooms()).resolves.toEqual([])
+      await expect(cache.getClassroom('kn-legacy', '2026-04-08')).resolves.toBeNull()
+    })
   })
 
   describe('deleteClassroom', () => {
@@ -147,6 +198,19 @@ describe('ClassroomCache', () => {
 
       expect(exactResult).toBeDefined()
       expect(afterResult).toBeDefined()
+    })
+  })
+
+  describe('getCacheSize', () => {
+    it('should count only renderable classrooms', async () => {
+      await cache.saveClassroom('kn-valid', '2026-04-08', createMockClassroom({ id: 'valid-1', title: '数字王国' }))
+      await cache.saveClassroom('kn-invalid', '2026-04-08', createMockClassroom({
+        id: 'invalid-1',
+        title: 'Generated Classroom',
+        scenes: [],
+      }))
+
+      await expect(cache.getCacheSize()).resolves.toBe(1)
     })
   })
 

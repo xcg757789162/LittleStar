@@ -10,6 +10,7 @@
 
 import type { Scene as OpenMAICScene, Stage as OpenMAICStage } from '@/types/openmaic/stage'
 import type { Action } from '@/types/openmaic/action'
+import type { SceneOutline as PipelineSceneOutline } from './pipeline-types'
 
 // ============================================================
 // 常量

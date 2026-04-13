@@ -6,7 +6,7 @@
 import { motion } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
-import { useUserProfileStore } from '@/stores/openmaic/user-profile'
+import { syncChildToOpenMAIC } from '@/stores/openmaic/child-openmaic-sync'
 import type { Child } from '@/types/models'
 
 interface ChildSwitcherProps {
@@ -24,21 +24,7 @@ export function ChildSwitcher({ visible, onClose }: ChildSwitcherProps) {
 
   const handleSelect = (child: Child) => {
     setCurrentChild(child)
-    // 同步孩子头像到课堂 user-profile store（data URL 或预设头像路径）
-    if (child.avatar?.startsWith('data:') || child.avatar?.startsWith('/avatars/')) {
-      useUserProfileStore.getState().setAvatar(child.avatar)
-    }
-    // 同步昵称
-    if (child.name) {
-      useUserProfileStore.getState().setNickname(child.name)
-    }
-    // 同步自我介绍（存在 settings.bio 中）
-    const settings = child.settings as Record<string, unknown> | undefined
-    if (settings?.bio && typeof settings.bio === 'string') {
-      useUserProfileStore.getState().setBio(settings.bio)
-    } else {
-      useUserProfileStore.getState().setBio('')
-    }
+    syncChildToOpenMAIC(child)
     onClose()
   }
 

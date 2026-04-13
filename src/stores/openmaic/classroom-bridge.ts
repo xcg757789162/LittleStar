@@ -91,45 +91,32 @@ export const useClassroomBridgeStore = create<ClassroomBridgeState>()((set) => (
         language: classroom.language || 'zh-CN',
       };
 
+      const legacySceneCount = (classroom.scenes || []).filter((scene) => !isNativeScene(scene)).length;
+      if (legacySceneCount > 0) {
+        throw new Error('该课堂使用旧版媒体结构（scene.slides / imageUrl / audioUrl），当前原生课堂播放器无法安全兼容，请重新生成课堂。');
+      }
+
       // 2. 将 Classroom.scenes 转换为 OpenMAIC Scene[]
-      const scenes: Scene[] = (classroom.scenes || []).map((rawScene, index) => {
-        if (isNativeScene(rawScene)) {
-          // v2 原生格式：直接映射，OpenMAIC Scene 字段完全可用
-          return {
-            id: rawScene.id || `scene-${index}`,
-            stageId: rawScene.stageId || stage.id,
-            type: mapSceneType(rawScene.type),
-            title: rawScene.title || `场景 ${index + 1}`,
-            order: rawScene.order ?? index,
-            content: rawScene.content!,
-            actions: rawScene.actions || [],
-            whiteboards: rawScene.whiteboards,
-            multiAgent: rawScene.multiAgent,
-            createdAt: rawScene.createdAt || Date.now(),
-            updatedAt: rawScene.updatedAt || Date.now(),
-          };
-        } else {
-          // v1 旧格式兼容：从 slides[] 构建基本的 SlideContent
-          // 旧缓存中 scene.slides 是简化的 Slide[]，构建一个空 canvas fallback
-          return {
-            id: rawScene.id || `scene-${index}`,
-            stageId: stage.id,
-            type: mapSceneType(rawScene.type),
-            title: rawScene.title || `场景 ${index + 1}`,
-            order: rawScene.order ?? index,
-            content: { type: 'slide' as const, canvas: {} as never },
-            actions: [],
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          };
-        }
-      });
+      const scenes: Scene[] = (classroom.scenes || []).map((rawScene, index) => ({
+        id: rawScene.id || `scene-${index}`,
+        stageId: rawScene.stageId || stage.id,
+        type: mapSceneType(rawScene.type),
+        title: rawScene.title || `场景 ${index + 1}`,
+        order: rawScene.order ?? index,
+        content: rawScene.content!,
+        actions: rawScene.actions || [],
+        whiteboards: rawScene.whiteboards,
+        multiAgent: rawScene.multiAgent,
+        createdAt: rawScene.createdAt || Date.now(),
+        updatedAt: rawScene.updatedAt || Date.now(),
+      }));
 
       // 3. 注入到 Stage Store
       const stageStore = useStageStore.getState();
       stageStore.clearStore();
       stageStore.setStage(stage);
       stageStore.setScenes(scenes);
+      stageStore.setOutlines(normalizeStoredOutlines(classroom.outlines));
       stageStore.setMode('playback');
 
       // 自动选中第一个场景
@@ -140,6 +127,11 @@ export const useClassroomBridgeStore = create<ClassroomBridgeState>()((set) => (
       set({ status: 'ready', answerCount: 0, correctCount: 0 });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      try {
+        useStageStore.getState().clearStore();
+      } catch {
+        // 忽略 Stage 清理错误
+      }
       console.error('[ClassroomBridge] Failed to load classroom:', message);
       set({ status: 'error', error: message });
     }
@@ -177,6 +169,24 @@ export const useClassroomBridgeStore = create<ClassroomBridgeState>()((set) => (
 /**
  * 映射 LittleStar 场景类型到 OpenMAIC 场景类型
  */
+function normalizeStoredOutlines(outlines?: Classroom['outlines']): StageSceneOutline[] {
+  if (!Array.isArray(outlines)) return []
+
+  return outlines.map((outline, index) => ({
+    id: outline.id || `outline-${outline.order ?? outline.index ?? index}`,
+    order: outline.order ?? outline.index ?? index,
+    type:
+      outline.type === 'quiz' || outline.type === 'interactive' || outline.type === 'pbl'
+        ? outline.type
+        : 'slide',
+    title: outline.title,
+    description: outline.description,
+    keyPoints: outline.keyPoints ?? [],
+    language: outline.language === 'en-US' || outline.language === 'zh-CN' ? outline.language : undefined,
+    mediaGenerations: outline.mediaGenerations,
+  }))
+}
+
 function mapSceneType(type?: string): Scene['type'] {
   switch (type) {
     case 'slide':

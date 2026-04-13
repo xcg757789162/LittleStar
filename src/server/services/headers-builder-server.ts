@@ -7,37 +7,7 @@
  * 设计决策参考：design.md D6
  */
 
-// Preset agents 定义（与前端 PRESET_AGENTS 保持同步）
-const PRESET_AGENTS = [
-  {
-    id: 'teacher',
-    name: '小明老师',
-    emoji: '👨‍🏫',
-    description: '温暖耐心的AI老师，擅长用简单有趣的方式教学',
-    defaultVoice: 'female-tianmei',
-  },
-  {
-    id: 'student-eager',
-    name: '小星星',
-    emoji: '⭐',
-    description: '积极好学的小伙伴，总是第一个举手回答问题',
-    defaultVoice: 'female-yujie',
-  },
-  {
-    id: 'student-curious',
-    name: '小月亮',
-    emoji: '🌙',
-    description: '充满好奇心的小伙伴，喜欢提出各种有趣的问题',
-    defaultVoice: 'male-qn-qingse',
-  },
-  {
-    id: 'student-shy',
-    name: '小花',
-    emoji: '🌸',
-    description: '文静害羞的小伙伴，虽然不太爱说话但其实很聪明',
-    defaultVoice: 'female-shaonv',
-  },
-]
+import { PRESET_AGENTS } from '../../types/models.js'
 
 /**
  * 从 ChildSettings JSON 构建 OpenMAIC HTTP Headers

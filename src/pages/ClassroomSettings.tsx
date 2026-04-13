@@ -20,13 +20,16 @@ import { motion, AnimatePresence } from 'motion/react'
 import { VoicePicker } from '@/components/classroom/VoicePicker'
 import { useSettingsStore } from '@/lib/openmaic/store/settings'
 import { useAgentRegistry } from '@/lib/openmaic/orchestration/registry/store'
-import { useUserProfileStore, AVATAR_OPTIONS } from '@/stores/openmaic/user-profile'
+import { useUserProfileStore, AVATAR_OPTIONS } from '@/lib/openmaic/store/user-profile'
 import { useChildStore } from '@/stores/childStore'
-import { syncSettingsToOpenMAIC } from '@/stores/openmaic/settings-sync'
+import { syncChildProfileToOpenMAIC, syncChildToOpenMAIC } from '@/stores/openmaic/child-openmaic-sync'
+import { stripLegacyBioField } from '@/stores/openmaic/child-settings-compat'
+import { extractChildSettingsFromStore } from '@/stores/openmaic/settings-reverse-sync'
 import { resolveAgentVoice, getAvailableProvidersWithVoices, getCurrentProviderVoices } from '@/lib/openmaic/audio/voice-resolver'
 
 import type { TTSProviderId } from '@/lib/openmaic/audio/types'
 import type { ProviderWithVoices } from '@/lib/openmaic/audio/voice-resolver'
+import type { Child, ChildSettings } from '@/types/models'
 
 /* ═══════════════════════════════════════════
    设计 Token — Sunny Playground 风格
@@ -79,6 +82,46 @@ function mapBackendTTSProviderId(providerId: string): TTSProviderId | null {
   }
 }
 
+function getChildSnapshot(childId: string | null | undefined): Child | null {
+  if (!childId) return null
+  const state = useChildStore.getState()
+  return state.children.find((child) => child.id === childId) ?? null
+}
+
+export function buildPersistedClassroomSettings(
+  settings: Partial<ChildSettings>,
+): Pick<ChildSettings, 'classroomAgentMode' | 'selectedAgents' | 'teacherVoice' | 'maxDiscussionRounds' | 'agentVoiceMap'> {
+  return {
+    classroomAgentMode: settings.classroomAgentMode || 'preset',
+    selectedAgents: [...(settings.selectedAgents || [])],
+    teacherVoice: settings.teacherVoice || '',
+    maxDiscussionRounds: Number(settings.maxDiscussionRounds) || 3,
+    agentVoiceMap: { ...(settings.agentVoiceMap || {}) },
+  }
+}
+
+export function getClassroomSettingsSignature(settings: Partial<ChildSettings>): string {
+  return JSON.stringify(buildPersistedClassroomSettings(settings))
+}
+
+type PersistedClassroomSettings = ReturnType<typeof buildPersistedClassroomSettings>
+
+function toSettingsRecord(settings?: Partial<ChildSettings> | null): Record<string, unknown> {
+  return settings ? { ...settings } : {}
+}
+
+export function buildSelfIntroductionSettingsPayload(
+  child: Pick<Child, 'settings'> | null | undefined,
+  newBio: string,
+): Record<string, unknown> {
+  const currentSettings = stripLegacyBioField(toSettingsRecord(child?.settings))
+
+  return {
+    ...currentSettings,
+    selfIntroduction: newBio,
+  }
+}
+
 /* ═══════════════════════════════════════════
    主页面
    ═══════════════════════════════════════════ */
@@ -121,12 +164,17 @@ export function ClassroomSettings() {
   // === 当前孩子数据（用于正向同步 DB → OpenMAIC Store）===
   const currentChild = useChildStore((s) => s.currentChild)
   const childSettings = currentChild?.settings
+  const bioTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const classroomSettingsTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  const pendingClassroomSettingsRef = useRef(new Map<string, PersistedClassroomSettings>())
+  const lastClassroomSettingsChildIdRef = useRef<string | null>(null)
+  const nameEditChildIdRef = useRef<string | null>(null)
 
   // 当孩子的数据库设置变化时，正向同步到 OpenMAIC Store
   useEffect(() => {
-    if (!childSettings) return
-    syncSettingsToOpenMAIC(childSettings)
-  }, [childSettings, currentChild?.id])
+    if (!currentChild || !childSettings) return
+    syncChildToOpenMAIC(currentChild)
+  }, [childSettings, currentChild])
 
   // 构建可用的 TTS 音色列表
   // 优先使用当前已同步到 OpenMAIC store 的 provider；如果还停留在 browser-native，
@@ -143,6 +191,100 @@ export function ClassroomSettings() {
   const agents = allAgents.filter((a) => !a.isGenerated)
   const teacherAgent = agents.find((a) => a.role === 'teacher')
   const studentAgents = agents.filter((a) => a.role !== 'teacher')
+  const selectedAgentVoiceSignature = studentAgents
+    .map((agent) => `${agent.id}:${agent.voiceConfig?.providerId || ''}:${agent.voiceConfig?.voiceId || ''}`)
+    .join('|')
+
+  const flushClassroomSettingsToDb = useCallback(async (childId: string) => {
+    const existingTimer = classroomSettingsTimersRef.current.get(childId)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+      classroomSettingsTimersRef.current.delete(childId)
+    }
+
+    const persistedSettings = pendingClassroomSettingsRef.current.get(childId)
+    if (!persistedSettings) return
+
+    const targetChild = getChildSnapshot(childId)
+    if (!targetChild?.settings) {
+      pendingClassroomSettingsRef.current.delete(childId)
+      return
+    }
+
+    const currentSettings = stripLegacyBioField(
+      toSettingsRecord(targetChild.settings),
+    ) as Partial<ChildSettings>
+
+    if (getClassroomSettingsSignature(currentSettings) === JSON.stringify(persistedSettings)) {
+      pendingClassroomSettingsRef.current.delete(childId)
+      return
+    }
+
+    try {
+      const { apiClient } = await import('@/services/api')
+      await apiClient.patch('/children', {
+        settings: { ...currentSettings, ...persistedSettings },
+      }, {
+        filters: [{ column: 'id', operator: 'eq', value: Number(childId) }],
+      })
+
+      useChildStore.getState().updateChildSettings(String(childId), persistedSettings)
+    } catch (err) {
+      console.error('[persistClassroomSettingsToDb] ❌ 课堂设置写入数据库失败:', err)
+    } finally {
+      pendingClassroomSettingsRef.current.delete(childId)
+    }
+  }, [])
+
+  const persistClassroomSettingsToDb = useCallback((
+    targetChildId: string | null | undefined,
+    persistedSettings: PersistedClassroomSettings,
+  ) => {
+    const childId = targetChildId || useChildStore.getState().currentChild?.id
+    if (!childId) return
+
+    const existingTimer = classroomSettingsTimersRef.current.get(childId)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+    }
+
+    pendingClassroomSettingsRef.current.set(childId, persistedSettings)
+    const timer = setTimeout(() => {
+      void flushClassroomSettingsToDb(childId)
+    }, 250)
+    classroomSettingsTimersRef.current.set(childId, timer)
+  }, [flushClassroomSettingsToDb])
+
+  useEffect(() => {
+    const currentChildId = currentChild?.id ?? null
+    const previousChildId = lastClassroomSettingsChildIdRef.current
+
+    if (previousChildId && previousChildId !== currentChildId) {
+      void flushClassroomSettingsToDb(previousChildId)
+    }
+
+    if (previousChildId !== currentChildId) {
+      lastClassroomSettingsChildIdRef.current = currentChildId
+      return
+    }
+
+    if (!currentChildId || !childSettings) return
+
+    persistClassroomSettingsToDb(
+      currentChildId,
+      buildPersistedClassroomSettings(extractChildSettingsFromStore()),
+    )
+  }, [
+    agentMode,
+    currentChild?.id,
+    childSettings,
+    flushClassroomSettingsToDb,
+    maxTurns,
+    persistClassroomSettingsToDb,
+    selectedAgentIds,
+    selectedAgentVoiceSignature,
+    ttsVoice,
+  ])
 
   // === 事件处理 ===
 
@@ -152,55 +294,84 @@ export function ClassroomSettings() {
 
   const startEditName = () => {
     setNameDraft(nickname)
+    nameEditChildIdRef.current = currentChild?.id ?? null
     setEditingName(true)
   }
 
   const commitName = async () => {
     const trimmed = nameDraft.trim()
-    setNickname(trimmed)
+    const targetChildId = nameEditChildIdRef.current || useChildStore.getState().currentChild?.id || null
     setEditingName(false)
+    nameEditChildIdRef.current = null
 
-    // 持久化到数据库 children.name
-    const child = useChildStore.getState().currentChild
-    if (child?.id && trimmed) {
-      try {
-        const { apiClient } = await import('@/services/api')
-        await apiClient.patch('/children', { name: trimmed }, {
-          filters: [{ column: 'id', operator: 'eq', value: Number(child.id) }],
-        })
-        console.log('[commitName] ✅ 昵称已写入数据库:', trimmed)
-        useChildStore.getState().updateChild(String(child.id), { name: trimmed })
-      } catch (err) {
-        console.error('[commitName] ❌ 昵称写入数据库失败:', err)
-      }
+    if (!targetChildId || !trimmed) return
+
+    if (useChildStore.getState().currentChild?.id === targetChildId) {
+      setNickname(trimmed)
+    }
+
+    try {
+      const { apiClient } = await import('@/services/api')
+      await apiClient.patch('/children', { name: trimmed }, {
+        filters: [{ column: 'id', operator: 'eq', value: Number(targetChildId) }],
+      })
+      console.log('[commitName] ✅ 昵称已写入数据库:', trimmed)
+      useChildStore.getState().updateChild(String(targetChildId), { name: trimmed })
+    } catch (err) {
+      console.error('[commitName] ❌ 昵称写入数据库失败:', err)
     }
   }
 
-  /** 同步自我介绍到数据库（写入 children.settings.bio） */
-  const bioTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** 同步自我介绍到数据库（收口到 children.settings.selfIntroduction） */
   const syncBioToDb = useCallback((newBio: string) => {
     // 1. 立即更新 UI
     setBio(newBio)
 
+    const scheduledChild = useChildStore.getState().currentChild
+
     // 2. debounce 写入数据库（500ms 无输入后写入）
     if (bioTimerRef.current) clearTimeout(bioTimerRef.current)
     bioTimerRef.current = setTimeout(async () => {
-      const child = useChildStore.getState().currentChild
-      if (!child?.id) return
+      if (!scheduledChild?.id) return
+
+      const child = getChildSnapshot(scheduledChild.id) || scheduledChild
       try {
-        const currentSettings = (child.settings || {}) as Record<string, unknown>
         const { apiClient } = await import('@/services/api')
         await apiClient.patch('/children', {
-          settings: { ...currentSettings, bio: newBio },
+          settings: buildSelfIntroductionSettingsPayload(child, newBio),
         }, {
-          filters: [{ column: 'id', operator: 'eq', value: Number(child.id) }],
+          filters: [{ column: 'id', operator: 'eq', value: Number(scheduledChild.id) }],
         })
+
+        useChildStore.getState().updateChildSettings(String(scheduledChild.id), {
+          selfIntroduction: newBio,
+        })
+
+        if (useChildStore.getState().currentChild?.id === scheduledChild.id) {
+          syncChildProfileToOpenMAIC({
+            ...child,
+            settings: {
+              ...child.settings,
+              selfIntroduction: newBio,
+            },
+          })
+        }
         console.log('[syncBioToDb] ✅ 自我介绍已写入数据库:', newBio.substring(0, 30))
       } catch (err) {
         console.error('[syncBioToDb] ❌ 自我介绍写入数据库失败:', err)
       }
     }, 500)
   }, [setBio])
+
+  useEffect(() => {
+    return () => {
+      if (bioTimerRef.current) clearTimeout(bioTimerRef.current)
+
+      for (const childId of Array.from(pendingClassroomSettingsRef.current.keys())) {
+        void flushClassroomSettingsToDb(childId)
+      }
+    }
+  }, [flushClassroomSettingsToDb])
 
   /** 同步头像到数据库（当前孩子的 children.avatar 字段） */
   const syncAvatarToDb = useCallback(async (newAvatar: string) => {

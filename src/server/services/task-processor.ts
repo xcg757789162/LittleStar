@@ -12,7 +12,9 @@
 import { pool } from '../db.js'
 import { PipelineExecutor } from './pipeline-executor.js'
 import { buildHeadersFromSettingsServer } from './headers-builder-server.js'
+import { normalizeTaskProgress } from './task-progress.js'
 import type { PipelineCheckpoint } from './pipeline-executor.js'
+import type { UserRequirements } from '../../services/openmaic/pipeline-types.js'
 
 // ============================================================
 // 类型
@@ -39,6 +41,27 @@ let isProcessing = false
 let processingTimer: ReturnType<typeof setTimeout> | null = null
 
 const pipelineExecutor = new PipelineExecutor()
+
+type TaskRequirementsInput = Pick<TaskRow, 'requirement' | 'language' | 'settings'>
+
+function getNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed ? trimmed : undefined
+}
+
+export function buildTaskRequirements(task: TaskRequirementsInput): UserRequirements {
+  const userNickname = getNonEmptyString(task.settings?.userNickname)
+  const userBio = getNonEmptyString(task.settings?.userBio)
+    ?? getNonEmptyString(task.settings?.selfIntroduction)
+
+  return {
+    requirement: task.requirement,
+    language: task.language || 'zh-CN',
+    ...(userNickname ? { userNickname } : {}),
+    ...(userBio ? { userBio } : {}),
+  }
+}
 
 // ============================================================
 // 核心方法
@@ -144,28 +167,28 @@ async function processNextTask(): Promise<void> {
 
     // 执行 Pipeline
     const classroom = await pipelineExecutor.runFullPipeline({
-      requirements: {
-        requirement: task.requirement,
-        language: task.language || 'zh-CN',
-      },
+      requirements: buildTaskRequirements(task),
       headers,
       checkpoint: task.checkpoint,
       onProgress: async (step, percent, message) => {
-        // 更新进度
+        void message
+        const safeProgress = normalizeTaskProgress(percent)
+
         await pool.query(
           `UPDATE api.generation_tasks
            SET progress = $1, current_step = $2, updated_at = NOW()
            WHERE id = $3`,
-          [percent, step, task.id],
+          [safeProgress, step, task.id],
         ).catch(console.error)
       },
       onCheckpoint: async (checkpoint, step, progress) => {
-        // 保存断点
+        const safeProgress = normalizeTaskProgress(progress)
+
         await pool.query(
           `UPDATE api.generation_tasks
            SET checkpoint = $1, current_step = $2, progress = $3, updated_at = NOW()
            WHERE id = $4`,
-          [JSON.stringify(checkpoint), step, progress, task.id],
+          [JSON.stringify(checkpoint), step, safeProgress, task.id],
         ).catch(console.error)
       },
     })

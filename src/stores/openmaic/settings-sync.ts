@@ -21,11 +21,19 @@
 
 import type { ChildSettings } from '@/types/models'
 import type { TTSProviderId, ASRProviderId, ISEProviderId } from '@/lib/openmaic/audio/types'
+import { DEFAULT_TTS_VOICES } from '@/lib/openmaic/audio/constants'
 import type { PDFProviderId } from '@/lib/openmaic/pdf/types'
 import type { ImageProviderId, VideoProviderId } from '@/lib/openmaic/media/types'
 import type { WebSearchProviderId } from '@/lib/openmaic/web-search/types'
 import { useSettingsStore } from '@/lib/openmaic/store/settings'
+import { useAgentRegistry } from '@/lib/openmaic/orchestration/registry/store'
 import { createLogger } from '@/lib/openmaic/logger'
+import {
+  getAllMappedRegistryAgentIds,
+  toPresetAgentId,
+  toRegistryAgentId,
+  toRegistrySelectedAgentIds,
+} from './child-settings-compat'
 
 function mapChildTTSProviderId(providerId: string): TTSProviderId | null {
   switch (providerId) {
@@ -66,6 +74,42 @@ function mapChildASRProviderId(providerId: string): ASRProviderId | null {
 }
 
 const log = createLogger('SettingsSync')
+
+function getTeacherVoice(settings: ChildSettings): string {
+  return settings.teacherVoice || settings.ttsVoice || ''
+}
+
+function syncAgentRegistry(settings: ChildSettings, mappedTTSProviderId: TTSProviderId | null): void {
+  const registry = useAgentRegistry.getState()
+  const providerId = mappedTTSProviderId ?? useSettingsStore.getState().ttsProviderId
+  const teacherRegistryId = toRegistryAgentId('teacher')
+  const teacherVoice = getTeacherVoice(settings) || DEFAULT_TTS_VOICES[providerId]
+
+  if (teacherRegistryId) {
+    registry.updateAgent(teacherRegistryId, {
+      voiceConfig: {
+        providerId,
+        voiceId: teacherVoice,
+      },
+    })
+  }
+
+  for (const registryId of getAllMappedRegistryAgentIds()) {
+    if (registryId === teacherRegistryId) continue
+
+    const presetAgentId = toPresetAgentId(registryId)
+    const voiceId = presetAgentId ? settings.agentVoiceMap?.[presetAgentId] : undefined
+
+    registry.updateAgent(registryId, {
+      voiceConfig: voiceId
+        ? {
+            providerId,
+            voiceId,
+          }
+        : undefined,
+    })
+  }
+}
 
 /**
  * 将 LittleStar ChildSettings 同步到 OpenMAIC Settings Store
@@ -116,8 +160,9 @@ export function syncSettingsToOpenMAIC(settings: ChildSettings): void {
   if (mappedTTSProviderId) {
     try { store.setTTSProvider(mappedTTSProviderId) } catch { /* */ }
   }
-  if (settings.ttsVoice) {
-    try { store.setTTSVoice(settings.ttsVoice) } catch { /* */ }
+  const teacherVoice = getTeacherVoice(settings)
+  if (teacherVoice) {
+    try { store.setTTSVoice(teacherVoice) } catch { /* */ }
   }
   if (settings.ttsSpeed) {
     try { store.setTTSSpeed(settings.ttsSpeed) } catch { /* */ }
@@ -227,6 +272,12 @@ export function syncSettingsToOpenMAIC(settings: ChildSettings): void {
       ...(settings.enablePDF !== undefined ? { enabled: settings.enablePDF } : {}),
     })
   } catch { /* */ }
+
+  // === 9. 课堂模式 / 角色配置 ===
+  try { store.setAgentMode(settings.classroomAgentMode || 'preset') } catch { /* */ }
+  try { store.setSelectedAgentIds(toRegistrySelectedAgentIds(settings.selectedAgents)) } catch { /* */ }
+  try { store.setMaxTurns(String(settings.maxDiscussionRounds || 3)) } catch { /* */ }
+  syncAgentRegistry(settings, mappedTTSProviderId)
 
   log.info('设置同步完成 ✅')
 }

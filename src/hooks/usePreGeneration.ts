@@ -19,9 +19,10 @@ import {
   RequirementGenerator,
 } from '@/services/lesson-planner'
 import type { TemplatePrompt } from '@/services/lesson-planner/requirement-generator'
-import type { Subject, KnowledgeNode, MasteryRecord, PlacementTest } from '@/types/models'
+import type { Child, ChildSettings, Subject, KnowledgeNode, MasteryRecord, PlacementTest } from '@/types/models'
 import type { PipelineStepName } from '@/services/openmaic/pipeline-types'
 import { createLogger } from '@/lib/openmaic/logger'
+import { getSelfIntroductionFromSettings } from '@/stores/openmaic/child-settings-compat'
 
 const log = createLogger('PreGeneration')
 
@@ -43,7 +44,11 @@ export interface PreGenerationState {
 }
 
 const SUBJECTS: Subject[] = ['math', 'chinese', 'english']
-const MIN_CACHE_SIZE = 3
+
+export function getMinCacheSizeForCompletedSubjects(completedSubjectCount: number): number {
+  if (completedSubjectCount <= 0) return 0
+  return Math.min(SUBJECTS.length, completedSubjectCount)
+}
 
 /** 轮询间隔（毫秒） */
 const POLL_INTERVAL = 3000
@@ -91,6 +96,25 @@ function getApiBase(): string {
   return '/api/pre-generate/'
 }
 
+export function buildPreGenerationChildSettings(
+  child: Pick<Child, 'name' | 'settings'> | null | undefined,
+): Record<string, unknown> {
+  if (!child?.settings) {
+    return {}
+  }
+
+  const userNickname = child.name?.trim()
+  const userBio = getSelfIntroductionFromSettings(
+    child.settings as Partial<ChildSettings> & { bio?: unknown },
+  )
+
+  return {
+    ...(child.settings as Record<string, unknown>),
+    ...(userNickname ? { userNickname } : {}),
+    ...(userBio ? { userBio } : {}),
+  }
+}
+
 async function submitTasks(
   childId: number,
   childSettings: Record<string, unknown>,
@@ -124,6 +148,7 @@ export function usePreGeneration(
   childId: string | number | undefined,
   hasPlacementTest: boolean | null,
   cachedCount: number,
+  completedSubjectCount = 0,
 ): PreGenerationState {
   const [status, setStatus] = useState<PreGenerationStatus>('idle')
   const [pendingCount, setPendingCount] = useState(0)
@@ -145,6 +170,7 @@ export function usePreGeneration(
   const currentChild = useChildStore((s) => s.currentChild)
   const llmModel = currentChild?.settings?.llmModel ?? ''
   const llmApiKey = currentChild?.settings?.llmApiKey ?? ''
+  const minCacheSize = getMinCacheSizeForCompletedSubjects(completedSubjectCount)
 
   /**
    * 停止轮询
@@ -248,6 +274,7 @@ export function usePreGeneration(
         filters: [{ column: 'childId', operator: 'eq', value: numChildId }],
       })
       const completedSubjects = new Set(tests.map((t) => t.subject as Subject))
+      const requiredCacheSize = getMinCacheSizeForCompletedSubjects(completedSubjects.size)
       log.info('已完成评测科目:', [...completedSubjects])
 
       if (completedSubjects.size === 0) {
@@ -260,9 +287,9 @@ export function usePreGeneration(
       // 2. 检查缓存水位线
       const cache = new ClassroomCache(new PostgresCacheStore(numChildId))
       const existingSize = await cache.getCacheSize()
-      log.info('当前缓存数量:', existingSize, '/ 最小水位线:', MIN_CACHE_SIZE)
+      log.info('当前缓存数量:', existingSize, '/ 最小水位线:', requiredCacheSize)
 
-      if (existingSize >= MIN_CACHE_SIZE) {
+      if (existingSize >= requiredCacheSize) {
         log.info('缓存已达水位线，无需生成')
         setStatus('completed')
         setCompletedCount(existingSize)
@@ -406,7 +433,7 @@ export function usePreGeneration(
       try {
         const result = await submitTasks(
           numChildId,
-          child.settings as unknown as Record<string, unknown>,
+          buildPreGenerationChildSettings(child),
           backendTasks,
         )
         log.info('✅ 任务提交成功:', result.message, 'taskIds:', result.taskIds)
@@ -457,7 +484,8 @@ export function usePreGeneration(
     if (
       childId &&
       hasPlacementTest === true &&
-      cachedCount < MIN_CACHE_SIZE &&
+      minCacheSize > 0 &&
+      cachedCount < minCacheSize &&
       !hasTriggeredRef.current &&
       !isRunningRef.current
     ) {
@@ -465,7 +493,7 @@ export function usePreGeneration(
       hasTriggeredRef.current = true
       void runPreGeneration()
     }
-  }, [childId, hasPlacementTest, cachedCount, runPreGeneration])
+  }, [childId, hasPlacementTest, cachedCount, minCacheSize, runPreGeneration])
 
   /**
    * 监听课堂完成事件
@@ -478,7 +506,7 @@ export function usePreGeneration(
           try {
             const cache = new ClassroomCache(new PostgresCacheStore(Number(childId)))
             const currentSize = await cache.getCacheSize()
-            if (currentSize < MIN_CACHE_SIZE) {
+            if (minCacheSize > 0 && currentSize < minCacheSize) {
               void runPreGeneration()
             }
           } catch {
@@ -492,7 +520,7 @@ export function usePreGeneration(
 
     window.addEventListener('classroom-completed', handleClassroomCompleted)
     return () => window.removeEventListener('classroom-completed', handleClassroomCompleted)
-  }, [runPreGeneration, childId])
+  }, [runPreGeneration, childId, minCacheSize])
 
   /**
    * 监听评测完成事件

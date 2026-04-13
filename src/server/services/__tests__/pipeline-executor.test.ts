@@ -61,6 +61,13 @@ describe('PipelineExecutor', () => {
       description: '学习红黄蓝三种颜色',
       type: 'slide',
       language: 'zh-CN',
+      mediaGenerations: [
+        {
+          type: 'image',
+          prompt: 'cartoon red yellow blue balloons',
+          elementId: 'gen_img_color_1',
+        },
+      ],
     }
 
     mockFetch
@@ -119,6 +126,8 @@ describe('PipelineExecutor', () => {
       requirements: {
         requirement: '给幼儿讲红黄蓝三种颜色',
         language: 'zh-CN',
+        userNickname: '小明',
+        userBio: '我喜欢恐龙和拼图',
       },
       headers,
     })
@@ -126,13 +135,32 @@ describe('PipelineExecutor', () => {
     expect(classroom.status).toBe('completed')
     expect(classroom.scenes).toHaveLength(1)
     expect(classroom.scenes[0].title).toBe('颜色课堂')
-    expect((classroom.scenes[0].actions[0] as { audioBase64?: string }).audioBase64).toBe('base64-audio')
+    expect(classroom.outlines).toEqual([
+      expect.objectContaining({
+        id: 'outline-1',
+        mediaGenerations: [
+          expect.objectContaining({
+            type: 'image',
+            elementId: 'gen_img_color_1',
+          }),
+        ],
+      }),
+    ])
+    expect(classroom.scenes[0].actions[0]).toMatchObject({
+      type: 'speech',
+      text: '大家一起来认识颜色',
+      audioBase64: 'base64-audio',
+      audioId: 'scene-0-speech-0',
+      audioUrl: 'data:audio/mpeg;base64,base64-audio',
+    })
 
     const outlinesBody = JSON.parse(String(mockFetch.mock.calls[0][1]?.body)) as Record<string, unknown>
     expect(outlinesBody).toMatchObject({
       requirements: {
         requirement: '给幼儿讲红黄蓝三种颜色',
         language: 'zh-CN',
+        userNickname: '小明',
+        userBio: '我喜欢恐龙和拼图',
       },
       agents: [{ id: 'teacher', name: '小明老师', voiceId: 'alloy' }],
     })
@@ -251,5 +279,143 @@ describe('PipelineExecutor', () => {
     expect(secondActionsBody).toMatchObject({
       previousSpeeches: ['大家好'],
     })
+  })
+
+  it('accepts upstream outlines that only provide order and still builds scenes', async () => {
+    const outline = {
+      id: 'outline-order-only',
+      order: 0,
+      title: '数字课堂',
+      description: '认识 1 到 5',
+      type: 'slide',
+      keyPoints: ['1', '2', '3'],
+    }
+
+    mockFetch
+      .mockResolvedValueOnce(createSSEResponse([
+        `data: ${JSON.stringify({ type: 'done', outlines: [outline] })}`,
+      ]))
+      .mockResolvedValueOnce(createMockResponse({
+        success: true,
+        content: {
+          type: 'slide',
+          canvas: {
+            elements: [{ type: 'text', content: '<p>1 2 3 4 5</p>' }],
+          },
+        },
+        effectiveOutline: outline,
+      }))
+      .mockResolvedValueOnce(createMockResponse({
+        success: true,
+        scene: {
+          id: 'scene-order-only',
+          title: '数字课堂',
+          type: 'slide',
+          order: 0,
+          content: {
+            type: 'slide',
+            canvas: {
+              elements: [{ type: 'text', content: '<p>1 2 3 4 5</p>' }],
+            },
+          },
+          actions: [],
+        },
+        previousSpeeches: [],
+      }))
+
+    const classroom = await executor.runFullPipeline({
+      requirements: {
+        requirement: '给幼儿讲 1 到 5',
+        language: 'zh-CN',
+      },
+      headers: {
+        'x-model': 'openai:gpt-4o',
+        'x-api-key': 'sk-test',
+        'x-tts-enabled': 'false',
+      },
+    })
+
+    expect(classroom.title).toBe('数字课堂')
+    expect(classroom.scenes).toHaveLength(1)
+    expect(classroom.scenes[0].title).toBe('数字课堂')
+  })
+
+  it('accepts upstream scene-content payloads that omit the legacy type wrapper', async () => {
+    const outline = {
+      id: 'outline-slide-1',
+      order: 0,
+      title: '形状课堂',
+      description: '认识正方形',
+      type: 'slide',
+    }
+
+    mockFetch
+      .mockResolvedValueOnce(createSSEResponse([
+        `data: ${JSON.stringify({ type: 'done', outlines: [outline] })}`,
+      ]))
+      .mockResolvedValueOnce(createMockResponse({
+        success: true,
+        content: {
+          elements: [{ type: 'text', content: '<p>这是正方形</p>' }],
+          background: { type: 'solid', color: '#fff7ed' },
+        },
+        effectiveOutline: outline,
+      }))
+      .mockResolvedValueOnce(createMockResponse({
+        success: true,
+        scene: {
+          id: 'scene-shape-1',
+          title: '形状课堂',
+          type: 'slide',
+          order: 0,
+          content: {
+            type: 'slide',
+            canvas: {
+              elements: [{ type: 'text', content: '<p>这是正方形</p>' }],
+              background: { type: 'solid', color: '#fff7ed' },
+            },
+          },
+          actions: [],
+        },
+        previousSpeeches: [],
+      }))
+
+    const classroom = await executor.runFullPipeline({
+      requirements: {
+        requirement: '给幼儿讲正方形',
+        language: 'zh-CN',
+      },
+      headers: {
+        'x-model': 'openai:gpt-4o',
+        'x-api-key': 'sk-test',
+        'x-tts-enabled': 'false',
+      },
+    })
+
+    expect(classroom.scenes).toHaveLength(1)
+    const actionsBody = JSON.parse(String(mockFetch.mock.calls[2][1]?.body)) as Record<string, unknown>
+    expect(actionsBody).toMatchObject({
+      content: {
+        elements: [{ type: 'text', content: '<p>这是正方形</p>' }],
+      },
+    })
+  })
+
+  it('throws instead of returning a completed empty classroom when outlines are empty', async () => {
+    mockFetch.mockResolvedValueOnce(createSSEResponse([
+      `data: ${JSON.stringify({ type: 'done', outlines: [] })}`,
+    ]))
+
+    await expect(executor.runFullPipeline({
+      requirements: {
+        requirement: '空大纲课堂',
+        language: 'zh-CN',
+      },
+      headers: {
+        'x-model': 'openai:gpt-4o',
+        'x-api-key': 'sk-test',
+        'x-tts-enabled': 'false',
+      },
+    })).rejects.toThrow(/No scene outlines generated/)
   })
 })

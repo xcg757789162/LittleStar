@@ -9,7 +9,8 @@
  * 生产环境使用 PostgresCacheStore（持久化到 classroom_cache 表）。
  */
 
-import type { Classroom } from './types'
+import type { Classroom, Scene } from './types'
+import { isNativeScene } from './types'
 import type { Slide } from '@/lib/openmaic/types/slides'
 import { createLogger } from '@/lib/openmaic/logger'
 
@@ -105,6 +106,89 @@ function makeCacheKey(knowledgeNodeId: string, date: string): string {
   return `${knowledgeNodeId}::${date}`
 }
 
+function isPlaceholderTitle(title: string | undefined): boolean {
+  if (!title) return true
+  const normalized = title.trim().toLowerCase()
+  return normalized === '' || normalized === 'generated classroom' || normalized === 'classroom'
+}
+
+function getRenderableSceneTitle(classroom: Classroom): string | undefined {
+  for (const scene of classroom.scenes ?? []) {
+    if (typeof scene.title === 'string' && !isPlaceholderTitle(scene.title)) {
+      return scene.title
+    }
+
+    if (scene.slides) {
+      for (const slide of scene.slides) {
+        if (typeof slide.title === 'string' && !isPlaceholderTitle(slide.title)) {
+          return slide.title
+        }
+      }
+    }
+  }
+
+  return undefined
+}
+
+function resolveClassroomTitle(classroom: Classroom): string {
+  if (!isPlaceholderTitle(classroom.title)) {
+    return classroom.title
+  }
+
+  const stageName = classroom.stage?.name
+  if (!isPlaceholderTitle(stageName)) {
+    return stageName
+  }
+
+  return getRenderableSceneTitle(classroom) || classroom.title || '课堂内容'
+}
+
+function isRenderableNativeScene(scene: Scene): boolean {
+  if (!isNativeScene(scene) || !scene.content) {
+    return false
+  }
+
+  const content = scene.content as Record<string, unknown>
+
+  if (content.type === 'slide') {
+    const canvas = content.canvas as Record<string, unknown> | undefined
+    const elements = canvas?.elements as unknown[] | undefined
+    if (Array.isArray(elements) && elements.length > 0) {
+      return true
+    }
+  }
+
+  if (content.type === 'quiz') {
+    const questions = content.questions as unknown[] | undefined
+    if (Array.isArray(questions) && questions.length > 0) {
+      return true
+    }
+  }
+
+  if (content.type === 'interactive') {
+    if (typeof content.url === 'string' && content.url.trim()) return true
+    if (typeof content.html === 'string' && content.html.trim()) return true
+  }
+
+  if (content.type === 'pbl') {
+    if (content.projectConfig && typeof content.projectConfig === 'object') {
+      return true
+    }
+  }
+
+  return Array.isArray(scene.actions) && scene.actions.length > 0
+}
+
+function hasRenderableScenes(classroom: Classroom): boolean {
+  for (const scene of classroom.scenes ?? []) {
+    if (isRenderableNativeScene(scene)) {
+      return true
+    }
+  }
+
+  return false
+}
+
 /**
  * 课堂缓存管理器
  *
@@ -158,7 +242,15 @@ export class ClassroomCache {
   ): Promise<Classroom | null> {
     const key = makeCacheKey(knowledgeNodeId, date)
     const entry = await this.store.get(key)
-    return entry?.classroom ?? null
+    if (!entry) return null
+
+    if (!hasRenderableScenes(entry.classroom)) {
+      log.warn('移除无法被 Native Stage 渲染的课堂缓存:', key, entry.classroom.title)
+      await this.store.delete(key)
+      return null
+    }
+
+    return entry.classroom
   }
 
   /**
@@ -171,8 +263,15 @@ export class ClassroomCache {
     const items: CacheListItem[] = []
     const entries = await this.store.entries()
 
-    for (const [, entry] of entries) {
+    for (const [key, entry] of entries) {
       if (date && entry.date !== date) continue
+
+      // 过滤掉无法渲染的占位课堂，避免“Generated Classroom + 空缩略图”污染首页/课程列表
+      if (!hasRenderableScenes(entry.classroom)) {
+        log.warn('跳过无效课堂缓存:', key, entry.classroom.title)
+        await this.store.delete(key)
+        continue
+      }
 
       // 按科目过滤：通过 knowledgeNodeId 推断科目
       const inferredSubject = inferSubjectFromNodeId(entry.knowledgeNodeId)
@@ -232,7 +331,7 @@ export class ClassroomCache {
         knowledgeNodeId: entry.knowledgeNodeId,
         date: entry.date,
         classroomId: entry.classroom.id,
-        classroomTitle: entry.classroom.title,
+        classroomTitle: resolveClassroomTitle(entry.classroom),
         cachedAt: entry.cachedAt,
         thumbnailUrl,
         firstSlideCanvas,
@@ -288,6 +387,18 @@ export class ClassroomCache {
    * 获取缓存条目数量
    */
   async getCacheSize(): Promise<number> {
-    return this.store.size()
+    const entries = await this.store.entries()
+    let validCount = 0
+
+    for (const [key, entry] of entries) {
+      if (!hasRenderableScenes(entry.classroom)) {
+        log.warn('移除无效课堂缓存计数项:', key, entry.classroom.title)
+        await this.store.delete(key)
+        continue
+      }
+      validCount++
+    }
+
+    return validCount
   }
 }

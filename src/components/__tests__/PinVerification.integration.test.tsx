@@ -9,13 +9,13 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { PinVerification } from '../parent/PinVerification'
 
 describe('PinVerification 集成测试', () => {
-  let onVerify: ReturnType<typeof vi.fn>
-  let onCancel: ReturnType<typeof vi.fn>
+  let onVerify: ReturnType<typeof vi.fn> & ((isCorrect: boolean) => void)
+  let onCancel: ReturnType<typeof vi.fn> & (() => void)
 
   beforeEach(() => {
     vi.clearAllMocks()
-    onVerify = vi.fn()
-    onCancel = vi.fn()
+    onVerify = vi.fn() as ReturnType<typeof vi.fn> & ((isCorrect: boolean) => void)
+    onCancel = vi.fn() as ReturnType<typeof vi.fn> & (() => void)
   })
 
   it('应支持 PIN 设置模式（首次使用，无 correctPin）', () => {

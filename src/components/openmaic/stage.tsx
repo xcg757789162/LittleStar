@@ -357,6 +357,34 @@ export function Stage({
     resetPresentationIdleTimer,
   ]);
 
+  useEffect(() => {
+    const stageId = stage?.id;
+    if (!stageId) return;
+
+    const abortController = new AbortController();
+    let disposed = false;
+
+    const bootstrapMedia = async () => {
+      try {
+        await useMediaGenerationStore.getState().restoreFromDB(stageId);
+
+        if (!disposed && outlines.length > 0) {
+          await generateMediaForOutlines(outlines, stageId, abortController.signal);
+        }
+      } catch (error) {
+        console.warn('[Stage] Failed to bootstrap media generation:', error);
+      }
+    };
+
+    void bootstrapMedia();
+
+    return () => {
+      disposed = true;
+      abortController.abort();
+      useMediaGenerationStore.getState().clearStage(stageId);
+    };
+  }, [stage?.id, outlines]);
+
   // Initialize playback engine when scene changes
   useEffect(() => {
     // Bump epoch so any stale SSE callbacks from the previous scene are discarded

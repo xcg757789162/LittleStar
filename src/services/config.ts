@@ -569,8 +569,8 @@ export const BACKEND_VIDEO_PROVIDERS: BackendVideoProviderDef[] = [
     label: 'MiniMax Video（海螺）',
     videoProviderId: 'minimax-video',
     needsApiKey: true,
-    defaultBaseUrl: '',
-    description: 'MiniMax 海螺视频生成 API',
+    defaultBaseUrl: 'https://api.minimaxi.com',
+    description: 'MiniMax 海螺视频生成 API（Base URL 只填主域名，系统会自动拼接 /v1/video_generation）',
   },
   {
     id: 'backend-vid-default',

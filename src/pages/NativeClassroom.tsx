@@ -436,7 +436,7 @@ export function NativeClassroom() {
                 <h2 style={{ fontSize: '24px', fontWeight: 800, color: T.textDark, fontFamily: T.fontDisplay }}>📚 今日课程</h2>
                 <p style={{ fontSize: '14px', color: T.textMedium }}>选择一节课开始学习 ✨</p>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '14px', width: '100%', maxWidth: '720px', justifyItems: 'center' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px', width: '100%', maxWidth: '1080px', justifyItems: 'center' }}>
                 {cachedLessons.map((lesson, idx) => (
                   <LessonCard key={`${lesson.knowledgeNodeId}::${lesson.date}`}
                     title={lesson.classroomTitle}

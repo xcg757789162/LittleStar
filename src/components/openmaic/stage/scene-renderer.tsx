@@ -1,6 +1,7 @@
 
 import { useMemo } from 'react';
 import type { Scene, StageMode } from '@/lib/openmaic/types/stage';
+import { MediaStageProvider } from '@/lib/openmaic/contexts/media-stage-context';
 import { SlideEditor as SlideRenderer } from '../slide-renderer/Editor';
 import { QuizView } from '../scene-renderers/quiz-view';
 import { InteractiveRenderer } from '../scene-renderers/interactive-renderer';
@@ -31,5 +32,9 @@ export function SceneRenderer({ scene, mode }: SceneRendererProps) {
     }
   }, [scene, mode]);
 
-  return <div className="w-full h-full">{renderer}</div>;
+  return (
+    <MediaStageProvider value={scene.stageId}>
+      <div className="w-full h-full">{renderer}</div>
+    </MediaStageProvider>
+  );
 }

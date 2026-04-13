@@ -87,6 +87,10 @@ export function GenerationPreview() {
   const currentChild = useChildStore((s) => s.currentChild)
   const { data: tests } = usePlacementTests(currentChild?.id)
   const hasPlacement = tests && tests.length > 0
+  const completedSubjectCount = useMemo(
+    () => new Set((tests ?? []).map((t) => t.subject)).size,
+    [tests],
+  )
 
   // 缓存列表
   const [cacheList, setCacheList] = useState<CacheListItem[]>([])
@@ -112,7 +116,7 @@ export function GenerationPreview() {
   useEffect(() => { loadCacheList() }, [loadCacheList])
 
   // 预生成 Hook
-  const preGen = usePreGeneration(currentChild?.id, hasPlacement ?? null, cachedCount)
+  const preGen = usePreGeneration(currentChild?.id, hasPlacement ?? null, cachedCount, completedSubjectCount)
 
   // 预生成完成后刷新缓存列表
   useEffect(() => {

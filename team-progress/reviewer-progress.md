@@ -246,3 +246,116 @@
 - [ ] **[settings-sync.ts] 消除 `as never` 类型断言** — 正确转换 ProviderId 类型
 - [ ] **[settings-reverse-sync.ts] ISE 配置类型完善** — 消除 `as Record<string, unknown>` 双重断言
 - [ ] **[provider-list.tsx] 移除未使用的 props** — `activeProviderName` 和 `activeModelName`
+
+---
+
+## classroom-media-fix / reviewer（2026-04-13 10:02）
+
+- 状态: 已完成（最终技术评审）
+- 结论: **Blocking**
+- 审查范围: 旧缓存课堂策略、`audioBase64 -> audioId/audioUrl` 契约、`bio/selfIntroduction` 与 agent 映射、明显回归风险
+
+### Blocking 结论
+
+- [ ] **服务端 preset agent 映射仍是旧 ID 体系**：`src/server/services/headers-builder-server.ts` 仍用 `student-eager / student-curious / student-shy`，而当前 `ChildSettings`、`PRESET_AGENTS`、`settings-sync` 已统一为 `assistant / showoff / curious / notetaker / thinker`。活跃预生成链 `task-processor -> buildHeadersFromSettingsServer()` 会因此把 `selectedAgents` 大量丢失，preset 模式无法把当前课堂角色配置完整传进后端。
+- [ ] **`selfIntroduction` 仍未进入活跃预生成链**：`src/hooks/usePreGeneration.ts` 当前调用的是 `RequirementGenerator.generate()`，只生成 requirement 字符串并提交后端任务，没有把孩子昵称 / `selfIntroduction` 送入 `UserRequirements.userNickname / userBio`。这意味着本轮只修复了运行时 profile/store，同步到真实课堂生成输入仍缺一环。
+
+### Non-blocking 结论
+
+- [x] **旧缓存课堂处理策略合理**：`src/services/openmaic/cache.ts` 已在列表 / 读取 / 计数阶段清理 `slides[]` legacy 课堂；`src/stores/openmaic/classroom-bridge.ts` 遇到 legacy scene 会直接报错并清空 Stage，避免继续向播放器注入空舞台。
+- [x] **活跃 TTS 播放契约已打通**：`src/server/services/pipeline-executor.ts` 会在 TTS 后补齐 `audioBase64 + audioId + audioUrl`，而 `PlaybackEngine` / `AudioPlayer` 直接消费 `audioUrl`，当前后端预生成主链的“有声”路径是闭环的。
+- [ ] **裸 `elements` fallback 仍偏脆弱**：`pipeline-executor.ts` 虽新增 `toSlideCanvas()`，但尚未接入 `assembleScene()`；当前测试主要覆盖“scene-actions 返回完整 scene”的 happy path。若上游只回 `actions` 且 content 仍是裸 `elements`，仍可能退化成标题/描述文本 slide。
+- [ ] **媒体残余风险仍在**：`MediaStageProvider` 依旧未接入页面树，`AUDIO` renderer 仍是注释状态；这些不阻塞本轮 legacy/TTS 主修复，但若后续重新启用占位图/视频恢复或音频元素型场景，仍可能再次丢媒体。
+
+### 验证摘要
+
+- 已复核 `cache.ts`、`classroom-bridge.ts`、`pipeline-executor.ts`、`settings-sync.ts`、`settings-reverse-sync.ts`、`child-settings-compat.ts`、`child-openmaic-sync.ts`、`ClassroomSettings.tsx`、`usePreGeneration.ts`、`headers-builder-server.ts`。
+- 相关改动文件当前 `read_lints` 均为 0。
+- 最终判断：**课堂媒体 P0 主链基本成立，但“孩子画像 + preset 角色配置进入后端生成链”尚未闭环，当前应维持 blocking，不建议直接收尾。**
+
+---
+
+## classroom-media-fix / reviewer（2026-04-13 10:33）
+
+- 状态: 已完成（focused review）
+- 范围: 仅复核 `服务端 agent id`、`userBio/userNickname 预生成链`、`ClassroomSettings 持久化/串写`
+- 结论: **Still Blocking**
+
+### Focused review 结果
+
+- [ ] **服务端 agent id 仍未修复**：活跃入口 `src/server/services/task-processor.ts` 仍调用 `buildHeadersFromSettingsServer(task.settings)`；而 `src/server/services/headers-builder-server.ts` 里的 `PRESET_AGENTS` 依旧是 `student-eager / student-curious / student-shy`。当前 `ChildSettings.selectedAgents` 已统一为 `assistant / showoff / curious / notetaker / thinker`，因此 preset 模式下服务端仍会丢角色。
+- [ ] **`userBio/userNickname` 仍未进入活跃预生成链**：虽然 `RequirementGenerator.generateUserRequirements()` 已存在，但全仓没有生产调用点。`src/server/index.ts` 仍只把任务入库为 `knowledgeNodeId/date/requirement/language/settings`，`src/server/services/task-processor.ts` 调 `pipelineExecutor.runFullPipeline()` 时传入的 `requirements` 仍只有 `requirement + language`，未包含 `userNickname/userBio`。
+- [ ] **`ClassroomSettings` 的课堂字段仍未持久化到孩子级 DB**：`src/pages/ClassroomSettings.tsx` 中课堂模式、角色勾选、老师音色、讨论轮数都只写 `useSettingsStore` / `useAgentRegistry`；页面内没有 `syncOpenMAICToChild()`、也没有 `patch('/children', { settings: ... })` 去落库这些字段。当前唯一反向同步触发点仍是 `src/components/openmaic/settings/index.tsx` 关闭高级设置弹窗时。由于 `useSettingsStore` 持久化键仍是全局 `settings-storage`，这意味着用户若只在 `ClassroomSettings` 修改课堂配置，设置不会可靠写回 `children.settings`。
+
+### Focused review 验证摘要
+
+- 已复核：`headers-builder-server.ts`、`task-processor.ts`、`server/index.ts`、`usePreGeneration.ts`、`ClassroomSettings.tsx`、`settings-sync.ts`、`settings-reverse-sync.ts`、`settings.ts`。
+- 相关文件当前 `read_lints` 均为 0。
+- 最终判断：**这三项在当前代码里都仍是活跃链路问题，结论维持 still blocking，未达到 ready。**
+
+---
+
+## classroom-media-fix / reviewer（2026-04-13 10:52）
+
+- 状态: 已完成（focused review）
+- 范围: 仅复核 `服务端 agent id`、`userBio/userNickname 预生成链`、`ClassroomSettings 持久化/串写`
+- 结论: **Still Blocking**
+
+### Focused review 结果
+
+- [x] **服务端 agent id 已修复**：`src/server/services/headers-builder-server.ts` 已改为直接复用 `src/types/models.ts` 的 `PRESET_AGENTS`，并且服务端搜索已无 `student-eager / student-curious / student-shy` 残留；preset 模式下 `x-agent-profiles` 会按当前 `assistant / showoff / curious / notetaker / thinker` 体系产出。
+- [x] **`userNickname/userBio` 已进入活跃预生成链**：`src/hooks/usePreGeneration.ts` 里的 `buildPreGenerationChildSettings()` 会把 `child.name/selfIntroduction` 注入提交给后端的 `childSettings`；`src/server/services/task-processor.ts` 的 `buildTaskRequirements()` 会从 `task.settings` 收口到 `UserRequirements.userNickname/userBio`，并实际传给 `pipelineExecutor.runFullPipeline()`。
+- [ ] **`ClassroomSettings` 持久化仍不可靠，维持 blocking**：`src/pages/ClassroomSettings.tsx` 虽新增 `persistClassroomSettingsToDb()`，但它只有一个全局 `classroomSettingsTimerRef`，每次重新调度都会先 `clearTimeout()`；同时 effect 在 `currentChild.id` 变化时会再次调用 `persistClassroomSettingsToDb(currentChild.id)`。这意味着如果孩子 A 改完课堂模式/角色/轮数后在 250ms debounce 内切到孩子 B，A 的待写入定时器会被取消，导致刚改的课堂设置可能根本没落库。
+- [ ] **对应测试覆盖也还缺这条竞态路径**：`src/pages/__tests__/ClassroomSettings.persistence.test.tsx` 目前只覆盖了 `selfIntroduction` 的切孩防串写，以及“课堂字段变化后会写库”的正常路径；还没有覆盖“课堂字段修改后在 debounce 窗口内切孩子/离开页面”的场景，因此这条可靠性缺口目前没有测试兜底。
+
+### Focused review 验证摘要
+
+- 已复核：`headers-builder-server.ts`、`usePreGeneration.ts`、`task-processor.ts`、`pipeline-executor.test.ts`、`ClassroomSettings.tsx`、`ClassroomSettings.persistence.test.tsx`、`headers-builder-server.test.ts`、`task-processor-user-requirements.test.ts`。
+- 相关改动文件当前 `read_lints` 均为 0。
+- 额外说明：Vitest 仍受仓库既有 `html-encoding-sniffer` / ESM-CJS worker 问题影响，当前没有稳定全绿证据；本次 verdict 依据的是活跃代码路径审计。
+- 最终判断：**前两项已闭环，但 `ClassroomSettings` 的课堂字段自动落库仍存在切孩子/卸载时丢写风险，因此结论仍是 still blocking。**
+
+---
+
+## classroom-media-fix / reviewer（2026-04-13 11:08）
+
+- 状态: 已完成（focused review）
+- 范围: 仅复核 `服务端 agent id`、`userBio/userNickname 预生成链`、`ClassroomSettings 持久化/串写`
+- 结论: **Still Blocking**
+
+### Focused review 结果
+
+- [x] **服务端 agent id 继续保持通过**：`src/server/services/headers-builder-server.ts` 仍直接复用共享 `PRESET_AGENTS`；服务端检索已无 `student-eager / student-curious / student-shy` 残留，preset 模式下 `x-agent-profiles` 与当前角色 id 体系一致。
+- [x] **`userNickname/userBio` 继续保持通过**：`src/hooks/usePreGeneration.ts` 的 `buildPreGenerationChildSettings()` 仍会把 `child.name/selfIntroduction` 收进提交给后端的 `childSettings`；`src/server/services/task-processor.ts` 的 `buildTaskRequirements()` 也仍把它们透传到 `PipelineExecutor.runFullPipeline({ requirements })`。
+- [ ] **第三条 gate 仍不能放行，但 blocking 原因已变化**：本轮 `ClassroomSettings` 里的按孩子维度 pending snapshot + 切孩/卸载 flush 设计，已基本覆盖我上轮指出的“切孩/离页丢写”竞态；新增测试 `ClassroomSettings.persistence.test.tsx` 也已补上这两条路径。
+- [ ] **新的 compile-level blocker**：`src/pages/ClassroomSettings.tsx` 当前直接使用了未定义的 `PersistedClassroomSettings`（`TS2304`，见 `165`、`237`），同时 `211` 行还存在 `ChildSettings -> Record<string, unknown>` 的非法类型转换（`TS2352`）。我已用定向命令确认：`npx tsc --noEmit --pretty false | grep "ClassroomSettings.tsx"` 会稳定报出这 3 条错误，因此当前补丁仍不能判 `ready`。
+
+### Focused review 验证摘要
+
+- 已复核：`headers-builder-server.ts`、`usePreGeneration.ts`、`task-processor.ts`、`ClassroomSettings.tsx`、`ClassroomSettings.persistence.test.tsx`、`headers-builder-server.test.ts`、`task-processor-user-requirements.test.ts`。
+- `read_lints`：相关改动文件仍为 0，但 **lint 结果不能覆盖 TypeScript 编译错误**。
+- 定向编译诊断：`src/pages/ClassroomSettings.tsx(165,62) TS2304 Cannot find name 'PersistedClassroomSettings'`、`(211,7) TS2352`、`(237,24) TS2304`。
+- 最终判断：**原先的课堂设置竞态风险基本已修掉，但当前提交引入新的 TypeScript 编译级错误，因此结论仍是 still blocking。**
+
+---
+
+## classroom-media-fix / reviewer（2026-04-13 11:14）
+
+- 状态: 已完成（focused review）
+- 范围: 仅复核 `服务端 agent id`、`userBio/userNickname 预生成链`、`ClassroomSettings 持久化/串写`
+- 结论: **Ready**
+
+### Focused review 结果
+
+- [x] **服务端 agent id 已稳定通过**：`src/server/services/headers-builder-server.ts` 持续直接复用共享 `PRESET_AGENTS`；服务端检索已无 `student-eager / student-curious / student-shy` 残留，preset 模式下 `x-agent-profiles` 与当前角色 id 体系一致。
+- [x] **`userNickname/userBio` 预生成链已稳定通过**：`src/hooks/usePreGeneration.ts` 中 `buildPreGenerationChildSettings()` 仍有真实提交调用点，会把 `child.name/selfIntroduction` 注入后端 `childSettings`；`src/server/services/task-processor.ts` 里的 `buildTaskRequirements()` 也仍把这两个字段透传到 `PipelineExecutor.runFullPipeline({ requirements })`。
+- [x] **`ClassroomSettings` 第三条 gate 现已通过**：本轮新增 `PersistedClassroomSettings` 类型别名与 `toSettingsRecord()` helper，已经修掉我上轮点名的 3 条 TypeScript 编译错误；按孩子维度缓存待写入课堂设置、切孩 flush 原孩子、卸载逐个 flush 的 runtime 设计仍保持成立。
+- [x] **课堂持久化回归覆盖已补齐到 4 类路径**：`src/pages/__tests__/ClassroomSettings.persistence.test.tsx` 现覆盖正常写库、快速连续编辑只落最后快照、250ms 内切孩子写回原孩子且不串写、卸载时立即 flush 未落库 debounce。
+
+### Focused review 验证摘要
+
+- 已复核：`headers-builder-server.ts`、`usePreGeneration.ts`、`task-processor.ts`、`ClassroomSettings.tsx`、`ClassroomSettings.persistence.test.tsx`。
+- `read_lints`：相关改动文件当前均为 0。
+- 定向 TypeScript 复核：`export PATH="/Users/chenguoxie/.workbuddy/binaries/node/versions/20.18.0/bin:$PATH" && cd /Users/chenguoxie/CodeBuddy/OpenMAIC && npx tsc --noEmit --pretty false 2>&1 | grep "ClassroomSettings.tsx" | cat` 当前 **无输出，exitCode 0**。
+- 额外说明：Vitest 仍受仓库既有 worker 问题影响，focused review 结论仍以活跃代码路径审计 + 定向编译检查为准。
+- 最终判断：**按本次 focused review 范围，三条 gate 均已闭环，结论从 still blocking 更新为 ready。**

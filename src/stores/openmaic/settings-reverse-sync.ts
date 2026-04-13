@@ -11,9 +11,16 @@
  */
 
 import { useSettingsStore } from '@/lib/openmaic/store/settings'
+import { useUserProfileStore } from '@/lib/openmaic/store/user-profile'
+import { useAgentRegistry } from '@/lib/openmaic/orchestration/registry/store'
 import { useChildStore } from '@/stores/childStore'
 import type { ChildSettings } from '@/types/models'
 import { createLogger } from '@/lib/openmaic/logger'
+import {
+  stripLegacyBioField,
+  toPresetAgentId,
+  toPresetSelectedAgents,
+} from './child-settings-compat'
 
 const log = createLogger('SettingsReverseSync')
 
@@ -92,6 +99,23 @@ export function extractChildSettingsFromStore(): Partial<ChildSettings> {
   const webSearchConfig = s.webSearchProvidersConfig[s.webSearchProviderId]
   const webSearchApiKey = webSearchConfig?.apiKey || ''
 
+  // === Classroom profile / agent settings ===
+  const selfIntroduction = useUserProfileStore.getState().bio || ''
+  const selectedAgents = toPresetSelectedAgents(s.selectedAgentIds)
+  const registry = useAgentRegistry.getState()
+  const agentVoiceMap = Object.fromEntries(
+    (s.selectedAgentIds || [])
+      .map((agentId) => {
+        const presetAgentId = toPresetAgentId(agentId)
+        const voiceId = registry.getAgent(agentId)?.voiceConfig?.voiceId
+        if (!presetAgentId || presetAgentId === 'teacher' || !voiceId) {
+          return null
+        }
+        return [presetAgentId, voiceId]
+      })
+      .filter((entry): entry is [string, string] => Array.isArray(entry)),
+  )
+
   return {
     // LLM
     llmProviderId: s.providerId,
@@ -144,6 +168,14 @@ export function extractChildSettingsFromStore(): Partial<ChildSettings> {
     enableWebSearch: webSearchConfig?.enabled ?? false,
     webSearchProviderId: s.webSearchProviderId,
     webSearchApiKey,
+
+    // Classroom
+    classroomAgentMode: s.agentMode,
+    selectedAgents,
+    teacherVoice: s.ttsVoice,
+    maxDiscussionRounds: Number(s.maxTurns) || 3,
+    agentVoiceMap,
+    selfIntroduction,
   }
 }
 
@@ -168,7 +200,9 @@ export async function syncOpenMAICToChild(): Promise<boolean> {
 
   try {
     // 合并到现有 settings（保留非高级设置字段如 dailyLearningMinutes 等）
-    const currentSettings = (child.settings || {}) as Partial<ChildSettings>
+    const currentSettings = stripLegacyBioField(
+      (child.settings || {}) as Record<string, unknown>,
+    ) as Partial<ChildSettings>
 
     // === 防空值覆盖保护 ===
     // 场景：新浏览器打开 → localStorage 空 → Store 用默认空值初始化

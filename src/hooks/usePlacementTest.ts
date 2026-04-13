@@ -27,6 +27,7 @@ import {
 import { loadCurriculum } from '@/curriculum'
 import { apiClient } from '@/services/api'
 import { useChildStore } from '@/stores/childStore'
+import { normalizeChildSettings } from '@/stores/openmaic/child-settings-compat'
 import { placementTestKeys } from '@/hooks/queries/usePlacementTests'
 import type {
   GradeLevel,
@@ -391,7 +392,7 @@ export function usePlacementTest(
       setPhase('phase2_loading')
 
       const child = useChildStore.getState().currentChild
-      const settings = child?.settings
+      const settings = normalizeChildSettings(child?.settings)
 
       const phase2Plan = await engine.generatePhase2Plan(
         analysis,

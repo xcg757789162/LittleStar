@@ -8,6 +8,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { useChildStore } from '@/stores/childStore'
+import { useSettingsStore } from '@/lib/openmaic/store/settings'
+import { AVATAR_OPTIONS, useUserProfileStore } from '@/lib/openmaic/store/user-profile'
+import { DEFAULT_ADVANCED_SETTINGS } from '@/types/models'
 
 // 使用 vi.hoisted 确保变量在 vi.mock 提升前初始化
 const { mockChildren, mockApiGet } = vi.hoisted(() => {
@@ -42,6 +45,17 @@ describe('useInitializeApp', () => {
     vi.clearAllMocks()
     mockChildren.length = 0
     useChildStore.getState().reset()
+    useUserProfileStore.setState({
+      avatar: AVATAR_OPTIONS[0],
+      nickname: '',
+      bio: '',
+    })
+    useSettingsStore.setState({
+      selectedAgentIds: ['default-1', 'default-2', 'default-3'],
+      maxTurns: '10',
+      agentMode: 'auto',
+      ttsVoice: '',
+    })
     // 默认返回空孩子列表
     mockApiGet.mockImplementation(async () => [...mockChildren])
   })
@@ -110,6 +124,39 @@ describe('useInitializeApp', () => {
     })
 
     expect(mockApiGet).toHaveBeenCalledWith('/children')
+  })
+
+  it('应将首个孩子的 profile 与课堂设置同步到 OpenMAIC store', async () => {
+    mockChildren.push({
+      id: 1,
+      name: '小花',
+      avatar: '/avatars/user.png',
+      age: 4,
+      gradeLevel: 'lower-kindergarten',
+      createdAt: new Date().toISOString(),
+      settings: {
+        dailyLearningMinutes: 15,
+        preferredSubjects: ['chinese'],
+        difficultyAdjustment: 0,
+        voiceEnabled: true,
+        soundEffectsEnabled: true,
+        ...DEFAULT_ADVANCED_SETTINGS,
+        classroomAgentMode: 'preset',
+        selectedAgents: ['assistant'],
+        maxDiscussionRounds: 4,
+        selfIntroduction: '我喜欢小动物',
+      },
+    })
+
+    renderHook(() => useInitializeApp())
+
+    await waitFor(() => {
+      expect(useUserProfileStore.getState().nickname).toBe('小花')
+      expect(useUserProfileStore.getState().bio).toBe('我喜欢小动物')
+      expect(useSettingsStore.getState().selectedAgentIds).toEqual(['default-1', 'default-2'])
+      expect(useSettingsStore.getState().maxTurns).toBe('4')
+      expect(useSettingsStore.getState().agentMode).toBe('preset')
+    })
   })
 
   it('loading 状态管理：初始化过程中 isInitialized 为 false', () => {

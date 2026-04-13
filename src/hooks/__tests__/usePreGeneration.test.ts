@@ -1,23 +1,22 @@
 /**
- * usePreGeneration Hook — Pipeline Client 集成测试
+ * usePreGeneration Hook — 预生成水位线行为测试
  *
- * 测试 hook 使用 Pipeline Client 生成课堂、进度状态更新、错误处理和降级行为。
+ * 重点验证：最小水位线应按已完成评测的科目数动态计算，
+ * 避免两科已测却仍然强制补到 3 节缓存。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act, waitFor } from '@testing-library/react'
-import { usePreGeneration } from '../usePreGeneration'
-import type { PipelineProgress } from '@/services/openmaic/pipeline-types'
+import { renderHook, act } from '@testing-library/react'
+import { buildPreGenerationChildSettings, usePreGeneration } from '../usePreGeneration'
 
-// === Module Mocks ===
+const mockApiGet = vi.fn()
+const mockFetch = vi.fn()
 
-// Mock apiClient
 vi.mock('@/services/api', () => ({
   apiClient: {
-    get: vi.fn().mockResolvedValue([]),
+    get: mockApiGet,
   },
 }))
 
-// Mock childStore
 const mockChild = {
   id: '1',
   userId: 'user-1',
@@ -57,33 +56,9 @@ vi.mock('@/stores/childStore', () => ({
   ),
 }))
 
-// Mock OpenMAIC Client
-const mockGenerateClassroom = vi.fn()
-const mockPollUntilComplete = vi.fn()
-const mockCheckHealth = vi.fn()
-
-vi.mock('@/services/openmaic/client', () => ({
-  OpenMAICClient: vi.fn().mockImplementation(() => ({
-    generateClassroom: mockGenerateClassroom,
-    pollUntilComplete: mockPollUntilComplete,
-    checkHealth: mockCheckHealth,
-  })),
-}))
-
-// Mock Pipeline Client
-const mockRunFullPipeline = vi.fn()
-vi.mock('@/services/openmaic/pipeline-client', () => ({
-  OpenMAICPipelineClient: vi.fn().mockImplementation(() => ({
-    runFullPipeline: mockRunFullPipeline,
-  })),
-}))
-
-// Mock Cache
-const mockSaveClassroom = vi.fn()
 const mockGetCacheSize = vi.fn()
 vi.mock('@/services/openmaic/cache', () => ({
   ClassroomCache: vi.fn().mockImplementation(() => ({
-    saveClassroom: mockSaveClassroom,
     getCacheSize: mockGetCacheSize,
     getClassroom: vi.fn(),
     listCachedClassrooms: vi.fn(),
@@ -97,40 +72,50 @@ vi.mock('@/services/openmaic/postgres-cache-store', () => ({
   PostgresCacheStore: vi.fn().mockImplementation(() => ({})),
 }))
 
-// Mock LessonPlanner
 vi.mock('@/services/lesson-planner', () => ({
   LessonPlanner: vi.fn().mockImplementation(() => ({
     planLessons: vi.fn().mockReturnValue([]),
   })),
   RequirementGenerator: vi.fn().mockImplementation(() => ({
     generate: vi.fn().mockReturnValue('test requirement'),
-    generateUserRequirements: vi.fn().mockReturnValue({
-      requirement: 'test requirement',
-      language: 'zh-CN',
-    }),
-  })),
-  GenerationScheduler: vi.fn().mockImplementation(() => ({
-    submitTask: vi.fn(),
-    executeTasks: vi.fn().mockResolvedValue([]),
-    getPendingCount: vi.fn().mockReturnValue(0),
-    clearTasks: vi.fn(),
   })),
 }))
+
+async function flushMicrotasks(rounds = 6): Promise<void> {
+  await act(async () => {
+    for (let i = 0; i < rounds; i += 1) {
+      await Promise.resolve()
+    }
+  })
+}
 
 describe('usePreGeneration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockApiGet.mockResolvedValue([])
     mockGetCacheSize.mockResolvedValue(0)
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        tasks: [],
+        completedCount: 0,
+        totalCount: 0,
+        activeCount: 0,
+        failedCount: 0,
+        taskIds: [],
+        message: 'ok',
+      }),
+    })
+    vi.stubGlobal('fetch', mockFetch)
   })
 
   afterEach(() => {
+    vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
 
   it('should return initial idle state', () => {
-    const { result } = renderHook(() =>
-      usePreGeneration(undefined, null, 0),
-    )
+    const { result } = renderHook(() => usePreGeneration(undefined, null, 0))
 
     expect(result.current.status).toBe('idle')
     expect(result.current.pendingCount).toBe(0)
@@ -139,54 +124,75 @@ describe('usePreGeneration', () => {
     expect(result.current.error).toBeNull()
   })
 
-  it('should expose generationStep in state when Pipeline is active', () => {
-    const { result } = renderHook(() =>
-      usePreGeneration('1', true, 0),
-    )
+  it('should expose generation fields and trigger function', () => {
+    const { result } = renderHook(() => usePreGeneration('1', null, 0))
 
-    // generationStep should be available in state
     expect(result.current.generationStep).toBeDefined()
-  })
-
-  it('should expose generationProgress in state', () => {
-    const { result } = renderHook(() =>
-      usePreGeneration('1', true, 0),
-    )
-
-    expect(result.current.generationProgress).toBeDefined()
     expect(typeof result.current.generationProgress).toBe('number')
-  })
-
-  it('should expose currentSceneIndex in state', () => {
-    const { result } = renderHook(() =>
-      usePreGeneration('1', true, 0),
-    )
-
-    expect(result.current.currentSceneIndex).toBeDefined()
     expect(typeof result.current.currentSceneIndex).toBe('number')
-  })
-
-  it('should have triggerGeneration function', () => {
-    const { result } = renderHook(() =>
-      usePreGeneration('1', null, 0),
-    )
-
     expect(typeof result.current.triggerGeneration).toBe('function')
   })
 
   it('should stay idle when childId is undefined', () => {
-    const { result } = renderHook(() =>
-      usePreGeneration(undefined, true, 0),
-    )
-
+    const { result } = renderHook(() => usePreGeneration(undefined, true, 0))
     expect(result.current.status).toBe('idle')
   })
 
   it('should stay idle when no placement test', () => {
-    const { result } = renderHook(() =>
-      usePreGeneration('1', false, 0),
-    )
+    const { result } = renderHook(() => usePreGeneration('1', false, 0))
+    expect(result.current.status).toBe('idle')
+  })
+
+  it('should not auto-trigger when cached lessons already match completed subjects', async () => {
+    mockApiGet.mockResolvedValue([
+      { subject: 'math' },
+      { subject: 'chinese' },
+    ])
+    mockGetCacheSize.mockResolvedValue(2)
+
+    const { result } = renderHook(() => usePreGeneration('1', true, 2, 2))
+
+    await flushMicrotasks()
 
     expect(result.current.status).toBe('idle')
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('should stop manual generation when cache already reaches completed-subject waterline', async () => {
+    mockApiGet.mockResolvedValue([
+      { subject: 'math' },
+      { subject: 'chinese' },
+    ])
+    mockGetCacheSize.mockResolvedValue(2)
+
+    const { result } = renderHook(() => usePreGeneration('1', null, 0, 2))
+
+    act(() => {
+      result.current.triggerGeneration()
+    })
+    await flushMicrotasks()
+
+    expect(result.current.status).toBe('completed')
+    expect(result.current.completedCount).toBe(2)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('should include child nickname and self introduction in submitted childSettings payload', () => {
+    expect(buildPreGenerationChildSettings(mockChild)).toMatchObject({
+      userNickname: '小明',
+      userBio: '',
+    })
+
+    expect(buildPreGenerationChildSettings({
+      ...mockChild,
+      name: '  小星星  ',
+      settings: {
+        ...mockChild.settings,
+        selfIntroduction: '我喜欢火箭和画画',
+      },
+    })).toMatchObject({
+      userNickname: '小星星',
+      userBio: '我喜欢火箭和画画',
+    })
   })
 })

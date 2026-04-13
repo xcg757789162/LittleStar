@@ -12,7 +12,7 @@
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { useChildStore } from '@/stores/childStore'
-import { useUserProfileStore } from '@/stores/openmaic/user-profile'
+import { syncChildToOpenMAIC } from '@/stores/openmaic/child-openmaic-sync'
 import { apiClient } from '@/services/api'
 import type { Child } from '@/types/models'
 import { createLogger } from '@/lib/openmaic/logger'
@@ -64,30 +64,11 @@ export function useInitializeApp(): InitializeAppState {
           addChild(child)
         }
 
-        // 从数据库同步第一个孩子的头像到 user-profile store
-        // 支持自定义头像（data: URL）和预设头像（/avatars/ 路径）
+        // 同步第一个孩子的课堂配置到 OpenMAIC 运行时 store
         const firstChild = children[0]
-        if (firstChild?.avatar) {
-          const isCustomAvatar = firstChild.avatar.startsWith('data:') || firstChild.avatar.startsWith('/avatars/')
-          if (isCustomAvatar) {
-            log.info('从数据库恢复头像:', firstChild.avatar.substring(0, 50) + '...')
-            useUserProfileStore.getState().setAvatar(firstChild.avatar)
-          } else {
-            log.info('孩子头像为 emoji 或默认值，不覆盖本地头像:', firstChild.avatar)
-          }
-        }
-
-        // 从数据库恢复昵称（children.name）
-        if (firstChild?.name) {
-          log.info('从数据库恢复昵称:', firstChild.name)
-          useUserProfileStore.getState().setNickname(firstChild.name)
-        }
-
-        // 从数据库恢复自我介绍（children.settings.bio）
-        const childSettings = firstChild?.settings as Record<string, unknown> | undefined
-        if (childSettings?.bio && typeof childSettings.bio === 'string') {
-          log.info('从数据库恢复自我介绍:', (childSettings.bio as string).substring(0, 30))
-          useUserProfileStore.getState().setBio(childSettings.bio as string)
+        if (firstChild) {
+          log.info('从数据库恢复当前孩子到 OpenMAIC store:', firstChild.name)
+          syncChildToOpenMAIC(firstChild)
         }
       } catch (err) {
         // API 调用失败（后端离线或网络问题）

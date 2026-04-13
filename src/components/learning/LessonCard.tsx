@@ -101,7 +101,7 @@ export function LessonCard({
       style={{
         position: 'relative',
         width: '100%',
-        maxWidth: 160,
+        maxWidth: 320,
         borderRadius: 22,
         overflow: 'hidden',
         cursor: isLocked ? 'not-allowed' : 'pointer',
@@ -116,7 +116,7 @@ export function LessonCard({
       {/* 缩略图区域 */}
       <div ref={thumbRef} style={{
         width: '100%',
-        height: 100,
+        height: 150,
         background: showSlide ? '#FFFFFF' : gradient,
         display: 'flex',
         alignItems: 'center',
@@ -202,21 +202,23 @@ export function LessonCard({
 
       {/* 标题区域 */}
       <div style={{
-        padding: '10px 12px',
+        padding: '14px 16px',
         display: 'flex',
         alignItems: 'center',
-        gap: 6,
+        gap: 10,
       }}>
         <p style={{
-          fontSize: 13,
+          fontSize: 16,
           fontWeight: 700,
           fontFamily: "'Nunito', 'PingFang SC', sans-serif",
           color: isLocked ? '#B8B8B8' : '#2D3142',
           margin: 0,
-          lineHeight: 1.3,
+          lineHeight: 1.35,
           overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          minHeight: '2.7em',
           flex: 1,
         }}>
           {title}

@@ -61,7 +61,7 @@ import { ModelEditDialog } from './model-edit-dialog';
 import { AddProviderDialog, type NewProviderData } from './add-provider-dialog';
 import type { SettingsSection, EditingModel } from '@/lib/openmaic/types/settings';
 import { syncOpenMAICToChild } from '@/stores/openmaic/settings-reverse-sync';
-import { syncSettingsToOpenMAIC } from '@/stores/openmaic/settings-sync';
+import { syncChildToOpenMAIC } from '@/stores/openmaic/child-openmaic-sync';
 import { useChildStore } from '@/stores/childStore';
 
 // ─── Provider List Column (reusable) ───
@@ -248,9 +248,9 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
     if (open && !hasSyncedOnOpen.current) {
       hasSyncedOnOpen.current = true;
       const currentChild = useChildStore.getState().currentChild;
-      if (currentChild?.settings) {
-        console.log('[SettingsDialog] 📥 打开时正向同步 DB → Store, child:', currentChild.id);
-        syncSettingsToOpenMAIC(currentChild.settings);
+      if (currentChild) {
+        console.log('[SettingsDialog] 📥 打开时正向同步 DB → OpenMAIC, child:', currentChild.id);
+        syncChildToOpenMAIC(currentChild);
       }
     }
     if (!open) {

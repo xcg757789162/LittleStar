@@ -216,7 +216,7 @@ export function VideoSettings({ selectedProviderId }: VideoSettingsProps) {
 
       {/* Base URL */}
       <div className="space-y-2">
-        <Label>Base URL</Label>
+        <Label>{selectedProviderId === 'minimax-video' ? 'Base URL（只填主域名）' : 'Base URL'}</Label>
         <Input
           name={`video-base-url-${selectedProviderId}`}
           type="url"
@@ -227,23 +227,37 @@ export function VideoSettings({ selectedProviderId }: VideoSettingsProps) {
           value={currentConfig?.baseUrl || ''}
           onChange={(e) => handleBaseUrlChange(e.target.value)}
           placeholder={
-            currentConfig?.serverBaseUrl ||
-            currentProvider?.defaultBaseUrl ||
-            t('settings.enterCustomBaseUrl')
+            selectedProviderId === 'minimax-video'
+              ? currentConfig?.serverBaseUrl || currentProvider?.defaultBaseUrl || 'https://api.minimaxi.com'
+              : currentConfig?.serverBaseUrl ||
+                currentProvider?.defaultBaseUrl ||
+                t('settings.enterCustomBaseUrl')
           }
           className="h-8"
         />
+        {selectedProviderId === 'minimax-video' && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+            这里只填主域名，例如 <span className="font-mono">https://api.minimaxi.com</span>。
+            不要填写官网完整接口地址
+            <span className="font-mono"> https://api.minimaxi.com/v1/video_generation</span>，系统会自动拼接
+            <span className="font-mono"> /v1/video_generation</span>。
+          </div>
+        )}
         {(() => {
           const effectiveBaseUrl =
             currentConfig?.baseUrl ||
             currentConfig?.serverBaseUrl ||
             currentProvider?.defaultBaseUrl ||
             '';
-          if (!effectiveBaseUrl) return null;
+          const normalizedBaseUrl = effectiveBaseUrl.replace(/\/$/, '');
+          if (!normalizedBaseUrl) return null;
           return (
-            <p className="text-xs text-muted-foreground break-all">
-              {t('settings.requestUrl')}: {effectiveBaseUrl}
-            </p>
+            <div className="space-y-1 text-xs text-muted-foreground break-all">
+              <p>生效 Base URL: {normalizedBaseUrl}</p>
+              {selectedProviderId === 'minimax-video' && (
+                <p>测试请求地址: {`${normalizedBaseUrl}/v1/video_generation`}</p>
+              )}
+            </div>
           );
         })()}
       </div>

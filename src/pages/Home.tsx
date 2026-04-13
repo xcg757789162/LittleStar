@@ -440,7 +440,7 @@ export function Home() {
     totalCount: preGenTotal,
     stageText: preGenStageText,
     triggerGeneration,
-  } = usePreGeneration(childId, hasPlacementTest, cachedCount)
+  } = usePreGeneration(childId, hasPlacementTest, cachedCount, completedSubjects.size)
 
   // 预生成完成后刷新缓存
   const refreshCache = useCallback(async () => {

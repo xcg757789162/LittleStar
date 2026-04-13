@@ -16,7 +16,11 @@ import type {
   PipelineStepName,
   AgentInfo,
 } from '../../services/openmaic/pipeline-types.js'
-import { isSceneOutline } from '../../services/openmaic/pipeline-types.js'
+import {
+  normalizeSceneOutline,
+  getSceneOutlineIndex,
+  attachGeneratedSpeechAudio,
+} from '../../services/openmaic/pipeline-types.js'
 
 // ============================================================
 // 类型定义
@@ -89,6 +93,7 @@ export interface GeneratedClassroom {
     updatedAt: number
     language: string
   }
+  outlines: SceneOutline[]
 }
 
 interface SceneContentApiResponse {
@@ -185,6 +190,10 @@ export class PipelineExecutor {
       onProgress?.('outlines', 20, `大纲生成完成，共 ${outlines.length} 个场景`)
     }
 
+    if (outlines.length === 0) {
+      throw new Error('No scene outlines generated from scene-outlines-stream')
+    }
+
     const stageId = cp.stageId
     const stageInfo = this.buildStageInfo(requirements, outlines)
 
@@ -252,17 +261,18 @@ export class PipelineExecutor {
         onProgress?.('tts', ttsPercent, `正在生成场景 ${i + 1} 的语音 ${j + 1}/${speechActions.length}...`)
 
         try {
+          const audioId = `scene-${i}-speech-${j}`
           const ttsResult = await this.generateTTS(
             speechActions[j].text!,
             headers,
-            `scene-${i}-speech-${j}`,
+            audioId,
           )
-          if (ttsResult.audio) {
-            speechActions[j].audioBase64 = ttsResult.audio
-          }
-          if (ttsResult.durationMs > 0) {
-            speechActions[j].audioDurationMs = ttsResult.durationMs
-          }
+          attachGeneratedSpeechAudio(speechActions[j], {
+            audioId,
+            audioBase64: ttsResult.audio,
+            durationMs: ttsResult.durationMs,
+            format: ttsResult.format,
+          })
           cp.completedTTS[ttsKey] = true
           await onCheckpoint?.(cp, 'tts', Math.round(ttsPercent))
         } catch (error) {
@@ -296,6 +306,7 @@ export class PipelineExecutor {
         updatedAt: Date.now(),
         language: requirements.language,
       },
+      outlines,
     }
 
     onProgress?.('assembly', 100, '课堂生成完成！')
@@ -331,7 +342,10 @@ export class PipelineExecutor {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({ requirements, agents }),
+        body: JSON.stringify({
+          requirements,
+          ...(agents && agents.length > 0 ? { agents } : {}),
+        }),
       },
     )
 
@@ -422,7 +436,7 @@ export class PipelineExecutor {
     text: string,
     headers: Record<string, string>,
     audioId: string,
-  ): Promise<{ audio: string; durationMs: number }> {
+  ): Promise<{ audio: string; durationMs: number; format?: string }> {
     const ttsEnabled = headers['x-tts-enabled'] !== 'false'
     const ttsProviderId = headers['x-tts-provider']
     const ttsVoice = headers['x-tts-voice']
@@ -461,6 +475,7 @@ export class PipelineExecutor {
     return {
       audio: data.audio ?? data.base64 ?? '',
       durationMs: data.durationMs ?? 0,
+      format: data.format,
     }
   }
 
@@ -525,12 +540,17 @@ export class PipelineExecutor {
           continue
         }
 
-        if (data.type === 'outline' && isSceneOutline(data.data)) {
-          outlines.push(data.data as SceneOutline)
+        if (data.type === 'outline') {
+          const normalized = normalizeSceneOutline(data.data, outlines.length)
+          if (normalized) {
+            outlines.push(normalized)
+          }
         } else if (data.type === 'done') {
           const doneOutlines = data.outlines as unknown[]
           if (Array.isArray(doneOutlines)) {
-            return doneOutlines.filter(isSceneOutline)
+            return doneOutlines
+              .map((outline, index) => normalizeSceneOutline(outline, index))
+              .filter((outline): outline is SceneOutline => outline !== null)
           }
           return outlines
         } else if (data.type === 'error') {
@@ -547,6 +567,7 @@ export class PipelineExecutor {
     content: GeneratedContent,
     actions: SceneAction[],
   ): GeneratedScene {
+    const outlineIndex = getSceneOutlineIndex(outline)
     const sceneType = this.mapSceneType(outline.type)
 
     let sceneContent: unknown
@@ -556,7 +577,7 @@ export class PipelineExecutor {
       sceneContent = {
         type: 'quiz' as const,
         questions: content.questions.map((q, idx) => ({
-          id: `q-${outline.index}-${idx}`,
+          id: `q-${outlineIndex}-${idx}`,
           type: 'single' as const,
           question: q.question,
           options: q.options.map((opt) => ({ label: opt.label, value: opt.value })),
@@ -577,15 +598,15 @@ export class PipelineExecutor {
     }
 
     const nativeActions = actions.map((a, idx) => ({
-      id: `action-${outline.index}-${idx}`,
+      id: `action-${outlineIndex}-${idx}`,
       ...a,
     }))
 
     return {
-      id: `scene-${outline.index}`,
+      id: `scene-${outlineIndex}`,
       title: outline.title,
       type: sceneType,
-      order: outline.index,
+      order: outlineIndex,
       content: sceneContent,
       actions: nativeActions,
     }
@@ -625,7 +646,34 @@ export class PipelineExecutor {
       return false
     }
     const obj = value as Record<string, unknown>
-    return obj.type === 'slide' || obj.type === 'quiz'
+    const canvas = obj.canvas as Record<string, unknown> | undefined
+    return (
+      obj.type === 'slide' ||
+      obj.type === 'quiz' ||
+      obj.type === 'interactive' ||
+      obj.type === 'pbl' ||
+      Array.isArray(obj.questions) ||
+      Array.isArray(obj.elements) ||
+      Array.isArray(canvas?.elements) ||
+      typeof obj.html === 'string' ||
+      (obj.projectConfig !== null && typeof obj.projectConfig === 'object')
+    )
+  }
+
+  private toSlideCanvas(content: GeneratedContent): Record<string, unknown> | null {
+    if (content.canvas && typeof content.canvas === 'object' && Array.isArray(content.canvas.elements)) {
+      return content.canvas as unknown as Record<string, unknown>
+    }
+
+    if (!Array.isArray(content.elements)) {
+      return null
+    }
+
+    return {
+      elements: content.elements,
+      ...(content.background !== undefined ? { background: content.background } : {}),
+      ...(content.remark !== undefined ? { remark: content.remark } : {}),
+    }
   }
 
   private parseNumberHeader(value: string | undefined): number | undefined {
