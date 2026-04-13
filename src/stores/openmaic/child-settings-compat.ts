@@ -44,6 +44,80 @@ export function normalizeChildSettings(
   } as ChildSettings
 }
 
+const LIVE_STORE_PRIORITY_FIELDS: Array<keyof ChildSettings> = [
+  'llmProviderId',
+  'llmModel',
+  'llmApiKey',
+  'llmBaseUrl',
+]
+
+function shouldPreferLiveValue(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.trim() !== ''
+  }
+
+  if (typeof value === 'number') {
+    return !Number.isNaN(value)
+  }
+
+  if (typeof value === 'boolean') {
+    return true
+  }
+
+  if (Array.isArray(value)) {
+    return true
+  }
+
+  if (value && typeof value === 'object') {
+    return true
+  }
+
+  return false
+}
+
+function cloneConfigValue<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return [...value] as T
+  }
+
+  if (value && typeof value === 'object') {
+    return { ...(value as Record<string, unknown>) } as T
+  }
+
+  return value
+}
+
+export function mergeChildSettingsWithLiveStore(
+  settings?: LegacyChildSettings | null,
+  liveSettings?: Partial<ChildSettings> | null,
+): ChildSettings | null {
+  if (!settings && !liveSettings) return null
+
+  const merged = {
+    ...(normalizeChildSettings(settings) ?? {}),
+  } as ChildSettings
+
+  const hasEffectiveLiveLLMConfig = Boolean(
+    liveSettings?.llmModel?.trim()
+      || liveSettings?.llmApiKey?.trim()
+      || liveSettings?.llmBaseUrl?.trim(),
+  )
+
+  for (const field of LIVE_STORE_PRIORITY_FIELDS) {
+    if (field === 'llmProviderId' && !hasEffectiveLiveLLMConfig) {
+      continue
+    }
+
+    const liveValue = liveSettings?.[field]
+    if (!shouldPreferLiveValue(liveValue)) continue
+
+    ;(merged as Record<string, unknown>)[field] = cloneConfigValue(liveValue)
+  }
+
+  merged.selfIntroduction = getSelfIntroductionFromSettings(merged)
+  return merged
+}
+
 export function stripLegacyBioField<T extends Record<string, unknown>>(
   settings?: T | null,
 ): Omit<T, 'bio'> {
@@ -51,8 +125,9 @@ export function stripLegacyBioField<T extends Record<string, unknown>>(
     return {} as Omit<T, 'bio'>
   }
 
-  const { bio: _legacyBio, ...rest } = settings
-  return rest
+  const rest = { ...settings } as Record<string, unknown>
+  delete rest.bio
+  return rest as Omit<T, 'bio'>
 }
 
 export function toRegistryAgentId(presetAgentId?: string | null): string | null {

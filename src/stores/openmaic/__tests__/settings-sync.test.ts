@@ -6,6 +6,7 @@ import type { Child, ChildSettings } from '@/types/models'
 import { DEFAULT_ADVANCED_SETTINGS } from '@/types/models'
 import {
   getSelfIntroductionFromSettings,
+  mergeChildSettingsWithLiveStore,
   stripLegacyBioField,
 } from '../child-settings-compat'
 import { syncChildToOpenMAIC } from '../child-openmaic-sync'
@@ -170,5 +171,53 @@ describe('OpenMAIC settings sync compatibility', () => {
       curious: 'lovely_girl',
     })
     expect(extracted.selfIntroduction).toBe('我喜欢拼图和小动物')
+  })
+
+  it('应优先使用 live store 中的 LLM 配置补齐运行时设置', () => {
+    const store = useSettingsStore.getState()
+    useSettingsStore.setState({
+      providerId: 'backend-doubao',
+      modelId: 'doubao-pro-32k',
+      providersConfig: {
+        ...store.providersConfig,
+        'backend-doubao': {
+          ...store.providersConfig['backend-doubao'],
+          apiKey: 'live-key',
+          baseUrl: 'https://ark.example.com/v3',
+        },
+      },
+    })
+
+    const merged = mergeChildSettingsWithLiveStore(
+      createTestChild({
+        llmProviderId: '',
+        llmModel: '',
+        llmApiKey: '',
+        llmBaseUrl: '',
+      }).settings,
+      extractChildSettingsFromStore(),
+    )
+
+    expect(merged?.llmProviderId).toBe('backend-doubao')
+    expect(merged?.llmModel).toBe('backend-doubao:doubao-pro-32k')
+    expect(merged?.llmApiKey).toBe('live-key')
+    expect(merged?.llmBaseUrl).toBe('https://ark.example.com/v3')
+  })
+
+  it('不应让 live store 的空值覆盖数据库里已有的 LLM 配置', () => {
+    const merged = mergeChildSettingsWithLiveStore(
+      createTestChild({
+        llmProviderId: 'backend-openai',
+        llmModel: 'backend-openai:gpt-4o',
+        llmApiKey: 'db-key',
+        llmBaseUrl: 'https://api.openai.com/v1',
+      }).settings,
+      extractChildSettingsFromStore(),
+    )
+
+    expect(merged?.llmProviderId).toBe('backend-openai')
+    expect(merged?.llmModel).toBe('backend-openai:gpt-4o')
+    expect(merged?.llmApiKey).toBe('db-key')
+    expect(merged?.llmBaseUrl).toBe('https://api.openai.com/v1')
   })
 })

@@ -12,6 +12,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { apiClient } from '@/services/api'
 import { useChildStore } from '@/stores/childStore'
+import { useSettingsStore } from '@/lib/openmaic/store/settings'
 import { ClassroomCache } from '@/services/openmaic/cache'
 import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
 import {
@@ -22,7 +23,11 @@ import type { TemplatePrompt } from '@/services/lesson-planner/requirement-gener
 import type { Child, ChildSettings, Subject, KnowledgeNode, MasteryRecord, PlacementTest } from '@/types/models'
 import type { PipelineStepName } from '@/services/openmaic/pipeline-types'
 import { createLogger } from '@/lib/openmaic/logger'
-import { getSelfIntroductionFromSettings } from '@/stores/openmaic/child-settings-compat'
+import {
+  getSelfIntroductionFromSettings,
+  mergeChildSettingsWithLiveStore,
+} from '@/stores/openmaic/child-settings-compat'
+import { extractChildSettingsFromStore } from '@/stores/openmaic/settings-reverse-sync'
 
 const log = createLogger('PreGeneration')
 
@@ -120,18 +125,25 @@ function getApiBase(): string {
 
 export function buildPreGenerationChildSettings(
   child: Pick<Child, 'name' | 'settings'> | null | undefined,
+  resolvedSettings?: Partial<ChildSettings> | null,
 ): Record<string, unknown> {
-  if (!child?.settings) {
+  const effectiveSettings = resolvedSettings
+    ?? mergeChildSettingsWithLiveStore(
+      child?.settings as Partial<ChildSettings> & { bio?: unknown } | undefined,
+      extractChildSettingsFromStore(),
+    )
+
+  if (!effectiveSettings) {
     return {}
   }
 
-  const userNickname = child.name?.trim()
+  const userNickname = child?.name?.trim()
   const userBio = getSelfIntroductionFromSettings(
-    child.settings as Partial<ChildSettings> & { bio?: unknown },
+    effectiveSettings as Partial<ChildSettings> & { bio?: unknown },
   )
 
   return {
-    ...(child.settings as unknown as Record<string, unknown>),
+    ...(effectiveSettings as unknown as Record<string, unknown>),
     ...(userNickname ? { userNickname } : {}),
     ...(userBio ? { userBio } : {}),
   }
@@ -188,10 +200,17 @@ export function usePreGeneration(
   const hasTriggeredRef = useRef(false)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // 监听 child settings 变化（API Key 配置后自动刷新）
+  // 监听 child settings 与 live settings 变化（API Key 配置后自动刷新）
   const currentChild = useChildStore((s) => s.currentChild)
-  const llmModel = currentChild?.settings?.llmModel ?? ''
-  const llmApiKey = currentChild?.settings?.llmApiKey ?? ''
+  const liveProviderId = useSettingsStore((s) => s.providerId)
+  const liveModelId = useSettingsStore((s) => s.modelId)
+  const liveProvidersConfig = useSettingsStore((s) => s.providersConfig)
+  const liveLlmModel = liveProviderId && liveModelId
+    ? `${liveProviderId}:${liveModelId}`
+    : ''
+  const liveLlmApiKey = liveProvidersConfig[liveProviderId]?.apiKey ?? ''
+  const llmModel = liveLlmModel || currentChild?.settings?.llmModel || ''
+  const llmApiKey = liveLlmApiKey || currentChild?.settings?.llmApiKey || ''
 
   /**
    * 停止轮询
@@ -290,6 +309,17 @@ export function usePreGeneration(
         return
       }
 
+      const effectiveSettings = mergeChildSettingsWithLiveStore(
+        child.settings as Partial<ChildSettings> & { bio?: unknown },
+        extractChildSettingsFromStore(),
+      )
+
+      log.info('[PreGeneration] 运行时配置解析', JSON.stringify({
+        llmProviderId: effectiveSettings?.llmProviderId || '',
+        llmModel: effectiveSettings?.llmModel || '',
+        hasLlmApiKey: Boolean(effectiveSettings?.llmApiKey),
+      }))
+
       // 1. 检查是否有已完成的评测
       const tests = await apiClient.get<PlacementTest>('/placement_tests', {
         filters: [{ column: 'childId', operator: 'eq', value: numChildId }],
@@ -332,8 +362,14 @@ export function usePreGeneration(
       }
 
       // 3. 检查 API Key
-      if (!child.settings.llmModel || !child.settings.llmApiKey) {
-        log.warn('API Key 未配置')
+      if (!effectiveSettings?.llmModel || !effectiveSettings.llmApiKey) {
+        log.warn('API Key 未配置', {
+          childId: numChildId,
+          childModel: child.settings?.llmModel || '',
+          liveModel: effectiveSettings?.llmModel || '',
+          hasChildApiKey: Boolean(child.settings?.llmApiKey),
+          hasLiveApiKey: Boolean(effectiveSettings?.llmApiKey),
+        })
         setStatus('api-key-missing')
         setStageText('请先配置 AI 模型和 API Key')
         setError('请在「家长面板 → 高级设置 → 高级课堂设置」中配置 LLM 模型和 API Key 后再试')
@@ -465,7 +501,7 @@ export function usePreGeneration(
       try {
         const result = await submitTasks(
           numChildId,
-          buildPreGenerationChildSettings(child),
+          buildPreGenerationChildSettings(child, effectiveSettings),
           backendTasks,
         )
         log.info('✅ 任务提交成功:', result.message, 'taskIds:', result.taskIds)
@@ -514,16 +550,19 @@ export function usePreGeneration(
 
   useEffect(() => {
     if (
-      childId &&
-      hasPlacementTest === true &&
-      completedSubjectCount > 0 &&
-      !hasTriggeredRef.current &&
-      !isRunningRef.current
+      !childId
+      || hasPlacementTest !== true
+      || completedSubjectCount <= 0
+      || hasTriggeredRef.current
+      || isRunningRef.current
     ) {
-      log.info('✅ 条件满足，自动触发预生成检查')
-      hasTriggeredRef.current = true
-      void runPreGeneration()
+      return
     }
+
+    log.info('✅ 条件满足，自动触发预生成检查')
+    hasTriggeredRef.current = true
+    const timer = setTimeout(() => void runPreGeneration(), 0)
+    return () => clearTimeout(timer)
   }, [childId, hasPlacementTest, completedSubjectCount, runPreGeneration, cachedCount])
 
   /**

@@ -1,5 +1,11 @@
 # Team Progress
 
+## llm-challenge-config-fix
+- plan-investigator：已确认评测 challenge 阶段代码会尝试走 `generateQuestion()` → `/api/pre-generate/question`，不是“没接 LLM”，真正断点在运行时配置读取。
+- config-investigator：已确认首页 `usePreGeneration` 的 `api-key-missing` 与 phase2 生成都主要读取 `currentChild.settings`，而家长刚在前端改完时最新值可能仍停留在 OpenMAIC live settings store。
+- main：已落地最小修复——新增 `mergeChildSettingsWithLiveStore()`，让 `usePlacementTest` phase2 与 `usePreGeneration` 的缺 Key 判定/任务提交优先使用 live LLM 配置；同时保留 DB 值兜底，避免空值覆盖。
+- 验证：直接用 Node 22 `--experimental-strip-types` 执行脚本，已确认“live 配置可补齐 + 空值不覆盖 DB”两种场景通过；`eslint` 针对本次改动文件无新增 error，仅剩 `usePlacementTest.ts` 既有 `react-hooks/exhaustive-deps` warning。
+
 ## minimax-url-copy-fix
 - researcher：已完成，定位 MiniMax Video Base URL 文案入口与自动拼接路径行为
 - main：已完成 MiniMax Video Base URL 文案修复、提供商描述同步、项目索引同步、lint 检查

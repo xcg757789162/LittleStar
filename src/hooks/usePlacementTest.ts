@@ -27,7 +27,8 @@ import {
 import { loadCurriculum } from '@/curriculum'
 import { apiClient } from '@/services/api'
 import { useChildStore } from '@/stores/childStore'
-import { normalizeChildSettings } from '@/stores/openmaic/child-settings-compat'
+import { mergeChildSettingsWithLiveStore } from '@/stores/openmaic/child-settings-compat'
+import { extractChildSettingsFromStore } from '@/stores/openmaic/settings-reverse-sync'
 import { placementTestKeys } from '@/hooks/queries/usePlacementTests'
 import type {
   GradeLevel,
@@ -392,7 +393,19 @@ export function usePlacementTest(
       setPhase('phase2_loading')
 
       const child = useChildStore.getState().currentChild
-      const settings = normalizeChildSettings(child?.settings)
+      const settings = mergeChildSettingsWithLiveStore(
+        child?.settings,
+        extractChildSettingsFromStore(),
+      )
+
+      log.info(
+        '[Phase2] 运行时配置解析完成',
+        JSON.stringify({
+          llmProviderId: settings?.llmProviderId || '',
+          llmModel: settings?.llmModel || '',
+          hasLlmApiKey: Boolean(settings?.llmApiKey),
+        }),
+      )
 
       const phase2Plan = await engine.generatePhase2Plan(
         analysis,
@@ -561,7 +574,7 @@ export function usePlacementTest(
         })
 
         // 异步触发预生成（不 await，不阻塞结果页）
-        triggerPreGeneration(childId, subject, testResult).catch(() => {
+        triggerPreGeneration(childId, subject).catch(() => {
           log.warn('预生成触发失败，Home 页 Hook 将作为兜底')
         })
       } catch (dbErr) {
@@ -619,7 +632,6 @@ export function usePlacementTest(
 async function triggerPreGeneration(
   childId: number,
   subject: string,
-  _result: PlacementResult,
 ): Promise<void> {
   log.info('[PreGeneration] 触发评测后预生成检查, childId:', childId, 'subject:', subject)
 
