@@ -400,37 +400,19 @@ app.get('/api/pre-generate/status', async (req, res) => {
       return
     }
 
-    // 只查询真正活跃的任务（pending / running）
+    // 统一查询所有相关任务（活跃 + 已完成 + 最近失败），按创建时间排序
+    // 确保 UI 能按正确顺序展示所有课堂（含已完成的），避免标签偏移
     const { rows } = await pool.query(
       `SELECT id, status, progress, current_step, knowledge_node_id, date, error,
               retry_count, created_at, updated_at
        FROM api.generation_tasks
        WHERE child_id = $1
-         AND status IN ('pending', 'running')
+         AND (
+           status IN ('pending', 'running')
+           OR (status = 'completed' AND completed_at > NOW() - INTERVAL '1 hour')
+           OR (status = 'failed' AND updated_at > NOW() - INTERVAL '10 minutes')
+         )
        ORDER BY created_at ASC, id ASC`,
-      [childId],
-    )
-
-    // 统计最近失败的任务（只返回最新一轮的，用于 UI 提示）
-    const { rows: failedRows } = await pool.query(
-      `SELECT id, status, progress, current_step, knowledge_node_id, date, error,
-              retry_count, created_at, updated_at
-       FROM api.generation_tasks
-       WHERE child_id = $1
-         AND status = 'failed'
-         AND updated_at > NOW() - INTERVAL '10 minutes'
-       ORDER BY updated_at DESC
-       LIMIT 10`,
-      [childId],
-    )
-
-    // 统计已完成的（最近 1 小时内）
-    const { rows: completedRows } = await pool.query(
-      `SELECT COUNT(*) as count
-       FROM api.generation_tasks
-       WHERE child_id = $1
-         AND status = 'completed'
-         AND completed_at > NOW() - INTERVAL '1 hour'`,
       [childId],
     )
 
@@ -445,16 +427,13 @@ app.get('/api/pre-generate/status', async (req, res) => {
       console.warn('[API] 清理失败任务出错:', cleanErr)
     })
 
-    const completedCount = parseInt(completedRows[0]?.count || '0', 10)
-    const activeCount = rows.length
-    const failedCount = failedRows.length
-    // totalCount = 活跃 + 已完成（不包含失败的，避免数字只增不减）
+    const completedCount = rows.filter(r => r.status === 'completed').length
+    const activeCount = rows.filter(r => r.status === 'pending' || r.status === 'running').length
+    const failedCount = rows.filter(r => r.status === 'failed').length
     const totalCount = activeCount + completedCount
 
-    const allTasks = [...rows, ...failedRows]
-
     res.json({
-      tasks: allTasks.map((r) => ({
+      tasks: rows.map((r) => ({
         id: r.id,
         status: r.status,
         progress: r.progress,
