@@ -68,10 +68,9 @@ test('full core learning loop should persist a completed math lesson to history'
   await expectLessonPickerReadyState(page)
 
   await openFirstAvailableLesson(page)
-  await expect(page.getByRole('button', { name: '✅ 完成课堂' })).toBeVisible({ timeout: 30_000 })
 
   const startQuizButton = page.getByTestId('quiz-start-button')
-  await expect(startQuizButton).toBeVisible({ timeout: 20_000 })
+  await expect(startQuizButton).toBeVisible({ timeout: 30_000 })
   await startQuizButton.click()
 
   const firstOption = page.getByTestId('option-0')
@@ -83,8 +82,8 @@ test('full core learning loop should persist a completed math lesson to history'
   await submitAnswersButton.click()
   await expect(page.getByRole('button', { name: /^(重新答题|Retry)$/ })).toBeVisible({ timeout: 20_000 })
 
-  await page.getByRole('button', { name: '✅ 完成课堂' }).click()
-  await expect(page.getByTestId('session-summary')).toBeVisible({ timeout: 20_000 })
+  // Classroom auto-completes after all quizzes are answered on the last scene
+  await expect(page.getByTestId('session-summary')).toBeVisible({ timeout: 30_000 })
 
   await expect
     .poll(() => getHistoryCount(request, env, pickerSeed.token, pickerSeed.childId), {

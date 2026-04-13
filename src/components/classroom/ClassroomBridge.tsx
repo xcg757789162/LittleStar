@@ -8,12 +8,14 @@
  * 4. 向上层页面报告课堂状态
  */
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { Stage } from '@/components/openmaic/stage';
 import { useClassroomBridgeStore } from '@/stores/openmaic/classroom-bridge';
 import { useStageStore } from '@/lib/openmaic/store/stage';
 import { ThemeProvider } from '@/lib/openmaic/hooks/use-theme';
 import { motion } from 'motion/react';
+
+const AUTO_COMPLETE_DELAY_MS = 5000;
 
 interface ClassroomBridgeProps {
   /** 课堂完成回调 */
@@ -29,43 +31,84 @@ export function ClassroomBridge({ onComplete, onAnswer, onExit }: ClassroomBridg
   const error = useClassroomBridgeStore((s) => s.error);
   const completeClassroom = useClassroomBridgeStore((s) => s.completeClassroom);
 
-  // 监听 Stage 播放完成
   const scenes = useStageStore((s) => s.scenes);
   const currentSceneId = useStageStore((s) => s.currentSceneId);
 
+  const completedQuizScenesRef = useRef<Set<string>>(new Set());
+  const autoCompleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasAutoCompletedRef = useRef(false);
+
   const handleComplete = useCallback(() => {
+    if (hasAutoCompletedRef.current) return;
+    hasAutoCompletedRef.current = true;
+    if (autoCompleteTimerRef.current) {
+      clearTimeout(autoCompleteTimerRef.current);
+      autoCompleteTimerRef.current = null;
+    }
     completeClassroom();
     onComplete?.();
   }, [completeClassroom, onComplete]);
 
-  // 监听 QuizView 的判分结果事件，逐个调用 onAnswer 以更新 learningStore 统计
-  useEffect(() => {
-    if (!onAnswer) return;
+  const scheduleAutoComplete = useCallback(() => {
+    if (hasAutoCompletedRef.current) return;
 
+    const { scenes: allScenes, currentSceneId: curId } = useStageStore.getState();
+    if (allScenes.length === 0 || !curId) return;
+
+    const lastScene = allScenes[allScenes.length - 1];
+    if (curId !== lastScene.id) {
+      if (autoCompleteTimerRef.current) {
+        clearTimeout(autoCompleteTimerRef.current);
+        autoCompleteTimerRef.current = null;
+      }
+      return;
+    }
+
+    const quizScenes = allScenes.filter((s) => s.type === 'quiz');
+    const allQuizzesDone =
+      quizScenes.length === 0 ||
+      quizScenes.every((s) => completedQuizScenesRef.current.has(s.id));
+
+    if (!allQuizzesDone) return;
+
+    if (!autoCompleteTimerRef.current) {
+      autoCompleteTimerRef.current = setTimeout(handleComplete, AUTO_COMPLETE_DELAY_MS);
+    }
+  }, [handleComplete]);
+
+  // Relay quiz answers to learningStore AND track completed quiz scenes for auto-complete
+  useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as {
         sceneId: string;
         results: { questionId: string; isCorrect: boolean }[];
       };
-      if (detail?.results) {
+      if (detail?.results && onAnswer) {
         for (const result of detail.results) {
           onAnswer(result.isCorrect);
         }
         console.log('[ClassroomBridge] Relayed', detail.results.length, 'quiz answers to learningStore');
       }
+      if (detail?.sceneId) {
+        completedQuizScenesRef.current.add(detail.sceneId);
+      }
+      scheduleAutoComplete();
     };
 
     window.addEventListener('quiz-answer-results', handler);
     return () => window.removeEventListener('quiz-answer-results', handler);
-  }, [onAnswer]);
+  }, [onAnswer, scheduleAutoComplete]);
 
-  // 如果播放到最后一个场景并完成，触发课堂完成
+  // Re-evaluate auto-complete whenever the current scene changes
   useEffect(() => {
-    if (scenes.length > 0 && currentSceneId) {
-      // 这里只做状态监控，实际完成由用户操作触发
-      // 可扩展：scenes.findIndex((s) => s.id === currentSceneId) 获取当前场景索引
-    }
-  }, [scenes, currentSceneId]);
+    scheduleAutoComplete();
+  }, [currentSceneId, scenes, scheduleAutoComplete]);
+
+  useEffect(() => {
+    return () => {
+      if (autoCompleteTimerRef.current) clearTimeout(autoCompleteTimerRef.current);
+    };
+  }, []);
 
   if (status === 'error') {
     return (
@@ -124,22 +167,11 @@ export function ClassroomBridge({ onComplete, onAnswer, onExit }: ClassroomBridg
   // status === 'ready' || status === 'playing'
   return (
     <div className="openmaic-classroom relative flex h-full w-full min-h-0 overflow-hidden">
-      {/* OpenMAIC 原生 Stage 组件 */}
       <ThemeProvider>
         <div className="flex-1 min-h-0 w-full">
           <Stage />
         </div>
       </ThemeProvider>
-
-      {/* 完成课堂按钮 */}
-      <div className="absolute bottom-4 right-4 z-50">
-        <button
-          onClick={handleComplete}
-          className="px-4 py-2 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-full text-sm font-medium text-gray-600 hover:bg-white hover:text-orange-600 hover:border-orange-300 transition-all shadow-sm"
-        >
-          ✅ 完成课堂
-        </button>
-      </div>
     </div>
   );
 }
