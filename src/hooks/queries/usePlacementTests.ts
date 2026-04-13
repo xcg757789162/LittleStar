@@ -81,27 +81,34 @@ export function useCreatePlacementTest() {
 }
 
 /**
- * 重置评测 — 删除该孩子的所有评测记录、掌握率记录、课堂缓存，
- * 然后使相关 React Query 缓存失效，回到初始评测状态。
+ * 重置评测 — 删除该孩子的评测记录、掌握率记录、课堂缓存。
+ * 可指定 subject 仅重置单个科目，不传则重置全部。
  */
 export function useResetPlacement() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (childId: number) => {
-      await Promise.all([
-        apiClient.delete('/placement_tests', {
-          filters: [{ column: 'childId', operator: 'eq', value: childId }],
-        }),
-        apiClient.delete('/mastery_records', {
-          filters: [{ column: 'childId', operator: 'eq', value: childId }],
-        }),
-        apiClient.delete('/classroom_cache', {
-          filters: [{ column: 'childId', operator: 'eq', value: childId }],
-        }),
-      ])
-      return childId
+    mutationFn: async ({ childId, subject }: { childId: number; subject?: Subject }) => {
+      const childFilter = { column: 'childId', operator: 'eq' as const, value: childId }
+
+      if (subject) {
+        const subjectFilter = { column: 'subject', operator: 'eq' as const, value: subject }
+        const nodePrefix = { column: 'knowledgeNodeId', operator: 'like' as const, value: `${subject}%` }
+        await Promise.all([
+          apiClient.delete('/placement_tests', { filters: [childFilter, subjectFilter] }),
+          apiClient.delete('/mastery_records', { filters: [childFilter, nodePrefix] }),
+          apiClient.delete('/classroom_cache', { filters: [childFilter, nodePrefix] }),
+        ])
+      } else {
+        await Promise.all([
+          apiClient.delete('/placement_tests', { filters: [childFilter] }),
+          apiClient.delete('/mastery_records', { filters: [childFilter] }),
+          apiClient.delete('/classroom_cache', { filters: [childFilter] }),
+        ])
+      }
+
+      return { childId, subject }
     },
-    onSuccess: (childId) => {
+    onSuccess: ({ childId }) => {
       queryClient.invalidateQueries({ queryKey: placementTestKeys.byChild(childId) })
       queryClient.invalidateQueries({ queryKey: ['masteryRecords', { childId }] })
       queryClient.invalidateQueries({ queryKey: ['knowledgeNodes'] })

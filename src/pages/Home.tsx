@@ -337,7 +337,7 @@ export function Home() {
   const childId = currentChild?.id
   const gradeLevel = currentChild?.gradeLevel ?? 'middle-kindergarten'
   const [cachedCount, setCachedCount] = useState<number>(0)
-  const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [resetTarget, setResetTarget] = useState<Subject | 'all' | null>(null)
   const [isResetting, setIsResetting] = useState(false)
   const resetPlacement = useResetPlacement()
 
@@ -481,19 +481,28 @@ export function Home() {
   const greeting = getGreeting(currentChild?.name)
 
   const handleResetPlacement = useCallback(async () => {
-    if (!childId) return
+    if (!childId || !resetTarget) return
     setIsResetting(true)
     try {
-      await resetPlacement.mutateAsync(Number(childId))
-      await cacheInstance.clearAll()
-      setCachedCount(0)
-      setShowResetConfirm(false)
+      const subject = resetTarget === 'all' ? undefined : resetTarget
+      await resetPlacement.mutateAsync({ childId: Number(childId), subject })
+      if (subject) {
+        const items = await cacheInstance.listCachedClassrooms(undefined, subject)
+        for (const item of items) {
+          await cacheInstance.deleteClassroom(item.knowledgeNodeId, item.date)
+        }
+      } else {
+        await cacheInstance.clearAll()
+      }
+      const size = await cacheInstance.getCacheSize()
+      setCachedCount(size)
+      setResetTarget(null)
     } catch {
-      /* silent — mutation 内部已 invalidate */
+      /* silent */
     } finally {
       setIsResetting(false)
     }
-  }, [childId, resetPlacement, cacheInstance])
+  }, [childId, resetTarget, resetPlacement, cacheInstance])
 
   // ═══════════════ 加载中 ═══════════════
   if (childId && isLoadingTests && !isTestsError && hasPlacementTest === null) {
@@ -1043,46 +1052,74 @@ export function Home() {
                     </span>
                   </div>
 
-                  {/* 右箭头 — 提示可点击查看详情 */}
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={subject.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.5 }}>
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
+                  {/* 重新评测 + 右箭头 */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                    <motion.button
+                      whileTap={{ scale: 0.85 }}
+                      whileHover={{ scale: 1.15 }}
+                      onClick={(e) => { e.stopPropagation(); setResetTarget(subject.key) }}
+                      title={`重新评测${subject.label}`}
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '10px',
+                        border: 'none',
+                        background: `${subject.color}18`,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 0,
+                        color: subject.color,
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="23 4 23 10 17 10" />
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                      </svg>
+                    </motion.button>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={subject.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </div>
                 </motion.div>
               )
             })}
 
-            {/* 重新评测按钮 */}
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.6 }}
-              whileTap={{ scale: 0.96 }}
-              whileHover={{ scale: 1.02 }}
-              onClick={(e) => { e.stopPropagation(); setShowResetConfirm(true) }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                padding: '12px 20px',
-                borderRadius: '16px',
-                border: `1.5px dashed ${T.textLight}`,
-                background: 'transparent',
-                cursor: 'pointer',
-                alignSelf: 'center',
-                marginTop: '4px',
-              }}
-            >
-              <RefreshIcon />
-              <span style={{
-                fontFamily: T.fontBody,
-                fontSize: '14px',
-                color: T.textMedium,
-                fontWeight: 600,
-              }}>
-                重新评测
-              </span>
-            </motion.button>
+            {/* 全部重新评测按钮 */}
+            {completedSubjects.size > 1 && (
+              <motion.button
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.6 }}
+                whileTap={{ scale: 0.96 }}
+                whileHover={{ scale: 1.02 }}
+                onClick={(e) => { e.stopPropagation(); setResetTarget('all') }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '12px 20px',
+                  borderRadius: '16px',
+                  border: `1.5px dashed ${T.textLight}`,
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  alignSelf: 'center',
+                  marginTop: '4px',
+                }}
+              >
+                <RefreshIcon />
+                <span style={{
+                  fontFamily: T.fontBody,
+                  fontSize: '14px',
+                  color: T.textMedium,
+                  fontWeight: 600,
+                }}>
+                  全部重新评测
+                </span>
+              </motion.button>
+            )}
           </motion.div>
         )}
       </motion.div>
@@ -1483,134 +1520,150 @@ export function Home() {
          重新评测确认弹窗
          ═══════════════════════════════════ */}
       <AnimatePresence>
-        {showResetConfirm && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => !isResetting && setShowResetConfirm(false)}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 9999,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'rgba(0,0,0,0.35)',
-              backdropFilter: 'blur(6px)',
-              padding: '24px',
-            }}
-          >
+        {resetTarget && (() => {
+          const targetSubjectConfig = resetTarget !== 'all'
+            ? ALL_SUBJECTS.find((s) => s.key === resetTarget)
+            : undefined
+          const titleText = targetSubjectConfig
+            ? `重新评测${targetSubjectConfig.label}？`
+            : '确认全部重新评测？'
+          const bodyText = targetSubjectConfig
+            ? `将清除「${targetSubjectConfig.label}」的评测记录和已缓存的课程内容，需要重新完成该科目的入学测评。`
+            : '将清除所有科目的评测记录和已缓存的课程内容，需要重新完成入学测评。'
+
+          return (
             <motion.div
-              initial={{ scale: 0.8, opacity: 0, y: 30 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.8, opacity: 0, y: 30 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-              onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isResetting && setResetTarget(null)}
               style={{
-                backgroundColor: T.cardBg,
-                borderRadius: T.cardRadius,
-                boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-                padding: '32px 28px',
-                maxWidth: '340px',
-                width: '100%',
-                textAlign: 'center',
-              }}
-            >
-              <div style={{
-                width: '64px',
-                height: '64px',
-                borderRadius: '20px',
-                background: T.warningBg,
+                position: 'fixed',
+                inset: 0,
+                zIndex: 9999,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                margin: '0 auto 20px',
-                fontSize: '32px',
-              }}>
-                🔄
-              </div>
-              <h3 style={{
-                fontFamily: T.fontDisplay,
-                fontSize: '20px',
-                fontWeight: 700,
-                color: T.textDark,
-                margin: '0 0 10px',
-              }}>
-                确认重新评测？
-              </h3>
-              <p style={{
-                fontFamily: T.fontBody,
-                fontSize: '14px',
-                color: T.textMedium,
-                lineHeight: 1.6,
-                margin: '0 0 24px',
-              }}>
-                重新评测将清除所有科目的评测记录和已缓存的课程内容，需要重新完成入学测评。
-              </p>
+                background: 'rgba(0,0,0,0.35)',
+                backdropFilter: 'blur(6px)',
+                padding: '24px',
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0, y: 30 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.8, opacity: 0, y: 30 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  backgroundColor: T.cardBg,
+                  borderRadius: T.cardRadius,
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+                  padding: '32px 28px',
+                  maxWidth: '340px',
+                  width: '100%',
+                  textAlign: 'center',
+                }}
+              >
+                <div style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '20px',
+                  background: targetSubjectConfig
+                    ? `${targetSubjectConfig.color}18`
+                    : T.warningBg,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 20px',
+                  fontSize: '32px',
+                }}>
+                  {targetSubjectConfig ? targetSubjectConfig.emoji : '🔄'}
+                </div>
+                <h3 style={{
+                  fontFamily: T.fontDisplay,
+                  fontSize: '20px',
+                  fontWeight: 700,
+                  color: T.textDark,
+                  margin: '0 0 10px',
+                }}>
+                  {titleText}
+                </h3>
+                <p style={{
+                  fontFamily: T.fontBody,
+                  fontSize: '14px',
+                  color: T.textMedium,
+                  lineHeight: 1.6,
+                  margin: '0 0 24px',
+                }}>
+                  {bodyText}
+                </p>
 
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowResetConfirm(false)}
-                  disabled={isResetting}
-                  style={{
-                    flex: 1,
-                    padding: '14px',
-                    borderRadius: '16px',
-                    border: `1.5px solid #E2E8F0`,
-                    background: T.cardBg,
-                    fontFamily: T.fontDisplay,
-                    fontSize: '15px',
-                    fontWeight: 600,
-                    color: T.textMedium,
-                    cursor: isResetting ? 'not-allowed' : 'pointer',
-                    opacity: isResetting ? 0.5 : 1,
-                  }}
-                >
-                  取消
-                </motion.button>
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleResetPlacement}
-                  disabled={isResetting}
-                  style={{
-                    flex: 1,
-                    padding: '14px',
-                    borderRadius: '16px',
-                    border: 'none',
-                    background: isResetting
-                      ? T.textLight
-                      : `linear-gradient(135deg, ${T.sunOrange} 0%, ${T.candyPink} 100%)`,
-                    fontFamily: T.fontDisplay,
-                    fontSize: '15px',
-                    fontWeight: 700,
-                    color: T.textWhite,
-                    cursor: isResetting ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    boxShadow: isResetting ? 'none' : `0 6px 20px rgba(255, 140, 66, 0.35)`,
-                  }}
-                >
-                  {isResetting ? (
-                    <>
-                      <motion.span
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                        style={{ display: 'inline-block' }}
-                      >
-                        ⏳
-                      </motion.span>
-                      重置中...
-                    </>
-                  ) : '确认重置'}
-                </motion.button>
-              </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setResetTarget(null)}
+                    disabled={isResetting}
+                    style={{
+                      flex: 1,
+                      padding: '14px',
+                      borderRadius: '16px',
+                      border: `1.5px solid #E2E8F0`,
+                      background: T.cardBg,
+                      fontFamily: T.fontDisplay,
+                      fontSize: '15px',
+                      fontWeight: 600,
+                      color: T.textMedium,
+                      cursor: isResetting ? 'not-allowed' : 'pointer',
+                      opacity: isResetting ? 0.5 : 1,
+                    }}
+                  >
+                    取消
+                  </motion.button>
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleResetPlacement}
+                    disabled={isResetting}
+                    style={{
+                      flex: 1,
+                      padding: '14px',
+                      borderRadius: '16px',
+                      border: 'none',
+                      background: isResetting
+                        ? T.textLight
+                        : targetSubjectConfig
+                          ? `linear-gradient(135deg, ${targetSubjectConfig.color} 0%, ${targetSubjectConfig.color}CC 100%)`
+                          : `linear-gradient(135deg, ${T.sunOrange} 0%, ${T.candyPink} 100%)`,
+                      fontFamily: T.fontDisplay,
+                      fontSize: '15px',
+                      fontWeight: 700,
+                      color: T.textWhite,
+                      cursor: isResetting ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      boxShadow: isResetting ? 'none' : `0 6px 20px rgba(255, 140, 66, 0.35)`,
+                    }}
+                  >
+                    {isResetting ? (
+                      <>
+                        <motion.span
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                          style={{ display: 'inline-block' }}
+                        >
+                          ⏳
+                        </motion.span>
+                        重置中...
+                      </>
+                    ) : '确认重置'}
+                  </motion.button>
+                </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
+          )
+        })()}
       </AnimatePresence>
     </div>
   )
