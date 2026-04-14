@@ -125,6 +125,89 @@ interface SceneActionsResult {
 }
 
 // ============================================================
+// 画布常量 & 媒体后处理
+// ============================================================
+
+const CANVAS_W = 1000
+const CANVAS_H = 562.5
+const MARGIN = 50
+const MAX_MEDIA_W = 600
+const MAX_MEDIA_H = CANVAS_H - MARGIN * 2 // 462.5
+
+function parseAspectRatio(ratio: string): number {
+  const parts = ratio.split(':').map(Number)
+  if (parts.length === 2 && parts[0] > 0 && parts[1] > 0) return parts[0] / parts[1]
+  return 16 / 9
+}
+
+/**
+ * Post-process slide content returned by OpenMAIC to clamp oversized
+ * AI-generated media elements (gen_img_* / gen_vid_*).
+ *
+ * LLMs sometimes output full-canvas dimensions for generated images/videos,
+ * causing them to dominate the entire slide and overlap text.
+ * This enforces max bounds and the declared aspect ratio.
+ */
+function clampOversizedMedia(
+  content: GeneratedContent,
+  outline?: SceneOutline,
+): GeneratedContent {
+  const elements =
+    content.canvas?.elements ?? content.elements
+  if (!elements || !Array.isArray(elements)) return content
+
+  const mediaGens = outline?.mediaGenerations as
+    | Array<{ elementId: string; aspectRatio?: string }>
+    | undefined
+
+  let modified = false
+
+  for (const el of elements) {
+    if (el.type !== 'image' && el.type !== 'video') continue
+    const src = el.src as string | undefined
+    if (!src || !/^gen_(img|vid)_/i.test(src)) continue
+
+    const mg = mediaGens?.find((m) => m.elementId === src)
+    const targetRatio = parseAspectRatio(mg?.aspectRatio || '16:9')
+
+    let w = (el.width as number) || 400
+    let h = (el.height as number) || 300
+
+    const originalW = w
+    const originalH = h
+
+    if (w > MAX_MEDIA_W) w = MAX_MEDIA_W
+    h = Math.round(w / targetRatio)
+
+    if (h > MAX_MEDIA_H) {
+      h = Math.round(MAX_MEDIA_H)
+      w = Math.round(h * targetRatio)
+    }
+
+    if (w !== originalW || h !== originalH) {
+      el.width = w
+      el.height = h
+      modified = true
+    }
+
+    let left = (el.left as number) ?? MARGIN
+    let top = (el.top as number) ?? MARGIN
+    if (left < MARGIN) { left = MARGIN; modified = true }
+    if (top < MARGIN) { top = MARGIN; modified = true }
+    if (left + w > CANVAS_W - MARGIN) { left = Math.max(MARGIN, CANVAS_W - MARGIN - w); modified = true }
+    if (top + h > CANVAS_H - MARGIN) { top = Math.max(MARGIN, CANVAS_H - MARGIN - h); modified = true }
+    el.left = left
+    el.top = top
+  }
+
+  if (modified) {
+    console.log('[PipelineExecutor] Clamped oversized gen media elements')
+  }
+
+  return content
+}
+
+// ============================================================
 // 配置
 // ============================================================
 
@@ -223,6 +306,7 @@ export class PipelineExecutor {
           headers,
           agentProfiles,
         )
+        content = clampOversizedMedia(content, outline)
         cp.sceneContents[i] = content
         await onCheckpoint?.(cp, 'scene-content', Math.round(contentPercent))
       }
