@@ -217,6 +217,7 @@ export function usePreGeneration(
   const isRunningRef = useRef(false)
   const hasTriggeredRef = useRef(false)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const prevTaskStatesRef = useRef<Map<number, { status: string; retryCount: number }>>(new Map())
 
   // 监听 child settings 与 live settings 变化（API Key 配置后自动刷新）
   const currentChild = useChildStore((s) => s.currentChild)
@@ -252,6 +253,33 @@ export function usePreGeneration(
         const active = data.tasks.filter((t) => t.status === 'pending' || t.status === 'running')
         const failed = data.tasks.filter((t) => t.status === 'failed')
         const running = data.tasks.find((t) => t.status === 'running')
+
+        // Log state transitions for each task
+        const prev = prevTaskStatesRef.current
+        for (const t of data.tasks) {
+          const p = prev.get(t.id)
+          const nodeName = t.knowledgeNodeName || t.knowledgeNodeId
+
+          if (!p) {
+            if (t.status === 'running') {
+              log.info(`📝 [${nodeName}] 开始生成 (任务 #${t.id})`)
+            }
+          } else if (p.status !== t.status) {
+            if (t.status === 'completed') {
+              log.info(`✅ [${nodeName}] 生成完成 (任务 #${t.id})`)
+            } else if (t.status === 'failed') {
+              log.error(`❌ [${nodeName}] 生成失败: ${t.error || '未知错误'} (任务 #${t.id})`)
+            } else if (t.status === 'running' && p.status === 'pending') {
+              log.info(`📝 [${nodeName}] 开始生成 (任务 #${t.id})`)
+            }
+          }
+
+          if (t.retryCount > 0 && t.retryCount > (p?.retryCount ?? 0)) {
+            log.warn(`🔄 [${nodeName}] 第 ${t.retryCount} 次重试${t.error ? ` (上次失败: ${t.error})` : ''} (任务 #${t.id})`)
+          }
+
+          prev.set(t.id, { status: t.status, retryCount: t.retryCount })
+        }
 
         setCompletedCount(data.completedCount)
         setPendingCount(active.length)
@@ -293,10 +321,13 @@ export function usePreGeneration(
           // 无活跃任务 → 完成或全部失败
           stopPolling()
           if (data.completedCount > 0) {
+            log.info(`🎉 全部生成完成: ${data.completedCount} 节课堂已就绪${failed.length > 0 ? `，${failed.length} 个失败` : ''}`)
             setStatus('completed')
             setStageText(`${data.completedCount} 节课堂已就绪！`)
             setGenerationProgress(100)
           } else if (failed.length > 0) {
+            const errors = failed.map((t) => `#${t.id}: ${t.error || '未知错误'}`).join('; ')
+            log.error(`💥 所有生成任务失败 (${failed.length} 个): ${errors}`)
             setStatus('failed')
             setError(failed[0]?.error || '生成任务失败')
             setStageText('课程生成失败，请重试')

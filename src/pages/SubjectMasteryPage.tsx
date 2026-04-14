@@ -10,7 +10,7 @@
  * 设计风格：Sunny Playground — 与 Home.tsx 统一
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
@@ -99,12 +99,20 @@ const SUBJECT_THEMES: Record<string, SubjectTheme> = {
 
 type NodeStatus = 'mastered' | 'learning' | 'not_started'
 
+interface LessonDetail {
+  lessonIndex: number
+  title: string
+  description: string
+  completed: boolean
+}
+
 interface NodeWithStatus {
   node: KnowledgeNode
   status: NodeStatus
   masteryLevel?: number
   completedLessons?: number
   totalLessons?: number
+  lessons?: LessonDetail[]
 }
 
 function getStatusConfig(status: NodeStatus, _color: string) {
@@ -217,6 +225,39 @@ export function SubjectMasteryPage() {
     enabled: !!childId,
   })
 
+  // 查询每个知识点的课时计划（课程名称）
+  const { data: lessonPlans } = useQuery({
+    queryKey: ['knowledge-node-lessons', subject],
+    queryFn: async () => {
+      if (!knowledgeNodes?.length) return []
+      const nodeIds = knowledgeNodes.map(n => n.id).filter(Boolean) as string[]
+      if (nodeIds.length === 0) return []
+      return apiClient.get<{ knowledgeNodeId: string; lessonIndex: number; title: string; description: string }>('/knowledge_node_lessons', {
+        filters: [
+          { column: 'knowledgeNodeId', operator: 'in', value: nodeIds },
+        ],
+        select: 'knowledge_node_id,lesson_index,title,description',
+        order: [{ column: 'lessonIndex', ascending: true }],
+      })
+    },
+    enabled: !!knowledgeNodes?.length,
+  })
+
+  // 课时计划映射：knowledgeNodeId → LessonInfo[]
+  const lessonPlanMap = useMemo(() => {
+    const m = new Map<string, Array<{ lessonIndex: number; title: string; description: string }>>()
+    if (!lessonPlans) return m
+    for (const lp of lessonPlans) {
+      if (!m.has(lp.knowledgeNodeId)) m.set(lp.knowledgeNodeId, [])
+      m.get(lp.knowledgeNodeId)!.push({
+        lessonIndex: lp.lessonIndex,
+        title: lp.title,
+        description: lp.description,
+      })
+    }
+    return m
+  }, [lessonPlans])
+
   // 学习记录映射：knowledgeNodeId → masteryLevel
   const masteryMap = useMemo(() => {
     if (!masteryRecords) return new Map<string, number>()
@@ -253,17 +294,25 @@ export function SubjectMasteryPage() {
       const completedSet = lessonCompletionMap.get(nodeId)
       const completedLessons = completedSet?.size ?? 0
 
+      const planLessons = lessonPlanMap.get(nodeId)
+      const lessons: LessonDetail[] | undefined = planLessons?.map(lp => ({
+        lessonIndex: lp.lessonIndex,
+        title: lp.title,
+        description: lp.description,
+        completed: completedSet?.has(lp.lessonIndex) ?? false,
+      }))
+
       if (totalLessons > 0) {
         if (completedLessons >= totalLessons) {
           mastered++
-          return { node, status: 'mastered' as NodeStatus, masteryLevel: level ?? 100, completedLessons, totalLessons }
+          return { node, status: 'mastered' as NodeStatus, masteryLevel: level ?? 100, completedLessons, totalLessons, lessons }
         }
         if (completedLessons > 0) {
           learning++
-          return { node, status: 'learning' as NodeStatus, masteryLevel: level ?? Math.round((completedLessons / totalLessons) * 100), completedLessons, totalLessons }
+          return { node, status: 'learning' as NodeStatus, masteryLevel: level ?? Math.round((completedLessons / totalLessons) * 100), completedLessons, totalLessons, lessons }
         }
         notStarted++
-        return { node, status: 'not_started' as NodeStatus, completedLessons: 0, totalLessons }
+        return { node, status: 'not_started' as NodeStatus, completedLessons: 0, totalLessons, lessons }
       }
 
       if (level != null && level >= 80) {
@@ -279,7 +328,7 @@ export function SubjectMasteryPage() {
     })
 
     return { nodesWithStatus: nodes, masteredCount: mastered, learningCount: learning, notStartedCount: notStarted }
-  }, [knowledgeNodes, masteryMap, lessonCompletionMap])
+  }, [knowledgeNodes, masteryMap, lessonCompletionMap, lessonPlanMap])
 
   const totalCount = nodesWithStatus.length
   const progressPercent = totalCount > 0 ? Math.round((masteredCount / totalCount) * 100) : 0
@@ -704,7 +753,7 @@ function SectionHeader({
   )
 }
 
-/** 知识点卡片 */
+/** 知识点卡片（可展开查看课程列表） */
 function KnowledgeNodeCard({
   item,
   themeColor,
@@ -712,167 +761,247 @@ function KnowledgeNodeCard({
   item: NodeWithStatus
   themeColor: string
 }) {
-  const { node, status, masteryLevel, completedLessons, totalLessons } = item
+  const { node, status, masteryLevel, completedLessons, totalLessons, lessons } = item
   const cfg = getStatusConfig(status, themeColor)
   const hasLessonPlan = totalLessons != null && totalLessons > 0
+  const hasLessons = lessons && lessons.length > 0
+  const [expanded, setExpanded] = useState(false)
 
   const difficultyStars = Math.max(1, Math.min(5, Math.ceil(node.difficulty / 2)))
 
   return (
     <motion.div
       variants={staggerItem}
-      whileHover={{ scale: 1.01, y: -1 }}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '14px',
-        padding: '14px 16px',
         borderRadius: '20px',
         backgroundColor: T.cardBg,
         boxShadow: '0 4px 16px rgba(0,0,0,0.04), 0 1px 4px rgba(0,0,0,0.03)',
         borderLeft: `4px solid ${cfg.borderColor}`,
+        overflow: 'hidden',
       }}
     >
-      {/* 状态图标 */}
-      <div style={{
-        width: '42px',
-        height: '42px',
-        borderRadius: '14px',
-        backgroundColor: cfg.bgColor,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-        fontSize: '20px',
-      }}>
-        {cfg.icon}
-      </div>
-
-      {/* 知识点信息 */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      {/* 主行（可点击展开） */}
+      <motion.div
+        whileHover={{ scale: 1.005 }}
+        onClick={hasLessons ? () => setExpanded(e => !e) : undefined}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '14px',
+          padding: '14px 16px',
+          cursor: hasLessons ? 'pointer' : 'default',
+          userSelect: 'none',
+        }}
+      >
+        {/* 状态图标 */}
         <div style={{
-          fontFamily: T.fontDisplay,
-          fontSize: '15px',
-          fontWeight: 600,
-          color: T.textDark,
-          marginBottom: '4px',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          width: '42px',
+          height: '42px',
+          borderRadius: '14px',
+          backgroundColor: cfg.bgColor,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          fontSize: '20px',
         }}>
-          {node.name}
+          {cfg.icon}
         </div>
 
-        {node.description && (
+        {/* 知识点信息 */}
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontFamily: T.fontBody,
-            fontSize: '12px',
-            color: T.textLight,
+            fontFamily: T.fontDisplay,
+            fontSize: '15px',
+            fontWeight: 600,
+            color: T.textDark,
             marginBottom: '4px',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}>
-            {node.description}
+            {node.name}
           </div>
-        )}
 
-        {/* 课时进度条（有课时计划时显示） */}
-        {hasLessonPlan && (
-          <div style={{ marginBottom: '4px' }}>
+          {node.description && (
             <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              marginBottom: '3px',
+              fontFamily: T.fontBody,
+              fontSize: '12px',
+              color: T.textLight,
+              marginBottom: '4px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}>
+              {node.description}
+            </div>
+          )}
+
+          {/* 课时进度条 */}
+          {hasLessonPlan && (
+            <div style={{ marginBottom: '4px' }}>
               <div style={{
-                flex: 1,
-                height: '6px',
-                borderRadius: '3px',
-                backgroundColor: '#F0F2F5',
-                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginBottom: '3px',
               }}>
                 <div style={{
-                  width: `${totalLessons! > 0 ? ((completedLessons ?? 0) / totalLessons!) * 100 : 0}%`,
-                  height: '100%',
+                  flex: 1,
+                  height: '6px',
                   borderRadius: '3px',
-                  background: `linear-gradient(90deg, ${cfg.borderColor}, ${cfg.borderColor}CC)`,
-                  transition: 'width 0.5s ease',
-                }} />
+                  backgroundColor: '#F0F2F5',
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    width: `${totalLessons! > 0 ? ((completedLessons ?? 0) / totalLessons!) * 100 : 0}%`,
+                    height: '100%',
+                    borderRadius: '3px',
+                    background: `linear-gradient(90deg, ${cfg.borderColor}, ${cfg.borderColor}CC)`,
+                    transition: 'width 0.5s ease',
+                  }} />
+                </div>
+                <span style={{
+                  fontFamily: T.fontBody,
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: cfg.textColor,
+                  flexShrink: 0,
+                }}>
+                  {completedLessons ?? 0}/{totalLessons} 堂课
+                </span>
               </div>
-              <span style={{
-                fontFamily: T.fontBody,
-                fontSize: '11px',
-                fontWeight: 600,
-                color: cfg.textColor,
-                flexShrink: 0,
-              }}>
-                {completedLessons ?? 0}/{totalLessons} 堂课
-              </span>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* 底部信息行 */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-        }}>
-          {/* 难度 */}
-          <span style={{
-            fontFamily: T.fontBody,
-            fontSize: '11px',
-            color: T.textLight,
+          {/* 底部信息行 */}
+          <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '2px',
+            gap: '10px',
           }}>
-            难度
-            {Array.from({ length: 5 }).map((_, i) => (
-              <span
-                key={i}
-                style={{
-                  fontSize: '9px',
-                  opacity: i < difficultyStars ? 1 : 0.25,
-                }}
-              >
-                ★
-              </span>
-            ))}
-          </span>
-
-          {/* 掌握率（无课时计划的旧模式才显示百分比） */}
-          {!hasLessonPlan && (status === 'mastered' || status === 'learning') && masteryLevel != null && (
             <span style={{
               fontFamily: T.fontBody,
               fontSize: '11px',
-              color: cfg.textColor,
-              fontWeight: 600,
+              color: T.textLight,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '2px',
             }}>
-              掌握 {Math.round(masteryLevel)}%
+              难度
+              {Array.from({ length: 5 }).map((_, i) => (
+                <span key={i} style={{ fontSize: '9px', opacity: i < difficultyStars ? 1 : 0.25 }}>★</span>
+              ))}
             </span>
+
+            {!hasLessonPlan && (status === 'mastered' || status === 'learning') && masteryLevel != null && (
+              <span style={{ fontFamily: T.fontBody, fontSize: '11px', color: cfg.textColor, fontWeight: 600 }}>
+                掌握 {Math.round(masteryLevel)}%
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* 右侧：状态标签 + 展开箭头 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          <div style={{
+            padding: '4px 10px',
+            borderRadius: '10px',
+            backgroundColor: cfg.bgColor,
+          }}>
+            <span style={{ fontFamily: T.fontBody, fontSize: '11px', fontWeight: 600, color: cfg.textColor }}>
+              {cfg.label}
+            </span>
+          </div>
+          {hasLessons && (
+            <motion.span
+              animate={{ rotate: expanded ? 180 : 0 }}
+              transition={{ duration: 0.2 }}
+              style={{ fontSize: '14px', color: T.textLight, lineHeight: 1 }}
+            >
+              ▾
+            </motion.span>
           )}
         </div>
-      </div>
+      </motion.div>
 
-      {/* 右侧状态标签 */}
-      <div style={{
-        padding: '4px 10px',
-        borderRadius: '10px',
-        backgroundColor: cfg.bgColor,
-        flexShrink: 0,
-      }}>
-        <span style={{
-          fontFamily: T.fontBody,
-          fontSize: '11px',
-          fontWeight: 600,
-          color: cfg.textColor,
+      {/* 展开的课程列表 */}
+      {expanded && hasLessons && (
+        <div style={{
+          padding: '0 16px 12px 72px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
         }}>
-          {cfg.label}
-        </span>
-      </div>
+          <div style={{
+            height: '1px',
+            backgroundColor: '#F0F2F5',
+            marginBottom: '4px',
+          }} />
+          {lessons!.map((lesson) => (
+            <div
+              key={lesson.lessonIndex}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '8px 12px',
+                borderRadius: '12px',
+                backgroundColor: lesson.completed ? `${cfg.bgColor}` : '#FAFBFC',
+                transition: 'background-color 0.2s',
+              }}
+            >
+              <span style={{
+                width: '22px',
+                height: '22px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '12px',
+                flexShrink: 0,
+                backgroundColor: lesson.completed ? cfg.borderColor : '#E8ECF2',
+                color: lesson.completed ? '#fff' : T.textLight,
+                fontWeight: 700,
+                fontFamily: T.fontBody,
+              }}>
+                {lesson.completed ? '✓' : lesson.lessonIndex}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontFamily: T.fontBody,
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  color: lesson.completed ? T.textDark : T.textMedium,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {lesson.title}
+                </div>
+                {lesson.description && (
+                  <div style={{
+                    fontFamily: T.fontBody,
+                    fontSize: '11px',
+                    color: T.textLight,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    marginTop: '1px',
+                  }}>
+                    {lesson.description}
+                  </div>
+                )}
+              </div>
+              {lesson.completed && (
+                <span style={{ fontSize: '11px', color: cfg.textColor, fontWeight: 600, fontFamily: T.fontBody, flexShrink: 0 }}>
+                  已完成
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </motion.div>
   )
 }

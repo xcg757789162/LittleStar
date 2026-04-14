@@ -51,6 +51,7 @@ const MODEL_TAGS = [
   'DirectorGraph', 'DirectorPrompt', 'SSEStream', 'PipelineClient',
   'MediaOrchestrator', 'MediaGenerationStore',
   'Generation', 'StatelessGenerate', 'PromptLoader',
+  'PreGeneration',
 ]
 
 const CATEGORIES: CategoryConfig[] = [

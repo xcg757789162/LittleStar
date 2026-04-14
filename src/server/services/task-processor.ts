@@ -45,10 +45,11 @@ let recoveryTimer: ReturnType<typeof setTimeout> | null = null
 let currentTaskId: number | null = null
 let currentTaskStartedAt: number | null = null
 
-/** 单个任务最大执行时间（防止 isProcessing 锁死） */
-const MAX_TASK_EXECUTION_MS = 180_000
+/** 单个任务最大执行时间（防止 isProcessing 锁死）
+ *  完整 Pipeline 含多场景大纲/内容/TTS/媒体生成，通常需要 5-10 分钟 */
+const MAX_TASK_EXECUTION_MS = 900_000
 /** 卡住任务恢复间隔 */
-const RECOVERY_INTERVAL_MS = 60_000
+const RECOVERY_INTERVAL_MS = 120_000
 
 const pipelineExecutor = new PipelineExecutor()
 
@@ -79,7 +80,7 @@ export function buildTaskRequirements(task: TaskRequirementsInput): UserRequirem
 
 export function startTaskProcessor(): void {
   console.log('[TaskProcessor] 启动任务处理器')
-  recoverStuckTasks().catch(console.error)
+  recoverOnStartup().then(() => recoverStuckTasks()).catch(console.error)
   processLoop()
   startRecoveryLoop()
 }
@@ -148,16 +149,36 @@ function checkProcessingTimeout(): void {
 }
 
 /**
- * 恢复卡住的任务（status='running' 超过 3 分钟）
+ * 启动时强制恢复：进程刚启动不可能有正在运行的任务，
+ * 全部 running 状态都是上一个进程残留的，无条件重置为 pending。
+ */
+async function recoverOnStartup(): Promise<void> {
+  try {
+    const result = await pool.query(
+      `UPDATE api.generation_tasks
+       SET status = 'pending', updated_at = NOW()
+       WHERE status = 'running'
+       RETURNING id`,
+    )
+    if (result.rowCount && result.rowCount > 0) {
+      console.log(`[TaskProcessor] 启动恢复: 重置 ${result.rowCount} 个残留 running 任务为 pending`)
+    }
+  } catch (error) {
+    console.error('[TaskProcessor] 启动恢复失败:', error)
+  }
+}
+
+/**
+ * 周期性恢复卡住的任务（status='running' 超过 15 分钟未更新）
  */
 async function recoverStuckTasks(): Promise<void> {
   try {
-    // 可重试的：重置为 pending
+    // 可重试的：重置为 pending（任务超过 15 分钟未更新才认为卡住）
     const retryable = await pool.query(
       `UPDATE api.generation_tasks
        SET status = 'pending', updated_at = NOW()
        WHERE status = 'running'
-         AND updated_at < NOW() - INTERVAL '3 minutes'
+         AND updated_at < NOW() - INTERVAL '15 minutes'
          AND retry_count < max_retries
        RETURNING id`,
     )
@@ -170,7 +191,7 @@ async function recoverStuckTasks(): Promise<void> {
       `UPDATE api.generation_tasks
        SET status = 'failed', error = COALESCE(error, 'stuck in running state'), updated_at = NOW()
        WHERE status = 'running'
-         AND updated_at < NOW() - INTERVAL '3 minutes'
+         AND updated_at < NOW() - INTERVAL '15 minutes'
          AND retry_count >= max_retries
        RETURNING id`,
     )
@@ -248,6 +269,24 @@ async function processNextTask(): Promise<void> {
       },
     })
 
+    // 用 knowledge_node_lessons 中的课时标题覆盖 pipeline 生成的通用标题
+    const lessonIdx = task.lesson_index ?? 1
+    try {
+      const { rows: lessonRows } = await pool.query<{ title: string }>(
+        `SELECT title FROM api.knowledge_node_lessons
+         WHERE knowledge_node_id = $1 AND lesson_index = $2 LIMIT 1`,
+        [task.knowledge_node_id, lessonIdx],
+      )
+      if (lessonRows.length > 0 && lessonRows[0].title) {
+        classroom.title = lessonRows[0].title
+        if (classroom.stage) {
+          classroom.stage.name = lessonRows[0].title
+        }
+      }
+    } catch {
+      // best-effort: keep pipeline-generated title if query fails
+    }
+
     // Extract base64 audio from JSON → write to /data/media/audio/ files
     // This shrinks classroomData from ~41MB to ~1MB (audio served via Nginx)
     const audioCount = await externalizeClassroomAudio(
@@ -258,7 +297,6 @@ async function processNextTask(): Promise<void> {
     }
 
     // 成功：写入 classroom_cache (no TTL — evicted on completion or by LRU capacity limit)
-    const lessonIdx = task.lesson_index ?? 1
     const cacheKey = `${task.knowledge_node_id}::${lessonIdx}::${task.date}`
 
     await pool.query(

@@ -229,7 +229,7 @@ function clampOversizedMedia(
 
 /** OpenMAIC 内网直连地址 */
 const OPENMAIC_BASE_URL = process.env.OPENMAIC_URL || 'http://localhost:3002'
-const TIMEOUT_MS = 90_000
+const TIMEOUT_MS = 180_000
 const MAX_RETRIES = 2
 
 // ============================================================
@@ -297,7 +297,13 @@ export class PipelineExecutor {
     const stageInfo = this.buildStageInfo(requirements, outlines)
 
     // Step 2: 对每个大纲生成内容、动作、TTS
+    // Progress layout: outlines=0-20%, per-scene=20-95%, assembly=95-100%
+    // Each scene gets an equal slice of the 20-95% range to avoid backward jumps.
     const totalScenes = outlines.length
+    const SCENE_PROGRESS_START = 20
+    const SCENE_PROGRESS_END = 95
+    const sceneProgressSlice = (SCENE_PROGRESS_END - SCENE_PROGRESS_START) / totalScenes
+
     if (!cp.sceneContents) cp.sceneContents = {}
     if (!cp.sceneActions) cp.sceneActions = {}
     if (!cp.completedTTS) cp.completedTTS = {}
@@ -306,13 +312,14 @@ export class PipelineExecutor {
 
     for (let i = 0; i < outlines.length; i++) {
       const outline = outlines[i]
+      const sceneBase = SCENE_PROGRESS_START + i * sceneProgressSlice
 
       // 2a: 生成内容（检查 checkpoint）
       let content: GeneratedContent
       if (cp.sceneContents[i]) {
         content = cp.sceneContents[i]
       } else {
-        const contentPercent = 20 + (i / totalScenes) * 30
+        const contentPercent = sceneBase
         onProgress?.('scene-content', contentPercent, `正在生成场景 ${i + 1}/${totalScenes} 的内容...`)
         content = await this.generateSceneContent(
           outline,
@@ -333,7 +340,7 @@ export class PipelineExecutor {
       if (cp.sceneActions[i]) {
         actions = cp.sceneActions[i]
       } else {
-        const actionsPercent = 50 + (i / totalScenes) * 20
+        const actionsPercent = sceneBase + sceneProgressSlice * 0.25
         onProgress?.('scene-actions', actionsPercent, `正在生成场景 ${i + 1}/${totalScenes} 的动作...`)
         const sceneActionsResult = await this.generateSceneActions(
           outline,
@@ -351,13 +358,14 @@ export class PipelineExecutor {
         await onCheckpoint?.(cp, 'scene-actions', Math.round(actionsPercent))
       }
 
-      // 2c: TTS
+      // 2c: TTS (occupies 50% of each scene's slice)
       const speechActions = actions.filter((a) => a.type === 'speech' && a.text)
       for (let j = 0; j < speechActions.length; j++) {
         const ttsKey = `${i}-${j}`
         if (cp.completedTTS[ttsKey]) continue
 
-        const ttsPercent = 70 + (i / totalScenes) * 20 + (j / Math.max(speechActions.length, 1)) * (20 / totalScenes)
+        const ttsPercent = sceneBase + sceneProgressSlice * 0.5
+          + (j / Math.max(speechActions.length, 1)) * sceneProgressSlice * 0.3
         onProgress?.('tts', ttsPercent, `正在生成场景 ${i + 1} 的语音 ${j + 1}/${speechActions.length}...`)
 
         try {
@@ -377,7 +385,6 @@ export class PipelineExecutor {
           await onCheckpoint?.(cp, 'tts', Math.round(ttsPercent))
         } catch (error) {
           console.error(`[PipelineExecutor] TTS 失败 scene=${i} action=${j}:`, error)
-          // TTS 失败不中止
         }
       }
 
@@ -385,14 +392,16 @@ export class PipelineExecutor {
       if (!cp.completedMedia) cp.completedMedia = {}
       const mediaGens = outline.mediaGenerations ?? []
       const elements = content.canvas?.elements ?? content.elements ?? []
-      for (const mg of mediaGens) {
+      for (let m = 0; m < mediaGens.length; m++) {
+        const mg = mediaGens[m]
         if (cp.completedMedia[mg.elementId]) continue
         const el = elements.find(
           (e: Record<string, unknown>) => e.src === mg.elementId,
         )
         if (!el) continue
 
-        const mediaPercent = 90 + (i / totalScenes) * 5
+        const mediaPercent = sceneBase + sceneProgressSlice * 0.8
+          + (m / Math.max(mediaGens.length, 1)) * sceneProgressSlice * 0.2
         onProgress?.(
           'media-generation',
           mediaPercent,
@@ -423,7 +432,7 @@ export class PipelineExecutor {
     }
 
     // Step 3: 组装 Classroom
-    onProgress?.('assembly', 95, '正在组装课堂数据...')
+    onProgress?.('assembly', 96, '正在组装课堂数据...')
 
     const classroom: GeneratedClassroom = {
       id: stageId,
