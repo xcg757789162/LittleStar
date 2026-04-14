@@ -373,18 +373,23 @@ export class ClassroomCache {
   }
 
   /**
-   * 清除过期缓存
-   * @param cutoffDate 截止日期 YYYY-MM-DD，该日期之前的缓存将被删除
+   * 清除过期缓存（保留用于 LRU 容量淘汰的 fallback）
+   *
+   * Note: TTL-based expiration has been removed. Cache entries are now evicted by:
+   *   1. Completion — deleted when the classroom is finished (NativeClassroom)
+   *   2. Replacement — ON CONFLICT upsert when a new version is generated
+   *   3. LRU capacity — server-side evict_classroom_cache() after insert
+   *
+   * This method is retained for the in-memory store fallback (test environments).
+   * @param cutoffDate 截止日期 YYYY-MM-DD
    */
   async clearExpiredCache(cutoffDate: string): Promise<void> {
-    // Fast path: DB-side delete without fetching data
     if (this.store.deleteExpired) {
       const cleared = await this.store.deleteExpired(cutoffDate)
-      log.info('清理过期缓存, cutoff:', cutoffDate, '清除:', cleared, '条')
+      log.info('清理缓存, cutoff:', cutoffDate, '清除:', cleared, '条')
       return
     }
 
-    // Lightweight path: use metadata only (no classroomData download)
     if (this.store.metadataEntries) {
       const metas = await this.store.metadataEntries()
       let cleared = 0
@@ -394,11 +399,10 @@ export class ClassroomCache {
           cleared++
         }
       }
-      log.info('清理过期缓存, cutoff:', cutoffDate, '清除:', cleared, '条')
+      log.info('清理缓存, cutoff:', cutoffDate, '清除:', cleared, '条')
       return
     }
 
-    // Fallback: full entries (in-memory store)
     const entries = await this.store.entries()
     let cleared = 0
     for (const [, entry] of entries) {
@@ -408,7 +412,7 @@ export class ClassroomCache {
         cleared++
       }
     }
-    log.info('清理过期缓存, cutoff:', cutoffDate, '清除:', cleared, '条')
+    log.info('清理缓存, cutoff:', cutoffDate, '清除:', cleared, '条')
   }
 
   /**

@@ -183,7 +183,8 @@ const AUDIO_FORMAT_TO_MIME: Record<string, string> = {
 export function buildAudioDataUrl(audioBase64: string, format = 'mp3'): string {
   const trimmed = audioBase64.trim()
   if (!trimmed) return ''
-  if (trimmed.startsWith('data:audio/')) return trimmed
+  // Already a usable URL (HTTP path or data URI) — pass through
+  if (trimmed.startsWith('data:audio/') || trimmed.startsWith('/') || trimmed.startsWith('http')) return trimmed
 
   const normalizedFormat = format.trim().toLowerCase()
   const mimeType = normalizedFormat.includes('/')

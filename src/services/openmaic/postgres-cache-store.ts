@@ -63,13 +63,23 @@ export class PostgresCacheStore implements CacheStore {
       ],
     })
     log.debug('DB get 结果:', key, row ? '找到' : '未找到')
-    return row ? toEntry(row) : undefined
+    if (!row) return undefined
+
+    // Touch LRU timestamp (fire-and-forget, don't block the read)
+    apiClient.patch('/classroom_cache', {
+      lastAccessedAt: new Date().toISOString(),
+    }, {
+      filters: [
+        { column: 'childId', operator: 'eq', value: this.childId },
+        { column: 'cacheKey', operator: 'eq', value: key },
+      ],
+    }).catch(() => { /* best-effort */ })
+
+    return toEntry(row)
   }
 
   async set(key: string, value: CacheEntry): Promise<void> {
     log.info('DB set:', key, 'nodeId:', value.knowledgeNodeId)
-    // 计算 3 天后过期时间
-    const expiresAt = new Date(value.cachedAt + 3 * 24 * 60 * 60 * 1000).toISOString()
 
     await apiClient.upsert('/classroom_cache', {
       childId: this.childId,
@@ -78,7 +88,7 @@ export class PostgresCacheStore implements CacheStore {
       date: value.date,
       classroomData: value.classroom,
       cachedAt: new Date(value.cachedAt).toISOString(),
-      expiresAt,
+      expiresAt: null,
     }, 'child_id,cache_key')
     log.debug('DB set 完成:', key)
   }

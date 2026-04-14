@@ -16,6 +16,7 @@ import { aiQuestionSchema, validateAIQuestion } from '../engine/ai-question-sche
 import { pool } from './db.js'
 import { resolveLLMBaseUrl, type QuestionGenerationSettings } from './question-model.js'
 import { startTaskProcessor, stopTaskProcessor, triggerProcessing } from './services/task-processor.js'
+import { startDataCleanup, stopDataCleanup } from './services/data-cleanup.js'
 
 const app = express()
 app.use(express.json({ limit: '10mb', type: 'application/json' }))
@@ -585,6 +586,7 @@ app.get('/api/pre-generate/health', async (_req, res) => {
 app.listen(PORT, () => {
   console.log(`[PreGeneration] 🚀 后端服务启动，端口 ${PORT}`)
   startTaskProcessor()
+  startDataCleanup()
 })
 
 // ============================================================
@@ -593,6 +595,7 @@ app.listen(PORT, () => {
 const gracefulShutdown = async (signal: string) => {
   console.log(`[PreGeneration] 收到 ${signal}，正在关闭...`)
   stopTaskProcessor()
+  stopDataCleanup()
   try {
     await pool.end()
     console.log('[PreGeneration] 数据库连接池已关闭')

@@ -13,6 +13,7 @@ import { pool } from '../db.js'
 import { PipelineExecutor } from './pipeline-executor.js'
 import { buildHeadersFromSettingsServer } from './headers-builder-server.js'
 import { normalizeTaskProgress } from './task-progress.js'
+import { externalizeClassroomAudio } from './audio-file-store.js'
 import type { PipelineCheckpoint } from './pipeline-executor.js'
 import type { UserRequirements } from '../../services/openmaic/pipeline-types.js'
 
@@ -246,20 +247,36 @@ async function processNextTask(): Promise<void> {
       },
     })
 
-    // 成功：写入 classroom_cache
+    // Extract base64 audio from JSON → write to /data/media/audio/ files
+    // This shrinks classroomData from ~41MB to ~1MB (audio served via Nginx)
+    const audioCount = await externalizeClassroomAudio(
+      classroom, task.child_id, task.knowledge_node_id, task.date,
+    )
+    if (audioCount > 0) {
+      console.log(`[TaskProcessor] Externalized ${audioCount} audio files for task #${task.id}`)
+    }
+
+    // 成功：写入 classroom_cache (no TTL — evicted on completion or by LRU capacity limit)
     const cacheKey = `${task.knowledge_node_id}::${task.date}`
-    const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
 
     await pool.query(
       `INSERT INTO api.classroom_cache
          (child_id, knowledge_node_id, date, cache_key, classroom_data, cached_at, expires_at)
-       VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NULL)
        ON CONFLICT (child_id, cache_key) DO UPDATE
          SET classroom_data = EXCLUDED.classroom_data,
              cached_at = NOW(),
-             expires_at = EXCLUDED.expires_at`,
-      [task.child_id, task.knowledge_node_id, task.date, cacheKey, JSON.stringify(classroom), expiresAt],
+             expires_at = NULL`,
+      [task.child_id, task.knowledge_node_id, task.date, cacheKey, JSON.stringify(classroom)],
     )
+
+    // Evict oldest cache entries if this child exceeds capacity (20 per child)
+    await pool.query(
+      `SELECT api.evict_classroom_cache($1, 20)`,
+      [task.child_id],
+    ).catch((err: unknown) => {
+      console.error(`[TaskProcessor] LRU eviction failed for child ${task.child_id}:`, err)
+    })
 
     await pool.query(
       `UPDATE api.generation_tasks

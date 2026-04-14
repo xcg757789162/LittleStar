@@ -33,7 +33,7 @@ import { CelebrationAnimation } from '@/components/feedback/CelebrationAnimation
 import { useSoundEffects } from '@/hooks/useSoundEffects';
 import { useAudioActivation } from '@/hooks/useAudioActivation';
 import { apiClient } from '@/services/api';
-import type { Subject, MasteryRecord, Achievement } from '@/types/models';
+import type { Subject, Achievement } from '@/types/models';
 import type { Classroom } from '@/services/openmaic/types';
 import type { CelebrationLevel } from '@/components/feedback/CelebrationAnimation';
 
@@ -290,30 +290,19 @@ export function NativeClassroom() {
           });
         }
 
-        // Upsert mastery_records
+        // Atomic mastery update via DB function (avoids read-modify-write race)
         const correctRate = stats.questionsCompleted > 0 ? stats.correctCount / stats.questionsCompleted : 0;
         const masteryDelta = correctRate >= 0.8 ? 15 : correctRate >= 0.5 ? 5 : -5;
-        const existingMastery = await apiClient.get<MasteryRecord>('/mastery_records', {
-          filters: [
-            { column: 'childId', operator: 'eq', value: numChildId },
-            { column: 'knowledgeNodeId', operator: 'eq', value: knowledgeNodeId },
-          ],
-        });
-        const baseMastery = 50;
-        const currentMastery = existingMastery.length > 0 ? existingMastery[0].masteryLevel : baseMastery;
-        const newMastery = Math.max(0, Math.min(100, currentMastery + masteryDelta));
-        const nextReview = new Date(today.getTime() + (newMastery >= 80 ? 7 : newMastery >= 60 ? 3 : 1) * 24 * 60 * 60 * 1000);
 
-        await apiClient.upsert('/mastery_records', {
-          childId: numChildId,
-          knowledgeNodeId,
-          masteryLevel: newMastery,
-          lastPracticed: today.toISOString(),
-          nextReviewDate: nextReview.toISOString(),
-          consecutiveCorrect: correctRate >= 0.8 ? stats.correctCount : 0,
-          totalAttempts: (existingMastery[0]?.totalAttempts ?? 0) + stats.questionsCompleted,
-          totalCorrect: (existingMastery[0]?.totalCorrect ?? 0) + stats.correctCount,
-        }, 'child_id,knowledge_node_id');
+        await apiClient.rpc('update_mastery', {
+          p_child_id: numChildId,
+          p_knowledge_node_id: knowledgeNodeId,
+          p_delta: masteryDelta,
+          p_questions: stats.questionsCompleted,
+          p_correct: stats.correctCount,
+        }).catch((err: unknown) => {
+          console.error('[NativeClassroom] Atomic mastery update failed, falling back:', err);
+        });
       }
 
       // 删除已消费的缓存
