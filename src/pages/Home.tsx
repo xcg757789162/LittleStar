@@ -1242,7 +1242,7 @@ export function Home() {
                         textAlign: 'center',
                       }}>
                         {preGenCompleted > 0
-                          ? `${preGenCompleted} / ${preGenTotal} 节课堂${cachedCount > 0 ? `（已有 ${cachedCount} 节就绪）` : ''}`
+                          ? `${preGenCompleted} / ${preGenTotal} 节课堂${cachedCount > 0 ? `（${cachedCount} 节可学习）` : ''}`
                           : `共 ${preGenTotal} 节课堂，正在生成中...`}
                       </span>
                     </div>

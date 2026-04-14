@@ -521,8 +521,8 @@ export function NativeClassroom() {
 
   // 正在生成但尚未有可用（未学习）缓存的任务
   // 必须用 node+lesson+date 匹配缓存键；仅用 knowledgeNodeId 会把同点多课时的其余排队任务误隐藏
+  // 不再受限于 preGeneration.status，只要 taskDetails 里有活跃任务就展示
   const generatingTasks = useMemo(() => {
-    if (preGeneration.status !== 'checking' && preGeneration.status !== 'generating') return [];
     const readyLessonKeys = new Set(
       pendingLessons.map((l) => `${l.knowledgeNodeId}|${l.lessonIndex ?? 1}|${l.date}`),
     );
@@ -531,7 +531,7 @@ export function NativeClassroom() {
       const key = `${t.knowledgeNodeId}|${t.lessonIndex ?? 1}|${t.date}`;
       return !readyLessonKeys.has(key);
     });
-  }, [preGeneration.status, preGeneration.taskDetails, pendingLessons]);
+  }, [preGeneration.taskDetails, pendingLessons]);
 
   const hasAnyContent = pendingLessons.length > 0 || generatingTasks.length > 0 || completedLessons.length > 0;
 

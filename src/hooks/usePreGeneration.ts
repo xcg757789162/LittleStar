@@ -318,8 +318,7 @@ export function usePreGeneration(
           const runningIdx = data.tasks.indexOf(running)
           setCurrentSceneIndex(runningIdx >= 0 ? runningIdx : 0)
 
-          const completedLabel = data.completedCount > 0 ? `${data.completedCount} 堂已完成，` : ''
-          setStageText(`${completedLabel}正在生成第 ${data.completedCount + 1} 堂课 (${running.progress}%)...`)
+          setStageText(`正在生成第 ${data.completedCount + 1} / ${data.totalCount} 堂课 (${running.progress}%)...`)
         }
 
         // 判断是否全部完成
