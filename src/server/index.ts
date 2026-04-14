@@ -408,7 +408,7 @@ app.get('/api/pre-generate/status', async (req, res) => {
     // 确保 UI 能按正确顺序展示所有课堂（含已完成的），避免标签偏移
     const { rows } = await pool.query(
       `SELECT t.id, t.status, t.progress, t.current_step, t.knowledge_node_id,
-              t.date, t.error, t.retry_count, t.created_at, t.updated_at,
+              t.date, t.lesson_index, t.error, t.retry_count, t.created_at, t.updated_at,
               kn.name AS knowledge_node_name
        FROM api.generation_tasks t
        LEFT JOIN api.knowledge_nodes kn ON kn.id = t.knowledge_node_id
@@ -447,6 +447,7 @@ app.get('/api/pre-generate/status', async (req, res) => {
         knowledgeNodeId: r.knowledge_node_id,
         knowledgeNodeName: r.knowledge_node_name || '',
         date: r.date,
+        lessonIndex: r.lesson_index ?? 1,
         error: r.error,
         retryCount: r.retry_count,
       })),
@@ -457,6 +458,41 @@ app.get('/api/pre-generate/status', async (req, res) => {
     })
   } catch (error) {
     console.error('[API] GET /api/pre-generate/status 错误:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// ============================================================
+// GET /api/pre-generate/logs — 持久化系统日志查询
+// ============================================================
+app.get('/api/pre-generate/logs', async (req, res) => {
+  try {
+    const childId = parseInt(req.query.childId as string, 10)
+    if (!childId || isNaN(childId)) {
+      res.status(400).json({ error: 'childId is required' })
+      return
+    }
+    const limit = Math.min(parseInt(req.query.limit as string, 10) || 200, 500)
+
+    const { rows } = await pool.query<{
+      id: number
+      level: string
+      tag: string
+      message: string
+      task_id: number | null
+      created_at: string
+    }>(
+      `SELECT id, level, tag, message, task_id, created_at
+       FROM api.system_logs
+       WHERE child_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [childId, limit],
+    )
+
+    res.json({ logs: rows })
+  } catch (error) {
+    console.error('[API] GET /api/pre-generate/logs 错误:', error)
     res.status(500).json({ error: 'Internal server error' })
   }
 })

@@ -41,6 +41,9 @@ export interface TaskProgressInfo {
   id: number
   knowledgeNodeId: string
   knowledgeNodeName: string
+  /** 与 classroom 缓存键一致，用于区分同一知识点多课时 */
+  lessonIndex: number
+  date: string
   status: string
   progress: number
   currentStep: string | null
@@ -120,6 +123,7 @@ interface BackendStatusTask {
   knowledgeNodeId: string
   knowledgeNodeName: string
   date: string
+  lessonIndex?: number
   error: string | null
   retryCount: number
 }
@@ -290,6 +294,8 @@ export function usePreGeneration(
           id: t.id,
           knowledgeNodeId: t.knowledgeNodeId,
           knowledgeNodeName: t.knowledgeNodeName,
+          lessonIndex: t.lessonIndex ?? 1,
+          date: t.date,
           status: t.status,
           progress: t.status === 'completed' ? 100 : t.progress,
           currentStep: t.currentStep,

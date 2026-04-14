@@ -514,12 +514,17 @@ export function NativeClassroom() {
   }, [phase, selectedSubject, preGeneration.completedCount, preGeneration.status, loadLessons]);
 
   // 正在生成但尚未有可用（未学习）缓存的任务
+  // 必须用 node+lesson+date 匹配缓存键；仅用 knowledgeNodeId 会把同点多课时的其余排队任务误隐藏
   const generatingTasks = useMemo(() => {
     if (preGeneration.status !== 'checking' && preGeneration.status !== 'generating') return [];
-    const readyNodeIds = new Set(pendingLessons.map((l) => l.knowledgeNodeId));
-    return preGeneration.taskDetails.filter(
-      (t) => (t.status === 'pending' || t.status === 'running') && !readyNodeIds.has(t.knowledgeNodeId),
+    const readyLessonKeys = new Set(
+      pendingLessons.map((l) => `${l.knowledgeNodeId}|${l.lessonIndex ?? 1}|${l.date}`),
     );
+    return preGeneration.taskDetails.filter((t) => {
+      if (t.status !== 'pending' && t.status !== 'running') return false;
+      const key = `${t.knowledgeNodeId}|${t.lessonIndex ?? 1}|${t.date}`;
+      return !readyLessonKeys.has(key);
+    });
   }, [preGeneration.status, preGeneration.taskDetails, pendingLessons]);
 
   const hasAnyContent = pendingLessons.length > 0 || generatingTasks.length > 0 || completedLessons.length > 0;
