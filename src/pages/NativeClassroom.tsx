@@ -45,6 +45,7 @@ interface CompletedLesson {
   subject: Subject;
   classroomTitle: string;
   date: string;
+  lessonIndex: number;
   completedAt: string;
   round: number;
   questionsCompleted: number;
@@ -147,10 +148,13 @@ export function NativeClassroom() {
 
   // Filter out lessons that already appear in completedLessons to avoid
   // showing the same lesson in both "即将学习" and "已学完" sections.
+  // 必须用 knowledgeNodeId+lessonIndex 匹配；仅用 knowledgeNodeId 会把同点多课时全部误隐藏
   const pendingLessons = useMemo(() => {
     if (completedLessons.length === 0) return cachedLessons;
-    const completedNodeIds = new Set(completedLessons.map((l) => l.knowledgeNodeId));
-    return cachedLessons.filter((l) => !completedNodeIds.has(l.knowledgeNodeId));
+    const completedKeys = new Set(
+      completedLessons.map((l) => `${l.knowledgeNodeId}|${l.lessonIndex ?? 1}`),
+    );
+    return cachedLessons.filter((l) => !completedKeys.has(`${l.knowledgeNodeId}|${l.lessonIndex ?? 1}`));
   }, [cachedLessons, completedLessons]);
 
   const preGeneration = usePreGeneration(
@@ -186,7 +190,7 @@ export function NativeClassroom() {
                 { column: 'subject', operator: 'eq', value: subject },
               ],
               order: [{ column: 'completed_at', ascending: false }],
-              select: 'id,knowledgeNodeId:knowledge_node_id,knowledgeNodeName:knowledge_node_name,subject,classroomTitle:classroom_title,date,completedAt:completed_at,round,questionsCompleted:questions_completed,correctCount:correct_count,accuracy',
+              select: 'id,knowledgeNodeId:knowledge_node_id,knowledgeNodeName:knowledge_node_name,subject,classroomTitle:classroom_title,date,lessonIndex:lesson_index,completedAt:completed_at,round,questionsCompleted:questions_completed,correctCount:correct_count,accuracy',
             })
           : Promise.resolve([]),
       ]);
