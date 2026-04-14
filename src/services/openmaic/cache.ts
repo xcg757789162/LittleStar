@@ -47,7 +47,7 @@ export interface CacheListItem {
  * 从 knowledgeNodeId 推断科目
  * 知识点 ID 格式：math-xxx / chinese-xxx / english-xxx / default-math 等
  */
-function inferSubjectFromNodeId(knowledgeNodeId: string): string | undefined {
+export function inferSubjectFromNodeId(knowledgeNodeId: string): string | undefined {
   const id = knowledgeNodeId.toLowerCase()
   if (id.startsWith('math') || id.endsWith('-math')) return 'math'
   if (id.startsWith('chinese') || id.endsWith('-chinese')) return 'chinese'
@@ -320,7 +320,8 @@ export class ClassroomCache {
               const elements = canvas?.elements as Array<Record<string, unknown>> | undefined
               if (elements) {
                 for (const el of elements) {
-                  if (el.type === 'image' && typeof el.src === 'string') {
+                  if (el.type === 'image' && typeof el.src === 'string'
+                    && !(/^gen_(img|vid)_[\w-]+$/i.test(el.src))) {
                     thumbnailUrl = el.src
                     break
                   }
@@ -421,6 +422,41 @@ export class ClassroomCache {
   async clearAll(): Promise<void> {
     log.info('清除所有缓存')
     await this.store.clear()
+  }
+
+  /**
+   * 获取所有缓存条目的轻量元数据（不含 classroomData）
+   */
+  async getMetadataEntries(): Promise<CacheEntryMetadata[]> {
+    if (this.store.metadataEntries) {
+      return this.store.metadataEntries()
+    }
+    const entries = await this.store.entries()
+    return entries.map(([key, entry]) => ({
+      cacheKey: key,
+      knowledgeNodeId: entry.knowledgeNodeId,
+      date: entry.date,
+      cachedAt: entry.cachedAt,
+    }))
+  }
+
+  /**
+   * 获取未学习的缓存条目数量（排除已完成的课程）
+   * @param completedNodeIds 已完成课程的 knowledgeNodeId 集合
+   * @param subject 可选，按科目过滤
+   */
+  async getUnlearnedCacheSize(completedNodeIds: Set<string>, subject?: string): Promise<number> {
+    const metaEntries = await this.getMetadataEntries()
+    let count = 0
+    for (const meta of metaEntries) {
+      if (completedNodeIds.has(meta.knowledgeNodeId)) continue
+      if (subject) {
+        const inferredSubject = inferSubjectFromNodeId(meta.knowledgeNodeId)
+        if (inferredSubject !== subject) continue
+      }
+      count++
+    }
+    return count
   }
 
   /**

@@ -29,23 +29,24 @@ export function BaseVideoElement({ elementInfo }: BaseVideoElementProps) {
   const prevPlayingRef = useRef('');
   const [scope, animate] = useAnimate<HTMLDivElement>();
 
-  // Only subscribe to media store when inside a classroom (stageId provided via context).
   const stageId = useMediaStageId();
   const isPlaceholder = isMediaPlaceholder(elementInfo.src);
+  const isLivePlaceholder = !!stageId && isPlaceholder;
   const task = useMediaGenerationStore((s) => {
-    if (!isPlaceholder) return undefined;
+    if (!isLivePlaceholder) return undefined;
     const t = s.tasks[elementInfo.src];
     if (t && t.stageId !== stageId) return undefined;
     return t;
   });
   const videoGenerationEnabled = useSettingsStore((s) => s.videoGenerationEnabled);
   const resolvedSrc = task?.status === 'done' && task.objectUrl ? task.objectUrl : elementInfo.src;
-  const showDisabled = isPlaceholder && !task && !videoGenerationEnabled;
+  const isThumbnailPlaceholder = isPlaceholder && !stageId;
+  const showDisabled = isLivePlaceholder && !task && !videoGenerationEnabled;
   const showSkeleton =
-    isPlaceholder &&
+    isLivePlaceholder &&
     !showDisabled &&
     (!task || task.status === 'pending' || task.status === 'generating');
-  const showError = isPlaceholder && task?.status === 'failed';
+  const showError = isLivePlaceholder && task?.status === 'failed';
   const isReady = !isPlaceholder || task?.status === 'done';
 
   // Ensure video is paused on mount — prevents browser autoplay from user gesture context
@@ -107,7 +108,11 @@ export function BaseVideoElement({ elementInfo }: BaseVideoElementProps) {
         className="w-full h-full"
         style={{ transform: `rotate(${elementInfo.rotate}deg)` }}
       >
-        {showDisabled ? (
+        {isThumbnailPlaceholder ? (
+          <div className="w-full h-full bg-gradient-to-br from-indigo-50 via-violet-50/40 to-blue-50 flex items-center justify-center rounded">
+            <Film className="w-6 h-6 text-indigo-300/60" strokeWidth={1.5} />
+          </div>
+        ) : showDisabled ? (
           <div className="w-full h-full bg-gray-50 dark:bg-gray-900/30 flex items-center justify-center rounded">
             <div className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-gray-500 dark:text-gray-400">
               <VideoOff className="w-3 h-3 shrink-0" />

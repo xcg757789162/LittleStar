@@ -21,6 +21,7 @@ import { useKnowledgeNodes } from '@/hooks/queries/useKnowledgeNodes'
 import { ClassroomCache } from '@/services/openmaic/cache'
 import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
 import { usePreGeneration } from '@/hooks/usePreGeneration'
+import { apiClient } from '@/services/api'
 import type { Subject, PlacementTest, PlacementResult } from '@/types/models'
 
 /* ═══════════════════════════════════════════
@@ -423,18 +424,30 @@ export function Home() {
     ? (placementTests ? placementTests.length > 0 : null)
     : false
 
-  // 缓存课程数量
+  // 获取已完成课程 nodeId（用于计算未学习缓存数）
+  const [completedNodeIds, setCompletedNodeIds] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    if (!childId) return
+    apiClient.get<{ knowledgeNodeId: string }>('/classroom_history', {
+      filters: [{ column: 'childId', operator: 'eq', value: Number(childId) }],
+      select: 'knowledge_node_id',
+    }).then((records) => {
+      setCompletedNodeIds(new Set(records.map((r) => r.knowledgeNodeId)))
+    }).catch(() => {})
+  }, [childId])
+
+  // 缓存课程数量（只计算未学习的）
   useEffect(() => {
     const loadCacheStatus = async () => {
       try {
-        const size = await cacheInstance.getCacheSize()
+        const size = await cacheInstance.getUnlearnedCacheSize(completedNodeIds)
         setCachedCount(size)
       } catch {
         setCachedCount(0)
       }
     }
     loadCacheStatus()
-  }, [cacheInstance])
+  }, [cacheInstance, completedNodeIds])
 
   // 预生成
   const {
@@ -445,13 +458,21 @@ export function Home() {
     triggerGeneration,
   } = usePreGeneration(childId, hasPlacementTest, cachedCount, completedSubjects.size)
 
-  // 预生成完成后刷新缓存
+  // 预生成完成后刷新缓存（只计算未学习的）
   const refreshCache = useCallback(async () => {
     try {
-      const size = await cacheInstance.getCacheSize()
+      // 也刷新已完成列表，以获得最新的过滤
+      const records = await apiClient.get<{ knowledgeNodeId: string }>('/classroom_history', {
+        filters: [{ column: 'childId', operator: 'eq', value: Number(childId) }],
+        select: 'knowledge_node_id',
+      }).catch(() => [] as { knowledgeNodeId: string }[])
+      const latestCompletedIds = new Set(records.map((r) => r.knowledgeNodeId))
+      setCompletedNodeIds(latestCompletedIds)
+
+      const size = await cacheInstance.getUnlearnedCacheSize(latestCompletedIds)
       setCachedCount(size)
     } catch { /* silent */ }
-  }, [cacheInstance])
+  }, [cacheInstance, childId])
 
   useEffect(() => {
     if (preGenStatus === 'completed' && preGenCompleted > 0) {
@@ -467,10 +488,9 @@ export function Home() {
     return () => clearInterval(interval)
   }, [preGenStatus, refreshCache])
 
-  // 课堂完成事件：直接刷新缓存数量（补充 preGenStatus 变化的间接刷新）
+  // 课堂完成事件：刷新缓存数量（已完成课程变多，未学习计数需更新）
   useEffect(() => {
     const handleClassroomCompleted = () => {
-      // 延迟 2 秒刷新，等待缓存删除操作完成
       setTimeout(() => void refreshCache(), 2000)
     }
 

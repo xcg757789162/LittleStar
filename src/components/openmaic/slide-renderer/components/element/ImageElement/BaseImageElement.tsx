@@ -26,14 +26,13 @@ export function BaseImageElement({ elementInfo }: BaseImageElementProps) {
   const { clipShape, imgPosition } = useClipImage(elementInfo);
   const { filter } = useFilter(elementInfo.filters);
 
-  // Only subscribe to media store when inside a classroom (stageId provided via context).
-  // Homepage thumbnails have no stageId context → skip store to prevent cross-course contamination.
+  // Detect placeholder IDs regardless of context so thumbnails never render broken <img>.
   const stageId = useMediaStageId();
-  const isPlaceholder = !!stageId && isMediaPlaceholder(elementInfo.src);
+  const looksLikePlaceholder = isMediaPlaceholder(elementInfo.src);
+  const isLivePlaceholder = !!stageId && looksLikePlaceholder;
   const task = useMediaGenerationStore((s) => {
-    if (!isPlaceholder) return undefined;
+    if (!isLivePlaceholder) return undefined;
     const t = s.tasks[elementInfo.src];
-    // Only use task if it belongs to the current stage
     if (t && t.stageId !== stageId) return undefined;
     return t;
   });
@@ -41,12 +40,14 @@ export function BaseImageElement({ elementInfo }: BaseImageElementProps) {
   const imageGenerationEnabled = useSettingsStore((s) => s.imageGenerationEnabled);
   // Resolve actual src: use objectUrl from store if available, otherwise original src
   const resolvedSrc = task?.status === 'done' && task.objectUrl ? task.objectUrl : elementInfo.src;
-  const showDisabled = isPlaceholder && !task && !imageGenerationEnabled;
+  // Thumbnail/sidebar context (no stageId): show neutral visual instead of misleading "disabled" text
+  const isThumbnailPlaceholder = looksLikePlaceholder && !stageId;
+  const showDisabled = isLivePlaceholder && !task && !imageGenerationEnabled;
   const showSkeleton =
-    isPlaceholder &&
+    isLivePlaceholder &&
     !showDisabled &&
     (!task || task.status === 'pending' || task.status === 'generating');
-  const showError = isPlaceholder && task?.status === 'failed';
+  const showError = isLivePlaceholder && task?.status === 'failed';
 
   return (
     <div
@@ -72,7 +73,11 @@ export function BaseImageElement({ elementInfo }: BaseImageElementProps) {
             className="w-full h-full overflow-hidden relative"
             style={{ clipPath: clipShape.style }}
           >
-            {showDisabled ? (
+            {isThumbnailPlaceholder ? (
+              <div className="w-full h-full bg-gradient-to-br from-amber-50 via-orange-50/40 to-yellow-50 flex items-center justify-center">
+                <Paintbrush className="w-6 h-6 text-amber-300/60" strokeWidth={1.5} />
+              </div>
+            ) : showDisabled ? (
               <div className="w-full h-full bg-gray-50 dark:bg-gray-900/30 flex items-center justify-center">
                 <div className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-gray-500 dark:text-gray-400">
                   <ImageOff className="w-3 h-3 shrink-0" />

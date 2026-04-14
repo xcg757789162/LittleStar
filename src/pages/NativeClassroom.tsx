@@ -37,6 +37,21 @@ import type { Subject, Achievement } from '@/types/models';
 import type { Classroom } from '@/services/openmaic/types';
 import type { CelebrationLevel } from '@/components/feedback/CelebrationAnimation';
 
+/** 已完成课程（来自 classroom_history） */
+interface CompletedLesson {
+  id: number;
+  knowledgeNodeId: string;
+  knowledgeNodeName: string;
+  subject: Subject;
+  classroomTitle: string;
+  date: string;
+  completedAt: string;
+  round: number;
+  questionsCompleted: number;
+  correctCount: number;
+  accuracy: number;
+}
+
 /* ═══════════════════════════════════════════
    设计 Token — Sunny Playground 风格
    ═══════════════════════════════════════════ */
@@ -103,6 +118,7 @@ export function NativeClassroom() {
   const [currentClassroom, setCurrentClassroom] = useState<Classroom | null>(null);
   const [showCompleteCelebration, setShowCompleteCelebration] = useState(false);
   const [sessionSummary, setSessionSummary] = useState<{ questionsCompleted: number; correctCount: number; accuracy: number; subject: Subject } | null>(null);
+  const [completedLessons, setCompletedLessons] = useState<CompletedLesson[]>([]);
 
   // 选择模式（用于重新生成）
   const [selectMode, setSelectMode] = useState(false);
@@ -129,16 +145,23 @@ export function NativeClassroom() {
       : new ClassroomCache();
   }
 
+  // Filter out lessons that already appear in completedLessons to avoid
+  // showing the same lesson in both "即将学习" and "已学完" sections.
+  const pendingLessons = useMemo(() => {
+    if (completedLessons.length === 0) return cachedLessons;
+    const completedNodeIds = new Set(completedLessons.map((l) => l.knowledgeNodeId));
+    return cachedLessons.filter((l) => !completedNodeIds.has(l.knowledgeNodeId));
+  }, [cachedLessons, completedLessons]);
+
   const preGeneration = usePreGeneration(
     childId,
     hasPlacementTest,
-    cachedLessons.length,
+    pendingLessons.length,
     completedSubjects.size,
   );
 
-  // 追踪当前课堂
+  // 追踪当前课堂的知识点 ID
   const currentNodeIdRef = useRef<string>('');
-  const currentDateRef = useRef<string>('');
 
   // 如果从 Home 页带了科目进来，自动加载课程列表
   useEffect(() => {
@@ -153,16 +176,30 @@ export function NativeClassroom() {
   const loadLessons = useCallback(async (subject: Subject) => {
     setIsLoading(true);
     try {
-      const list = await cacheRef.current!.listCachedClassrooms(undefined, subject);
+      const [list, history] = await Promise.all([
+        cacheRef.current!.listCachedClassrooms(undefined, subject),
+        childId
+          ? apiClient.get<CompletedLesson>('/classroom_history', {
+              filters: [
+                { column: 'child_id', operator: 'eq', value: Number(childId) },
+                { column: 'subject', operator: 'eq', value: subject },
+              ],
+              order: [{ column: 'completed_at', ascending: false }],
+              select: 'id,knowledgeNodeId:knowledge_node_id,knowledgeNodeName:knowledge_node_name,subject,classroomTitle:classroom_title,date,completedAt:completed_at,round,questionsCompleted:questions_completed,correctCount:correct_count,accuracy',
+            })
+          : Promise.resolve([]),
+      ]);
       setCachedLessons(list);
+      setCompletedLessons(history);
       setPhase('lesson-picker');
     } catch {
       setCachedLessons([]);
+      setCompletedLessons([]);
       setPhase('lesson-picker');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [childId]);
 
   const handleSubjectSelect = useCallback(async (subject: Subject) => {
     activateAudio();
@@ -177,7 +214,6 @@ export function NativeClassroom() {
     try {
       // 记录当前课堂信息
       currentNodeIdRef.current = knowledgeNodeId;
-      currentDateRef.current = date;
 
       // 从缓存加载课堂
       const classroom = await cacheRef.current!.getClassroom(knowledgeNodeId, date);
@@ -260,33 +296,33 @@ export function NativeClassroom() {
         const knowledgeNodeId = currentNodeIdRef.current || currentClassroom.id || 'unknown';
         const existingHistory = await apiClient.get<{ id: number }>('/classroom_history', {
           filters: [
-            { column: 'childId', operator: 'eq', value: numChildId },
-            { column: 'knowledgeNodeId', operator: 'eq', value: knowledgeNodeId },
+            { column: 'child_id', operator: 'eq', value: numChildId },
+            { column: 'knowledge_node_id', operator: 'eq', value: knowledgeNodeId },
           ],
           select: 'id',
         });
         const round = existingHistory.length + 1;
 
         const historyRecord = await apiClient.post<{ id: number }>('/classroom_history', {
-          childId: numChildId,
-          knowledgeNodeId,
-          knowledgeNodeName: currentClassroom.title ?? knowledgeNodeId,
+          child_id: numChildId,
+          knowledge_node_id: knowledgeNodeId,
+          knowledge_node_name: currentClassroom.title ?? knowledgeNodeId,
           subject,
-          classroomId: currentClassroom.id,
-          classroomTitle: currentClassroom.title ?? '',
+          classroom_id: currentClassroom.id,
+          classroom_title: currentClassroom.title ?? '',
           date: dateStr,
-          completedAt: today.toISOString(),
+          completed_at: today.toISOString(),
           round,
-          isReview: false,
-          questionsCompleted: stats.questionsCompleted,
-          correctCount: stats.correctCount,
+          is_review: false,
+          questions_completed: stats.questionsCompleted,
+          correct_count: stats.correctCount,
           accuracy,
         });
 
         if (historyRecord?.id) {
           await apiClient.post('/classroom_snapshots', {
-            historyId: historyRecord.id,
-            classroomData: currentClassroom,
+            history_id: historyRecord.id,
+            classroom_data: currentClassroom,
           });
         }
 
@@ -305,20 +341,26 @@ export function NativeClassroom() {
         });
       }
 
-      // 删除已消费的缓存
+      // 触发新一轮预生成（不删除缓存，已完成的课堂保留用于复习）
       const nodeId = currentNodeIdRef.current;
-      const cacheDate = currentDateRef.current;
-      if (nodeId && cacheDate && cacheRef.current) {
-        await cacheRef.current.deleteClassroom(nodeId, cacheDate).catch(() => {});
-      }
-
-      // 触发新一轮预生成
       window.dispatchEvent(new CustomEvent('classroom-completed', {
         detail: { subject, knowledgeNodeId: nodeId },
       }));
 
+      // 刷新已完成课程列表
+      if (subject) {
+        apiClient.get<CompletedLesson>('/classroom_history', {
+          filters: [
+            { column: 'child_id', operator: 'eq', value: numChildId },
+            { column: 'subject', operator: 'eq', value: subject },
+          ],
+          order: [{ column: 'completed_at', ascending: false }],
+          select: 'id,knowledgeNodeId:knowledge_node_id,knowledgeNodeName:knowledge_node_name,subject,classroomTitle:classroom_title,date,completedAt:completed_at,round,questionsCompleted:questions_completed,correctCount:correct_count,accuracy',
+        }).then(setCompletedLessons).catch(() => {});
+      }
+
       const existingAchievements = await apiClient.get<Achievement>('/achievements', {
-        filters: [{ column: 'childId', operator: 'eq', value: numChildId }],
+        filters: [{ column: 'child_id', operator: 'eq', value: numChildId }],
       });
 
       // 简化的成就检查（里程碑）
@@ -363,12 +405,12 @@ export function NativeClassroom() {
   }, []);
 
   const toggleSelectAll = useCallback(() => {
-    if (selectedKeys.size === cachedLessons.length) {
+    if (selectedKeys.size === pendingLessons.length) {
       setSelectedKeys(new Set());
     } else {
-      setSelectedKeys(new Set(cachedLessons.map((l) => `${l.knowledgeNodeId}::${l.date}`)));
+      setSelectedKeys(new Set(pendingLessons.map((l) => `${l.knowledgeNodeId}::${l.date}`)));
     }
-  }, [cachedLessons, selectedKeys.size]);
+  }, [pendingLessons, selectedKeys.size]);
 
   const handleRegenerate = useCallback(async () => {
     if (selectedKeys.size === 0 || !childId || !currentChild) return;
@@ -376,7 +418,7 @@ export function NativeClassroom() {
 
     try {
       const numChildId = Number(childId);
-      const lessonsToRegen = cachedLessons.filter(
+      const lessonsToRegen = pendingLessons.filter(
         (l) => selectedKeys.has(`${l.knowledgeNodeId}::${l.date}`),
       );
 
@@ -413,7 +455,7 @@ export function NativeClassroom() {
     } finally {
       setIsRegenerating(false);
     }
-  }, [selectedKeys, childId, currentChild, cachedLessons, selectedSubject, loadLessons, preGeneration]);
+  }, [selectedKeys, childId, currentChild, pendingLessons, selectedSubject, loadLessons, preGeneration]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -445,10 +487,10 @@ export function NativeClassroom() {
     );
   }, [preGeneration.status, preGeneration.taskDetails, cachedLessons]);
 
-  const hasAnyContent = cachedLessons.length > 0 || generatingTasks.length > 0;
+  const hasAnyContent = pendingLessons.length > 0 || generatingTasks.length > 0 || completedLessons.length > 0;
 
   const isSubjectPending =
-    cachedLessons.length === 0 &&
+    pendingLessons.length === 0 &&
     (preGeneration.status === 'checking' || preGeneration.status === 'generating');
   const emptyStateTitle = preGeneration.status === 'failed'
     ? '课程准备出了点小问题'
@@ -560,7 +602,7 @@ export function NativeClassroom() {
               📚 选择课程
             </span>
             <div style={{ display: 'flex', gap: '8px' }}>
-              {cachedLessons.length > 0 && (
+              {pendingLessons.length > 0 && (
                 <motion.button whileTap={{ scale: 0.95 }} onClick={toggleSelectMode}
                   style={{ padding: '8px 18px', borderRadius: '16px', border: selectMode ? `2px solid ${T.sunOrange}` : '2px solid #FFE8D6', backgroundColor: selectMode ? '#FFF3E7' : T.cardBg, fontSize: '14px', cursor: 'pointer', color: selectMode ? T.sunOrange : T.textMedium, fontWeight: 600 }}>
                   {selectMode ? '✕ 取消' : '🔄 管理'}
@@ -585,124 +627,183 @@ export function NativeClassroom() {
                 <h2 style={{ fontSize: '24px', fontWeight: 800, color: T.textDark, fontFamily: T.fontDisplay }}>📚 今日课程</h2>
                 <p style={{ fontSize: '14px', color: T.textMedium }}>选择一节课开始学习 ✨</p>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px', width: '100%', maxWidth: '1080px', justifyItems: 'center' }}>
-                {cachedLessons.map((lesson, idx) => {
-                  const key = `${lesson.knowledgeNodeId}::${lesson.date}`;
-                  return (
-                    <LessonCard key={key}
-                      title={lesson.classroomTitle}
-                      thumbnailUrl={lesson.thumbnailUrl}
-                      slide={lesson.firstSlideCanvas}
-                      subject={selectedSubject ?? 'english'}
-                      isLocked={false}
-                      index={idx}
-                      onTap={() => handleStartLesson(lesson.knowledgeNodeId, lesson.date)}
-                      selectable={selectMode}
-                      selected={selectedKeys.has(key)}
-                      onToggleSelect={() => toggleSelect(key)}
-                    />
-                  );
-                })}
-                {/* 正在生成的课堂占位卡片 */}
-                {generatingTasks.map((task, idx) => (
-                  <motion.div
-                    key={`gen-${task.id}`}
-                    layout
-                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ delay: (cachedLessons.length + idx) * 0.08, type: 'spring', stiffness: 300, damping: 24 }}
-                    style={{
-                      position: 'relative',
-                      width: '100%',
-                      maxWidth: 320,
-                      borderRadius: 22,
-                      overflow: 'hidden',
-                      cursor: 'default',
-                      background: '#FFFFFF',
-                      boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
-                      border: '3px dashed #E0D6CC',
-                    }}
-                  >
-                    {/* 缩略图区域 — "生成中" */}
-                    <div style={{
-                      width: '100%',
-                      height: 150,
-                      background: 'linear-gradient(135deg, #FFF5EE 0%, #FFF0E6 50%, #FFE8D6 100%)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                    }}>
-                      <motion.span
-                        style={{ fontSize: 28 }}
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+
+              {/* ── 即将学习 ── */}
+              {pendingLessons.length > 0 && (
+                <div style={{ width: '100%', maxWidth: '1080px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, paddingLeft: 4 }}>
+                    <span style={{ fontSize: 18 }}>🚀</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: T.textDark, fontFamily: T.fontDisplay }}>
+                      即将学习
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: T.textLight, background: '#FFF3E7', padding: '2px 10px', borderRadius: 10 }}>
+                      {pendingLessons.length}
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px', width: '100%', justifyItems: 'center' }}>
+                    {pendingLessons.map((lesson, idx) => {
+                      const key = `${lesson.knowledgeNodeId}::${lesson.date}`;
+                      return (
+                        <LessonCard key={key}
+                          title={lesson.classroomTitle}
+                          thumbnailUrl={lesson.thumbnailUrl}
+                          slide={lesson.firstSlideCanvas}
+                          subject={selectedSubject ?? 'english'}
+                          isLocked={false}
+                          index={idx}
+                          onTap={() => handleStartLesson(lesson.knowledgeNodeId, lesson.date)}
+                          selectable={selectMode}
+                          selected={selectedKeys.has(key)}
+                          onToggleSelect={() => toggleSelect(key)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ── 生成中 ── */}
+              {generatingTasks.length > 0 && (
+                <div style={{ width: '100%', maxWidth: '1080px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, paddingLeft: 4 }}>
+                    <motion.span style={{ fontSize: 18, display: 'inline-block' }}
+                      animate={{ rotate: 360 }} transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}>⚙️</motion.span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: T.textDark, fontFamily: T.fontDisplay }}>
+                      生成中
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: T.textLight, background: '#FFF3E7', padding: '2px 10px', borderRadius: 10 }}>
+                      {generatingTasks.length}
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px', width: '100%', justifyItems: 'center' }}>
+                    {generatingTasks.map((task, idx) => (
+                      <motion.div
+                        key={`gen-${task.id}`}
+                        layout
+                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ delay: idx * 0.08, type: 'spring', stiffness: 300, damping: 24 }}
+                        style={{
+                          position: 'relative',
+                          width: '100%',
+                          maxWidth: 320,
+                          borderRadius: 22,
+                          overflow: 'hidden',
+                          cursor: 'default',
+                          background: '#FFFFFF',
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                          border: '3px dashed #E0D6CC',
+                        }}
                       >
-                        ⚙️
-                      </motion.span>
-                      <span style={{
-                        fontSize: 16,
-                        fontWeight: 700,
-                        color: T.sunOrange,
-                        fontFamily: T.fontDisplay,
-                        letterSpacing: 2,
-                      }}>
-                        生成中
-                      </span>
-                      {task.status === 'running' && task.progress > 0 && (
-                        <div style={{ width: '60%', height: 4, borderRadius: 999, background: '#F5E6DC', overflow: 'hidden' }}>
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${task.progress}%` }}
-                            transition={{ duration: 0.4 }}
-                            style={{ height: '100%', borderRadius: 999, background: `linear-gradient(90deg, ${T.sunOrange}, ${T.candyPink})` }}
-                          />
+                        <div style={{
+                          width: '100%',
+                          height: 150,
+                          background: 'linear-gradient(135deg, #FFF5EE 0%, #FFF0E6 50%, #FFE8D6 100%)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 8,
+                        }}>
+                          <motion.span
+                            style={{ fontSize: 28 }}
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+                          >
+                            ⚙️
+                          </motion.span>
+                          <span style={{
+                            fontSize: 16,
+                            fontWeight: 700,
+                            color: T.sunOrange,
+                            fontFamily: T.fontDisplay,
+                            letterSpacing: 2,
+                          }}>
+                            生成中
+                          </span>
+                          {task.status === 'running' && task.progress > 0 && (
+                            <div style={{ width: '60%', height: 4, borderRadius: 999, background: '#F5E6DC', overflow: 'hidden' }}>
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${task.progress}%` }}
+                                transition={{ duration: 0.4 }}
+                                style={{ height: '100%', borderRadius: 999, background: `linear-gradient(90deg, ${T.sunOrange}, ${T.candyPink})` }}
+                              />
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    {/* 序号徽标 */}
-                    <div style={{
-                      position: 'absolute',
-                      top: 8,
-                      left: 8,
-                      width: 26,
-                      height: 26,
-                      borderRadius: '50%',
-                      background: '#D5D5D5',
-                      color: '#FFFFFF',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 12,
-                      fontWeight: 800,
-                      fontFamily: T.fontDisplay,
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                    }}>
-                      {cachedLessons.length + idx + 1}
-                    </div>
-                    {/* 标题区域 */}
-                    <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <p style={{
-                        fontSize: 16,
-                        fontWeight: 700,
-                        fontFamily: "'Nunito', 'PingFang SC', sans-serif",
-                        color: T.textLight,
-                        margin: 0,
-                        lineHeight: 1.35,
-                        overflow: 'hidden',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        minHeight: '2.7em',
-                        flex: 1,
-                      }}>
-                        {task.knowledgeNodeName || `课堂 ${cachedLessons.length + idx + 1}`}
-                      </p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+                        <div style={{
+                          position: 'absolute',
+                          top: 8,
+                          left: 8,
+                          width: 26,
+                          height: 26,
+                          borderRadius: '50%',
+                          background: '#D5D5D5',
+                          color: '#FFFFFF',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 12,
+                          fontWeight: 800,
+                          fontFamily: T.fontDisplay,
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                        }}>
+                          {idx + 1}
+                        </div>
+                        <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <p style={{
+                            fontSize: 16,
+                            fontWeight: 700,
+                            fontFamily: "'Nunito', 'PingFang SC', sans-serif",
+                            color: T.textLight,
+                            margin: 0,
+                            lineHeight: 1.35,
+                            overflow: 'hidden',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            minHeight: '2.7em',
+                            flex: 1,
+                          }}>
+                            {task.knowledgeNodeName || `课堂 ${idx + 1}`}
+                          </p>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── 已学完 ── */}
+              {completedLessons.length > 0 && (
+                <div style={{ width: '100%', maxWidth: '1080px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, paddingLeft: 4 }}>
+                    <span style={{ fontSize: 18 }}>✅</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: T.textDark, fontFamily: T.fontDisplay }}>
+                      已学完
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: T.textLight, background: '#E8F5E9', padding: '2px 10px', borderRadius: 10 }}>
+                      {completedLessons.length}
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px', width: '100%', justifyItems: 'center' }}>
+                    {completedLessons.map((lesson, idx) => (
+                      <LessonCard
+                        key={`done-${lesson.id}`}
+                        title={lesson.classroomTitle || lesson.knowledgeNodeName}
+                        subject={lesson.subject}
+                        isLocked={false}
+                        index={idx}
+                        onTap={() => {}}
+                        status="completed"
+                        accuracy={lesson.accuracy}
+                        completedAt={lesson.completedAt}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </motion.div>
           ) : (
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
@@ -815,10 +916,10 @@ export function NativeClassroom() {
                   border: '2px solid #FFE8D6', backgroundColor: T.cardBg,
                   fontSize: '13px', cursor: 'pointer', color: T.textMedium, fontWeight: 600,
                 }}>
-                {selectedKeys.size === cachedLessons.length ? '取消全选' : '全选'}
+                {selectedKeys.size === pendingLessons.length ? '取消全选' : '全选'}
               </motion.button>
               <span style={{ fontSize: '13px', color: T.textMedium, fontWeight: 600 }}>
-                已选 {selectedKeys.size} / {cachedLessons.length} 节课
+                已选 {selectedKeys.size} / {pendingLessons.length} 节课
               </span>
             </div>
             <motion.button

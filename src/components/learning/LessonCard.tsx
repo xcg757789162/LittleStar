@@ -33,6 +33,9 @@ const SUBJECT_COLOR: Record<Subject, string> = {
   english: '#5BC0EB',
 }
 
+/** 课程卡片状态 */
+export type LessonStatus = 'ready' | 'completed'
+
 export interface LessonCardProps {
   /** 课程标题 */
   title: string
@@ -54,6 +57,12 @@ export interface LessonCardProps {
   selected?: boolean
   /** 选中切换回调 */
   onToggleSelect?: () => void
+  /** 课程状态（默认 ready） */
+  status?: LessonStatus
+  /** 正确率 0-100（completed 状态下展示） */
+  accuracy?: number
+  /** 完成日期（completed 状态下展示） */
+  completedAt?: string
 }
 
 export function LessonCard({
@@ -67,7 +76,11 @@ export function LessonCard({
   selectable,
   selected,
   onToggleSelect,
+  status = 'ready',
+  accuracy,
+  completedAt,
 }: LessonCardProps) {
+  const isCompleted = status === 'completed'
   const [imgError, setImgError] = useState(false)
   const thumbRef = useRef<HTMLDivElement>(null)
   const [thumbWidth, setThumbWidth] = useState(0)
@@ -115,12 +128,12 @@ export function LessonCard({
         maxWidth: 320,
         borderRadius: 22,
         overflow: 'hidden',
-        cursor: isLocked ? 'not-allowed' : 'pointer',
+        cursor: isLocked || isCompleted ? (isCompleted ? 'default' : 'not-allowed') : 'pointer',
         background: '#FFFFFF',
-        boxShadow: isLocked
+        boxShadow: isLocked || isCompleted
           ? '0 4px 16px rgba(0,0,0,0.04)'
           : `0 12px 36px ${accentColor}33, 0 4px 12px rgba(0,0,0,0.06)`,
-        border: isLocked ? '3px solid #F0F0F0' : `3px solid ${accentColor}44`,
+        border: isCompleted ? '3px solid #4CAF5066' : isLocked ? '3px solid #F0F0F0' : `3px solid ${accentColor}44`,
         transition: 'box-shadow 0.3s ease, border-color 0.3s ease',
       }}
     >
@@ -140,7 +153,7 @@ export function LessonCard({
             width: '100%',
             height: '100%',
             overflow: 'hidden',
-            filter: isLocked ? 'grayscale(0.5) brightness(0.85)' : 'none',
+            filter: isLocked ? 'grayscale(0.5) brightness(0.85)' : isCompleted ? 'brightness(0.92) saturate(0.7)' : 'none',
             transition: 'filter 0.3s ease',
           }}>
             <ThumbnailSlide
@@ -159,14 +172,14 @@ export function LessonCard({
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              filter: isLocked ? 'grayscale(0.5) brightness(0.85)' : 'none',
+              filter: isLocked ? 'grayscale(0.5) brightness(0.85)' : isCompleted ? 'brightness(0.92) saturate(0.7)' : 'none',
               transition: 'filter 0.3s ease',
             }}
           />
         ) : showEmoji ? (
           <span style={{
             fontSize: 40,
-            filter: isLocked ? 'grayscale(0.6)' : 'none',
+            filter: isLocked ? 'grayscale(0.6)' : isCompleted ? 'saturate(0.6)' : 'none',
             transition: 'filter 0.3s ease',
           }}>
             {emoji}
@@ -181,21 +194,21 @@ export function LessonCard({
           width: 26,
           height: 26,
           borderRadius: '50%',
-          background: isLocked ? '#B8B8B8' : accentColor,
+          background: isCompleted ? '#4CAF50' : isLocked ? '#B8B8B8' : accentColor,
           color: '#FFFFFF',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 12,
+          fontSize: isCompleted ? 14 : 12,
           fontWeight: 800,
           fontFamily: "'Baloo 2', 'Nunito', sans-serif",
           boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
         }}>
-          {index + 1}
+          {isCompleted ? '✓' : index + 1}
         </div>
 
         {/* 可学习闪烁指示 */}
-        {!isLocked && (
+        {!isLocked && !isCompleted && (
           <motion.div
             animate={{ opacity: [0.4, 1, 0.4] }}
             transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
@@ -209,6 +222,25 @@ export function LessonCard({
             ✨
           </motion.div>
         )}
+
+        {/* 已完成正确率徽标 */}
+        {isCompleted && accuracy !== undefined && (
+          <div style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            padding: '2px 8px',
+            borderRadius: 12,
+            background: accuracy >= 80 ? '#4CAF50' : accuracy >= 60 ? '#FF9800' : '#F44336',
+            color: '#FFFFFF',
+            fontSize: 11,
+            fontWeight: 800,
+            fontFamily: "'Baloo 2', 'Nunito', sans-serif",
+            boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+          }}>
+            {accuracy}%
+          </div>
+        )}
       </div>
 
       {/* 标题区域 */}
@@ -218,23 +250,34 @@ export function LessonCard({
         alignItems: 'center',
         gap: 10,
       }}>
-        <p style={{
-          fontSize: 16,
-          fontWeight: 700,
-          fontFamily: "'Nunito', 'PingFang SC', sans-serif",
-          color: isLocked ? '#B8B8B8' : '#2D3142',
-          margin: 0,
-          lineHeight: 1.35,
-          overflow: 'hidden',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          minHeight: '2.7em',
-          flex: 1,
-        }}>
-          {title}
-        </p>
-        {!isLocked && (
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{
+            fontSize: 16,
+            fontWeight: 700,
+            fontFamily: "'Nunito', 'PingFang SC', sans-serif",
+            color: isCompleted ? '#6B7280' : isLocked ? '#B8B8B8' : '#2D3142',
+            margin: 0,
+            lineHeight: 1.35,
+            overflow: 'hidden',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            minHeight: '2.7em',
+          }}>
+            {title}
+          </p>
+          {isCompleted && completedAt && (
+            <p style={{
+              fontSize: 11,
+              color: '#9CA3AF',
+              margin: '2px 0 0',
+              fontWeight: 600,
+            }}>
+              {new Date(completedAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })} 已学完
+            </p>
+          )}
+        </div>
+        {!isLocked && !isCompleted && (
           <motion.span
             animate={{ x: [0, 4, 0] }}
             transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
@@ -246,7 +289,7 @@ export function LessonCard({
       </div>
 
       {/* 锁定遮罩 */}
-      {isLocked && !selectable && (
+      {isLocked && !selectable && !isCompleted && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

@@ -13,7 +13,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { apiClient } from '@/services/api'
 import { useChildStore } from '@/stores/childStore'
 import { useSettingsStore } from '@/lib/openmaic/store/settings'
-import { ClassroomCache } from '@/services/openmaic/cache'
+import { ClassroomCache, inferSubjectFromNodeId } from '@/services/openmaic/cache'
 import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
 import {
   LessonPlanner,
@@ -373,28 +373,42 @@ export function usePreGeneration(
         return
       }
 
-      // 2. 按学科检查缓存水位线，至少保证每个已评测学科都有自己的课堂缓存
+      // 2. 按学科检查缓存水位线（只计算未学习的课程）
       const cache = new ClassroomCache(new PostgresCacheStore(numChildId))
-      const cacheCounts = Object.fromEntries(
-        await Promise.all(
-          SUBJECTS.map(async (subject) => [subject, await cache.getCacheSize(subject)] as const),
-        ),
-      ) as Record<Subject, number>
+
+      // 2a. 获取已完成课程的 knowledgeNodeId 集合
+      const historyRecords = await apiClient.get<{ knowledgeNodeId: string; subject: string }>('/classroom_history', {
+        filters: [{ column: 'childId', operator: 'eq', value: numChildId }],
+        select: 'knowledge_node_id,subject',
+      })
+      const completedNodeIds = new Set(historyRecords.map((r) => r.knowledgeNodeId))
+
+      // 2b. 获取缓存元数据（轻量级，不拉 classroomData）
+      const metaEntries = await cache.getMetadataEntries()
+
+      // 2c. 按科目统计未学习的缓存数
+      const unlearnedCounts: Record<Subject, number> = { math: 0, chinese: 0, english: 0 }
+      let totalUnlearnedCount = 0
+      for (const meta of metaEntries) {
+        if (completedNodeIds.has(meta.knowledgeNodeId)) continue
+        const subj = inferSubjectFromNodeId(meta.knowledgeNodeId)
+        if (subj && subj in unlearnedCounts) {
+          unlearnedCounts[subj as Subject]++
+          totalUnlearnedCount++
+        }
+      }
+
       const subjectsNeedingCache = getSubjectsMissingCache(
         completedSubjects,
-        cacheCounts,
-      )
-      const completedCacheCount = completedSubjects.reduce(
-        (sum, subject) => sum + (cacheCounts[subject] ?? 0),
-        0,
+        unlearnedCounts,
       )
 
-      log.info('按学科缓存统计:', cacheCounts, '待补学科:', subjectsNeedingCache)
+      log.info('按学科缓存统计 (未学习):', unlearnedCounts, '已完成节点:', completedNodeIds.size, '待补学科:', subjectsNeedingCache)
 
       if (subjectsNeedingCache.length === 0) {
-        log.info('各已评测学科缓存已达最低水位线，无需生成')
+        log.info('各已评测学科未学习缓存已达最低水位线，无需生成')
         setStatus('completed')
-        setCompletedCount(completedCacheCount)
+        setCompletedCount(totalUnlearnedCount)
         setStageText('各学科课程缓存已就绪')
         isRunningRef.current = false
         return
@@ -433,10 +447,16 @@ export function usePreGeneration(
         masteryMap.set(record.knowledgeNodeId, record.masteryLevel)
       }
 
-      // 5. 仅为缺课学科生成任务列表
+      // 5. 仅为缺课学科生成任务列表（排除已有未学习缓存的节点）
       const backendTasks: BackendTask[] = []
       const today = new Date()
       const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+
+      const unlearnedCachedNodeIds = new Set(
+        metaEntries
+          .filter((m) => !completedNodeIds.has(m.knowledgeNodeId))
+          .map((m) => m.knowledgeNodeId),
+      )
 
       for (const subject of subjectsNeedingCache) {
 
@@ -457,6 +477,7 @@ export function usePreGeneration(
 
           for (const dayPlan of plans) {
             for (const item of dayPlan.items) {
+              if (unlearnedCachedNodeIds.has(item.nodeId)) continue
               const node = nodes.find((n) => n.id === item.nodeId)
               if (!node) continue
 

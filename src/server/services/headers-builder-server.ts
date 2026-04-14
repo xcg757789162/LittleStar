@@ -64,18 +64,19 @@ export function buildHeadersFromSettingsServer(
   if (settings.ttsVoice) headers['x-tts-voice'] = settings.ttsVoice as string
   headers['x-tts-speed'] = String(settings.ttsSpeed ?? 1)
 
-  // 图片生成 — auto-enable when provider + API key are present
-  const hasImageConfig = !!(settings.imageProviderId && settings.imageApiKey)
-  const imageEnabled = hasImageConfig || (settings.enableImageGeneration === true)
+  // 图片生成 — auto-enable when provider is configured (with or without client-side API key,
+  // since server-configured providers don't require a client key)
+  const hasImageProvider = !!settings.imageProviderId
+  const imageEnabled = hasImageProvider || (settings.enableImageGeneration === true)
   headers['x-image-generation-enabled'] = String(imageEnabled)
   if (settings.imageProviderId) headers['x-image-provider'] = settings.imageProviderId as string
   if (settings.imageApiKey) headers['x-image-api-key'] = settings.imageApiKey as string
   if (settings.imageBaseUrl) headers['x-image-base-url'] = settings.imageBaseUrl as string
   if (settings.imageModelId) headers['x-image-model'] = settings.imageModelId as string
 
-  // 视频生成 — auto-enable when provider + API key are present
-  const hasVideoConfig = !!(settings.videoProviderId && settings.videoApiKey)
-  const videoEnabled = hasVideoConfig || (settings.enableVideoGeneration === true)
+  // 视频生成 — auto-enable when provider is configured
+  const hasVideoProvider = !!settings.videoProviderId
+  const videoEnabled = hasVideoProvider || (settings.enableVideoGeneration === true)
   headers['x-video-generation-enabled'] = String(videoEnabled)
   if (settings.videoProviderId) headers['x-video-provider'] = settings.videoProviderId as string
   if (settings.videoApiKey) headers['x-video-api-key'] = settings.videoApiKey as string

@@ -36,6 +36,8 @@ export interface PipelineCheckpoint {
   sceneActions?: Record<number, SceneAction[]>
   /** 已完成 TTS 的标记 Map<"sceneIdx-actionIdx", true> */
   completedTTS?: Record<string, boolean>
+  /** 已完成的媒体预生成标记 Map<elementId, true> */
+  completedMedia?: Record<string, boolean>
   /** 最后完成的步骤 */
   lastCompletedStep?: PipelineStepName
   /** 最后完成的场景索引 */
@@ -116,6 +118,20 @@ interface TTSApiResponse {
   audioId?: string
   base64?: string
   format?: string
+}
+
+interface ImageApiResponse {
+  success?: boolean
+  result?: { url?: string; base64?: string }
+  error?: string
+  errorCode?: string
+}
+
+interface VideoApiResponse {
+  success?: boolean
+  result?: { url?: string; poster?: string }
+  error?: string
+  errorCode?: string
 }
 
 interface SceneActionsResult {
@@ -365,6 +381,40 @@ export class PipelineExecutor {
         }
       }
 
+      // 2d: Media pre-generation (images/videos)
+      if (!cp.completedMedia) cp.completedMedia = {}
+      const mediaGens = outline.mediaGenerations ?? []
+      const elements = content.canvas?.elements ?? content.elements ?? []
+      for (const mg of mediaGens) {
+        if (cp.completedMedia[mg.elementId]) continue
+        const el = elements.find(
+          (e: Record<string, unknown>) => e.src === mg.elementId,
+        )
+        if (!el) continue
+
+        const mediaPercent = 90 + (i / totalScenes) * 5
+        onProgress?.(
+          'media-generation',
+          mediaPercent,
+          `正在预生成场景 ${i + 1} 的${mg.type === 'image' ? '图片' : '视频'}...`,
+        )
+
+        try {
+          const url = await this.generateMediaAsset(mg, headers)
+          if (url) {
+            el.src = url
+            cp.sceneContents![i] = content
+            cp.completedMedia[mg.elementId] = true
+            await onCheckpoint?.(cp, 'media-generation', Math.round(mediaPercent))
+          }
+        } catch (error) {
+          console.error(
+            `[PipelineExecutor] 媒体预生成失败 ${mg.elementId}:`,
+            error,
+          )
+        }
+      }
+
       // 组装 Scene
       const scene = generatedScene
         ? this.normalizeScene(generatedScene, outline, content, actions)
@@ -560,6 +610,99 @@ export class PipelineExecutor {
       audio: data.audio ?? data.base64 ?? '',
       durationMs: data.durationMs ?? 0,
       format: data.format,
+    }
+  }
+
+  /**
+   * Pre-generate a single image or video via the OpenMAIC API and return the
+   * resulting URL. Returns undefined if generation is disabled or headers are
+   * missing the required provider config.
+   */
+  private async generateMediaAsset(
+    req: { type: 'image' | 'video'; prompt: string; elementId: string; aspectRatio?: string; style?: string },
+    headers: Record<string, string>,
+  ): Promise<string | undefined> {
+    const MEDIA_TIMEOUT = 120_000
+
+    if (req.type === 'image') {
+      if (headers['x-image-generation-enabled'] === 'false') return undefined
+      if (!headers['x-image-provider']) return undefined
+
+      const reqHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-image-provider': headers['x-image-provider'],
+      }
+      if (headers['x-image-model']) reqHeaders['x-image-model'] = headers['x-image-model']
+      if (headers['x-image-api-key']) reqHeaders['x-api-key'] = headers['x-image-api-key']
+      if (headers['x-image-base-url']) reqHeaders['x-base-url'] = headers['x-image-base-url']
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), MEDIA_TIMEOUT)
+      try {
+        const res = await fetch(`${OPENMAIC_BASE_URL}/api/generate/image`, {
+          method: 'POST',
+          headers: reqHeaders,
+          body: JSON.stringify({
+            prompt: req.prompt,
+            aspectRatio: req.aspectRatio,
+            style: req.style,
+          }),
+          signal: controller.signal,
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({})) as Record<string, string>
+          throw new Error(err.error || `Image API returned ${res.status}`)
+        }
+        const data = (await res.json()) as ImageApiResponse
+        if (!data.success) throw new Error(data.error || 'Image generation failed')
+        const url =
+          data.result?.url ||
+          (data.result?.base64 ? `data:image/png;base64,${data.result.base64}` : undefined)
+        if (url) {
+          console.log(`[PipelineExecutor] 图片预生成完成: ${req.elementId}`)
+        }
+        return url
+      } finally {
+        clearTimeout(timeoutId)
+      }
+    }
+
+    // Video generation
+    if (headers['x-video-generation-enabled'] === 'false') return undefined
+    if (!headers['x-video-provider']) return undefined
+
+    const reqHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-video-provider': headers['x-video-provider'],
+    }
+    if (headers['x-video-model']) reqHeaders['x-video-model'] = headers['x-video-model']
+    if (headers['x-video-api-key']) reqHeaders['x-api-key'] = headers['x-video-api-key']
+    if (headers['x-video-base-url']) reqHeaders['x-base-url'] = headers['x-video-base-url']
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), MEDIA_TIMEOUT)
+    try {
+      const res = await fetch(`${OPENMAIC_BASE_URL}/api/generate/video`, {
+        method: 'POST',
+        headers: reqHeaders,
+        body: JSON.stringify({
+          prompt: req.prompt,
+          aspectRatio: req.aspectRatio,
+        }),
+        signal: controller.signal,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as Record<string, string>
+        throw new Error(err.error || `Video API returned ${res.status}`)
+      }
+      const data = (await res.json()) as VideoApiResponse
+      if (!data.success) throw new Error(data.error || 'Video generation failed')
+      if (data.result?.url) {
+        console.log(`[PipelineExecutor] 视频预生成完成: ${req.elementId}`)
+      }
+      return data.result?.url
+    } finally {
+      clearTimeout(timeoutId)
     }
   }
 

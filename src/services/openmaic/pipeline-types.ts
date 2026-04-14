@@ -21,6 +21,7 @@ export const PIPELINE_STEP_NAMES = [
   'scene-content',
   'scene-actions',
   'tts',
+  'media-generation',
   'assembly',
 ] as const
 
