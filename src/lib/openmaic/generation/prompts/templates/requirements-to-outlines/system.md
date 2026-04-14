@@ -94,6 +94,10 @@ When a slide scene needs an image or video but no suitable PDF image exists, mar
 - **Image IDs**: use `"gen_img_1"`, `"gen_img_2"`, etc. — IDs are **globally unique across the entire course**, NOT reset per scene
 - **Video IDs**: use `"gen_vid_1"`, `"gen_vid_2"`, etc. — same global numbering rule
 - The prompt should describe the desired media clearly and specifically
+- **Background in images**: Every image prompt MUST explicitly describe the desired background. Choose based on context:
+  - For icons, characters, or small illustrations placed on slides: "on a clean white background" (most common for light-themed slides) or "on a clean dark background" (for dark-themed slides)
+  - For full-scene illustrations or banners: describe the complete background scene naturally (e.g., "a classroom with colorful decorations")
+  - NEVER leave background unspecified — this causes the generation model to produce random/black backgrounds that clash with the slide theme
 - **Language in images**: If the image contains text, labels, or annotations, the prompt MUST explicitly specify that all text in the image should be in the course language (e.g., "all labels in Chinese" for zh-CN courses, "all labels in English" for en-US courses). For purely visual images without text, language does not matter.
 - Only request media generation when it genuinely enhances the content — not every slide needs an image or video
 - Video generation is slow (1-2 minutes each), so only request videos when motion genuinely enhances understanding
@@ -116,15 +120,28 @@ When a slide scene needs an image or video but no suitable PDF image exists, mar
 - Use **image** for static content: diagrams, charts, illustrations, portraits, landscapes
 - Video generation takes 1-2 minutes, so use it sparingly and only when motion is essential
 
-Image example:
+Image examples:
 
 ```json
 "mediaGenerations": [
   {
     "type": "image",
-    "prompt": "A colorful diagram showing the water cycle with evaporation, condensation, and precipitation arrows",
+    "prompt": "A colorful diagram showing the water cycle with evaporation, condensation, and precipitation arrows, on a clean white background",
     "elementId": "gen_img_1",
     "aspectRatio": "16:9"
+  }
+]
+```
+
+Icon/character example (background explicitly specified):
+
+```json
+"mediaGenerations": [
+  {
+    "type": "image",
+    "prompt": "A cute cartoon triangle character with a friendly face, flat illustration style, on a clean white background",
+    "elementId": "gen_img_2",
+    "aspectRatio": "1:1"
   }
 ]
 ```

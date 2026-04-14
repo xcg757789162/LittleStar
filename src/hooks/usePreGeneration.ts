@@ -413,21 +413,24 @@ export function usePreGeneration(
       // 2. 按学科检查缓存水位线（只计算未学习的课程）
       const cache = new ClassroomCache(new PostgresCacheStore(numChildId))
 
-      // 2a. 获取已完成课程的 knowledgeNodeId 集合
-      const historyRecords = await apiClient.get<{ knowledgeNodeId: string; subject: string }>('/classroom_history', {
+      // 2a. 获取已完成课程的 knowledgeNodeId+lessonIndex 集合
+      const historyRecords = await apiClient.get<{ knowledgeNodeId: string; lessonIndex: number; subject: string }>('/classroom_history', {
         filters: [{ column: 'childId', operator: 'eq', value: numChildId }],
-        select: 'knowledge_node_id,subject',
+        select: 'knowledge_node_id,lesson_index,subject',
       })
-      const completedNodeIds = new Set(historyRecords.map((r) => r.knowledgeNodeId))
+      const completedLessonKeys = new Set(
+        historyRecords.map((r) => `${r.knowledgeNodeId}|${r.lessonIndex ?? 1}`),
+      )
 
       // 2b. 获取缓存元数据（轻量级，不拉 classroomData）
       const metaEntries = await cache.getMetadataEntries()
 
-      // 2c. 按科目统计未学习的缓存数
+      // 2c. 按科目统计未学习的缓存数（需用 knowledgeNodeId|lessonIndex 精确匹配）
       const unlearnedCounts: Record<Subject, number> = { math: 0, chinese: 0, english: 0 }
       let totalUnlearnedCount = 0
       for (const meta of metaEntries) {
-        if (completedNodeIds.has(meta.knowledgeNodeId)) continue
+        const lessonKey = `${meta.knowledgeNodeId}|${meta.lessonIndex ?? 1}`
+        if (completedLessonKeys.has(lessonKey)) continue
         const subj = inferSubjectFromNodeId(meta.knowledgeNodeId)
         if (subj && subj in unlearnedCounts) {
           unlearnedCounts[subj as Subject]++
@@ -440,7 +443,7 @@ export function usePreGeneration(
         unlearnedCounts,
       )
 
-      log.info('按学科缓存统计 (未学习):', unlearnedCounts, '已完成节点:', completedNodeIds.size, '待补学科:', subjectsNeedingCache)
+      log.info('按学科缓存统计 (未学习):', unlearnedCounts, '已完成课时:', completedLessonKeys.size, '待补学科:', subjectsNeedingCache)
 
       if (subjectsNeedingCache.length === 0) {
         log.info('各已评测学科未学习缓存已达最低水位线，无需生成')
@@ -514,10 +517,10 @@ export function usePreGeneration(
       const today = new Date()
       const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
-      const unlearnedCachedNodeIds = new Set(
+      const unlearnedCachedLessonKeys = new Set(
         metaEntries
-          .filter((m) => !completedNodeIds.has(m.knowledgeNodeId))
-          .map((m) => m.knowledgeNodeId),
+          .filter((m) => !completedLessonKeys.has(`${m.knowledgeNodeId}|${m.lessonIndex ?? 1}`))
+          .map((m) => `${m.knowledgeNodeId}|${m.lessonIndex ?? 1}`),
       )
 
       for (const subject of subjectsNeedingCache) {
@@ -560,7 +563,7 @@ export function usePreGeneration(
             if (addedForSubject >= neededCount) break
             for (const item of dayPlan.items) {
               if (addedForSubject >= neededCount) break
-              if (unlearnedCachedNodeIds.has(item.nodeId)) continue
+              if (unlearnedCachedLessonKeys.has(`${item.nodeId}|${item.lessonIndex}`)) continue
               const node = nodes.find((n) => n.id === item.nodeId)
               if (!node) continue
 

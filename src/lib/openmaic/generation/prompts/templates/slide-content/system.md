@@ -928,7 +928,24 @@ Example:
 
 ---
 
-### Rule 8: Font Size Guidelines
+### Rule 8: Image-Text Non-Overlap
+
+When placing images alongside text, **always verify non-overlap** by checking the bounding boxes:
+
+**Layout strategy** — choose one and stick with it:
+
+1. **Image above text**: `image.top + image.height + 25 ≤ text.top`
+2. **Image below text**: `text.top + text.height + 25 ≤ image.top`
+3. **Image beside text** (left): `image.left + image.width + 30 ≤ text.left`
+4. **Image beside text** (right): `text.left + text.width + 30 ≤ image.left`
+
+**Common mistake**: Placing a large image (e.g., 500×280) at the center of the slide while text elements also start near the top. The image covers the text. Fix: shrink the image or move it to a dedicated region (e.g., right half) and keep text in the other half.
+
+**Quick sanity check**: After laying out all elements, mentally scan top-to-bottom. For each image, confirm no text element's bounding box intersects with it.
+
+---
+
+### Rule 9: Font Size Guidelines
 
 | Content Type | Recommended Size |
 | ------------ | ---------------- |
@@ -965,15 +982,24 @@ Before outputting JSON, verify:
 11. ✓ LineElement `width` is stroke thickness (2-6), NOT line length. Check: no LineElement has `width` > 6. If width equals the distance between start and end, it is WRONG — you confused stroke thickness with line span.
 12. ✓ **Slide text is concise and impersonal**: Every text element uses keywords, short phrases, or bullet points — no conversational sentences, no lecture-script-style paragraphs. No teacher name or identity appears on any slide (no "Teacher X's tips/wishes/comments"). If a text reads like spoken language or a personal message, rewrite it as a neutral bullet point.
 
-**🟡 P1 — Serious (strongly recommended)**: 13. ✓ **Text-Background pairs**: For each text with a background shape:
+13. ✓ **No image-text overlaps**: For every image element and every text element, verify they do NOT overlap. Two elements overlap when ALL four conditions are true:
+    - `imageLeft < textLeft + textWidth`
+    - `imageLeft + imageWidth > textLeft`
+    - `imageTop < textTop + textHeight`
+    - `imageTop + imageHeight > textTop`
+    If any image overlaps a text element, fix it by adjusting positions. Typically: place the image above or beside the text with ≥ 25px gap. This is the most common layout error — **always check**.
+
+**🟡 P1 — Serious (strongly recommended)**:
+
+14. ✓ **Text-Background pairs**: For each text with a background shape:
 
 - text.width < shape.width (with padding)
 - text.height < shape.height (with padding)
 - text is centered: `text.left = shape.left + (shape.width - text.width) / 2`
 - text is centered: `text.top = shape.top + (shape.height - text.height) / 2`
 
-14. ✓ No unintended element overlaps (especially check LaTeX elements — their rendered height may be much larger than specified)
-15. ✓ Image placed near related text (25-35px gap)
+15. ✓ No other unintended element overlaps (especially check LaTeX elements — their rendered height may be much larger than specified)
+16. ✓ Image placed near related text (25-35px gap)
 
 ---
 

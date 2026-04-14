@@ -455,14 +455,15 @@ export class ClassroomCache {
 
   /**
    * 获取未学习的缓存条目数量（排除已完成的课程）
-   * @param completedNodeIds 已完成课程的 knowledgeNodeId 集合
+   * @param completedLessonKeys 已完成课程的 `knowledgeNodeId|lessonIndex` 复合键集合
    * @param subject 可选，按科目过滤
    */
-  async getUnlearnedCacheSize(completedNodeIds: Set<string>, subject?: string): Promise<number> {
+  async getUnlearnedCacheSize(completedLessonKeys: Set<string>, subject?: string): Promise<number> {
     const metaEntries = await this.getMetadataEntries()
     let count = 0
     for (const meta of metaEntries) {
-      if (completedNodeIds.has(meta.knowledgeNodeId)) continue
+      const lessonKey = `${meta.knowledgeNodeId}|${meta.lessonIndex ?? 1}`
+      if (completedLessonKeys.has(lessonKey)) continue
       if (subject) {
         const inferredSubject = inferSubjectFromNodeId(meta.knowledgeNodeId)
         if (inferredSubject !== subject) continue

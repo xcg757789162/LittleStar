@@ -60,6 +60,11 @@ export interface CheckpointCallback {
   (checkpoint: PipelineCheckpoint, step: PipelineStepName, progress: number): Promise<void>
 }
 
+/** Non-fatal warning callback (media failures, etc.) */
+export interface PipelineWarnCallback {
+  (message: string): void
+}
+
 /** Pipeline 执行输入 */
 export interface PipelineExecutorInput {
   requirements: UserRequirements
@@ -67,6 +72,7 @@ export interface PipelineExecutorInput {
   checkpoint?: PipelineCheckpoint | null
   onProgress?: PipelineProgressCallback
   onCheckpoint?: CheckpointCallback
+  onWarn?: PipelineWarnCallback
 }
 
 /** 简化的 Scene 结构（与前端 Scene 兼容） */
@@ -241,7 +247,7 @@ export class PipelineExecutor {
    * 执行完整 Pipeline（支持断点恢复）
    */
   async runFullPipeline(input: PipelineExecutorInput): Promise<GeneratedClassroom> {
-    const { requirements, headers, checkpoint, onProgress, onCheckpoint } = input
+    const { requirements, headers, checkpoint, onProgress, onCheckpoint, onWarn } = input
 
     const cp: PipelineCheckpoint = checkpoint ? { ...checkpoint } : {}
     cp.previousSpeeches = cp.previousSpeeches ? [...cp.previousSpeeches] : []
@@ -417,10 +423,9 @@ export class PipelineExecutor {
             await onCheckpoint?.(cp, 'media-generation', Math.round(mediaPercent))
           }
         } catch (error) {
-          console.error(
-            `[PipelineExecutor] 媒体预生成失败 ${mg.elementId}:`,
-            error,
-          )
+          const msg = `媒体预生成失败 ${mg.elementId}: ${error instanceof Error ? error.message : String(error)}`
+          console.error(`[PipelineExecutor] ${msg}`)
+          onWarn?.(msg)
         }
       }
 

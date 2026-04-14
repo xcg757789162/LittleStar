@@ -3,7 +3,7 @@
  * 用户操作日志 / 程序运行日志 / 模型调用日志
  */
 
-import { useState, useCallback, useSyncExternalStore, useMemo } from 'react'
+import { useState, useCallback, useEffect, useSyncExternalStore, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import {
@@ -12,6 +12,7 @@ import {
   clearLogBuffer,
   type LogEntry,
 } from '@/lib/openmaic/logger'
+import { useChildStore } from '@/stores/childStore'
 
 const T = {
   fontDisplay: "'Baloo 2', 'Nunito', sans-serif",
@@ -103,7 +104,41 @@ function useLogEntries(): readonly LogEntry[] {
 
 export function ParentLogs() {
   const navigate = useNavigate()
-  const entries = useLogEntries()
+  const memEntries = useLogEntries()
+  const childId = useChildStore((s) => s.currentChild?.id)
+  const [dbEntries, setDbEntries] = useState<LogEntry[]>([])
+
+  useEffect(() => {
+    if (!childId) return
+    fetch(`/api/pre-generate/logs?childId=${childId}&limit=200`)
+      .then((r) => r.ok ? r.json() as Promise<{ logs: Array<{ level: string; tag: string; message: string; created_at: string }> }> : null)
+      .then((data) => {
+        if (!data?.logs) return
+        setDbEntries(data.logs.map((row) => ({
+          timestamp: new Date(row.created_at).getTime(),
+          level: row.level as LogEntry['level'],
+          tag: row.tag,
+          message: row.message,
+        })))
+      })
+      .catch(() => {})
+  }, [childId])
+
+  const entries = useMemo(() => {
+    if (dbEntries.length === 0) return memEntries
+    const seen = new Set<string>()
+    const merged: LogEntry[] = []
+    for (const e of [...memEntries, ...dbEntries]) {
+      const key = `${e.timestamp}|${e.tag}|${e.message}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        merged.push(e)
+      }
+    }
+    merged.sort((a, b) => a.timestamp - b.timestamp)
+    return merged
+  }, [memEntries, dbEntries])
+
   const [activeCategory, setActiveCategory] = useState<LogCategory>('all')
   const [expandedEntry, setExpandedEntry] = useState<number | null>(null)
 
@@ -354,7 +389,7 @@ export function ParentLogs() {
           padding: '24px 16px', textAlign: 'center',
           color: T.textLight, fontSize: '12px',
         }}>
-          日志缓冲区最多保留 200 条记录
+          内存日志最多 200 条 · 后台生成日志保留 7 天
         </div>
       </div>
     </div>

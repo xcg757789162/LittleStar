@@ -424,15 +424,15 @@ export function Home() {
     ? (placementTests ? placementTests.length > 0 : null)
     : false
 
-  // 获取已完成课程 nodeId（用于计算未学习缓存数）
-  const [completedNodeIds, setCompletedNodeIds] = useState<Set<string>>(new Set())
+  // 获取已完成课程 knowledgeNodeId|lessonIndex 复合键（用于计算未学习缓存数）
+  const [completedLessonKeys, setCompletedLessonKeys] = useState<Set<string>>(new Set())
   useEffect(() => {
     if (!childId) return
-    apiClient.get<{ knowledgeNodeId: string }>('/classroom_history', {
+    apiClient.get<{ knowledgeNodeId: string; lessonIndex: number }>('/classroom_history', {
       filters: [{ column: 'childId', operator: 'eq', value: Number(childId) }],
-      select: 'knowledge_node_id',
+      select: 'knowledge_node_id,lesson_index',
     }).then((records) => {
-      setCompletedNodeIds(new Set(records.map((r) => r.knowledgeNodeId)))
+      setCompletedLessonKeys(new Set(records.map((r) => `${r.knowledgeNodeId}|${r.lessonIndex ?? 1}`)))
     }).catch(() => {})
   }, [childId])
 
@@ -440,14 +440,14 @@ export function Home() {
   useEffect(() => {
     const loadCacheStatus = async () => {
       try {
-        const size = await cacheInstance.getUnlearnedCacheSize(completedNodeIds)
+        const size = await cacheInstance.getUnlearnedCacheSize(completedLessonKeys)
         setCachedCount(size)
       } catch {
         setCachedCount(0)
       }
     }
     loadCacheStatus()
-  }, [cacheInstance, completedNodeIds])
+  }, [cacheInstance, completedLessonKeys])
 
   // 预生成
   const {
@@ -462,14 +462,14 @@ export function Home() {
   const refreshCache = useCallback(async () => {
     try {
       // 也刷新已完成列表，以获得最新的过滤
-      const records = await apiClient.get<{ knowledgeNodeId: string }>('/classroom_history', {
+      const records = await apiClient.get<{ knowledgeNodeId: string; lessonIndex: number }>('/classroom_history', {
         filters: [{ column: 'childId', operator: 'eq', value: Number(childId) }],
-        select: 'knowledge_node_id',
-      }).catch(() => [] as { knowledgeNodeId: string }[])
-      const latestCompletedIds = new Set(records.map((r) => r.knowledgeNodeId))
-      setCompletedNodeIds(latestCompletedIds)
+        select: 'knowledge_node_id,lesson_index',
+      }).catch(() => [] as { knowledgeNodeId: string; lessonIndex: number }[])
+      const latestCompletedKeys = new Set(records.map((r) => `${r.knowledgeNodeId}|${r.lessonIndex ?? 1}`))
+      setCompletedLessonKeys(latestCompletedKeys)
 
-      const size = await cacheInstance.getUnlearnedCacheSize(latestCompletedIds)
+      const size = await cacheInstance.getUnlearnedCacheSize(latestCompletedKeys)
       setCachedCount(size)
     } catch { /* silent */ }
   }, [cacheInstance, childId])

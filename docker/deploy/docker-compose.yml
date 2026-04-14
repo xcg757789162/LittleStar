@@ -29,6 +29,7 @@ services:
       - ../postgresql/init/07-add-parent-pin.sql:/docker-entrypoint-initdb.d/07-add-parent-pin.sql:ro
       - ../postgresql/init/08-avatar-to-text.sql:/docker-entrypoint-initdb.d/08-avatar-to-text.sql:ro
       - ../postgresql/init/09-generation-tasks.sql:/docker-entrypoint-initdb.d/09-generation-tasks.sql:ro
+      - ../postgresql/init/10-system-logs.sql:/docker-entrypoint-initdb.d/10-system-logs.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-littlestar}"]
       interval: 10s

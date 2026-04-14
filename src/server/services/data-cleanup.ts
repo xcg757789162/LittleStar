@@ -19,6 +19,7 @@ const AUDIO_DIR = path.join(MEDIA_DATA_DIR, 'audio')
 const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000
 const LEARNING_RECORDS_RETENTION_DAYS = 180
 const FAILED_TASKS_RETENTION_DAYS = 30
+const SYSTEM_LOGS_RETENTION_DAYS = 7
 
 let cleanupTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -50,6 +51,7 @@ async function runCleanup(): Promise<void> {
   console.log('[DataCleanup] Starting cleanup cycle...')
 
   await cleanExpiredTasks()
+  await cleanExpiredSystemLogs()
   await cleanOldLearningRecords()
   await cleanOrphanAudioFiles()
 
@@ -74,6 +76,26 @@ async function cleanExpiredTasks(): Promise<void> {
     }
   } catch (error) {
     console.error('[DataCleanup] cleanExpiredTasks failed:', error)
+  }
+}
+
+/**
+ * Remove system_logs older than retention period (TTL).
+ */
+async function cleanExpiredSystemLogs(): Promise<void> {
+  try {
+    const result = await pool.query(
+      `DELETE FROM api.system_logs
+       WHERE created_at < NOW() - $1::interval
+       RETURNING id`,
+      [`${SYSTEM_LOGS_RETENTION_DAYS} days`],
+    )
+    const count = result.rowCount ?? 0
+    if (count > 0) {
+      console.log(`[DataCleanup] Cleaned ${count} expired system_logs (>${SYSTEM_LOGS_RETENTION_DAYS}d)`)
+    }
+  } catch (error) {
+    console.error('[DataCleanup] cleanExpiredSystemLogs failed:', error)
   }
 }
 

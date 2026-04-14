@@ -418,6 +418,83 @@ function fixElementDefaults(
 }
 
 /**
+ * Detect and fix overlapping image-text pairs.
+ *
+ * Strategy: for each image that overlaps a text element, nudge the image
+ * so it no longer intersects. Prefers pushing the image down; if that
+ * would exceed the canvas, pushes the image to the right of the text instead.
+ */
+function fixImageTextOverlaps(
+  elements: GeneratedSlideData['elements'],
+  canvasWidth = 1000,
+  canvasHeight = 562.5,
+): GeneratedSlideData['elements'] {
+  const GAP = 25;
+  const MARGIN = 50;
+
+  const result = elements.map((el) => ({ ...el }));
+
+  const images = result.filter((el) => el.type === 'image' || el.type === 'video');
+  const texts = result.filter((el) => el.type === 'text' || el.type === 'latex');
+
+  for (const img of images) {
+    const iL = img.left ?? 0;
+    const iT = img.top ?? 0;
+    const iW = img.width ?? 0;
+    const iH = img.height ?? 0;
+
+    for (const txt of texts) {
+      const tL = txt.left ?? 0;
+      const tT = txt.top ?? 0;
+      const tW = txt.width ?? 0;
+      const tH = txt.height ?? 0;
+
+      const overlaps =
+        iL < tL + tW && iL + iW > tL && iT < tT + tH && iT + iH > tT;
+
+      if (!overlaps) continue;
+
+      log.warn(
+        `Overlap detected: image(${iL},${iT},${iW}x${iH}) ∩ text(${tL},${tT},${tW}x${tH}), fixing`,
+      );
+
+      // Try placing image below the text
+      const belowTop = tT + tH + GAP;
+      if (belowTop + iH <= canvasHeight - MARGIN) {
+        img.top = belowTop;
+        break;
+      }
+
+      // Try placing image above the text
+      const aboveTop = tT - iH - GAP;
+      if (aboveTop >= MARGIN) {
+        img.top = aboveTop;
+        break;
+      }
+
+      // Try placing image to the right of the text
+      const rightLeft = tL + tW + GAP;
+      if (rightLeft + iW <= canvasWidth - MARGIN) {
+        img.left = rightLeft;
+        break;
+      }
+
+      // Last resort: shrink image to fit below text
+      const availH = canvasHeight - MARGIN - belowTop;
+      if (availH > 50) {
+        const scale = availH / iH;
+        img.top = belowTop;
+        img.height = Math.round(availH);
+        img.width = Math.round(iW * scale);
+        break;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * Process LaTeX elements: render latex string to HTML using KaTeX.
  * Fills in html and fixedRatio fields.
  * Elements that fail conversion are removed.
@@ -587,8 +664,11 @@ async function generateSlideContent(
   const fixedElements = fixElementDefaults(generatedData.elements, assignedImages);
   log.debug(`After element fixing: ${fixedElements.length} elements`);
 
+  // Fix image-text overlaps
+  const overlapFixedElements = fixImageTextOverlaps(fixedElements);
+
   // Process LaTeX elements: render latex string → HTML via KaTeX
-  const latexProcessedElements = processLatexElements(fixedElements);
+  const latexProcessedElements = processLatexElements(overlapFixedElements);
   log.debug(`After LaTeX processing: ${latexProcessedElements.length} elements`);
 
   // Resolve image_id references to actual URLs

@@ -14,6 +14,7 @@ import { PipelineExecutor } from './pipeline-executor.js'
 import { buildHeadersFromSettingsServer } from './headers-builder-server.js'
 import { normalizeTaskProgress } from './task-progress.js'
 import { externalizeClassroomAudio } from './audio-file-store.js'
+import { writeSystemLog } from './system-log.js'
 import type { PipelineCheckpoint } from './pipeline-executor.js'
 import type { UserRequirements } from '../../services/openmaic/pipeline-types.js'
 
@@ -234,6 +235,9 @@ async function processNextTask(): Promise<void> {
     `[TaskProcessor] 开始处理任务 #${task.id}: ${task.knowledge_node_id}` +
     ` (retry=${task.retry_count}/${task.max_retries})`,
   )
+  writeSystemLog(task.child_id, 'info', 'PreGeneration',
+    `开始生成课堂: ${task.knowledge_node_id}${task.retry_count > 0 ? ` (第 ${task.retry_count} 次重试)` : ''}`,
+    task.id)
 
   try {
     const headers = buildHeadersFromSettingsServer(task.settings)
@@ -266,6 +270,9 @@ async function processNextTask(): Promise<void> {
         ).catch((err: unknown) => {
           console.error(`[TaskProcessor] 检查点保存失败 #${task.id}:`, err)
         })
+      },
+      onWarn: (msg) => {
+        writeSystemLog(task.child_id, 'warn', 'PreGeneration', msg, task.id)
       },
     })
 
@@ -328,6 +335,8 @@ async function processNextTask(): Promise<void> {
     )
 
     console.log(`[TaskProcessor] ✅ 任务 #${task.id} 完成, cacheKey: ${cacheKey}`)
+    writeSystemLog(task.child_id, 'info', 'PreGeneration',
+      `课堂生成完成: ${task.knowledge_node_id}`, task.id)
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     console.error(`[TaskProcessor] ❌ 任务 #${task.id} 失败:`, errorMsg)
@@ -343,6 +352,9 @@ async function processNextTask(): Promise<void> {
         console.error(`[TaskProcessor] 重试状态更新失败 #${task.id}:`, err)
       })
       console.log(`[TaskProcessor] 任务 #${task.id} 将重试 (${task.retry_count + 1}/${task.max_retries})`)
+      writeSystemLog(task.child_id, 'warn', 'PreGeneration',
+        `课堂生成将重试 (${task.retry_count + 1}/${task.max_retries}): ${errorMsg}`,
+        task.id)
     } else {
       await pool.query(
         `UPDATE api.generation_tasks
@@ -353,6 +365,8 @@ async function processNextTask(): Promise<void> {
         console.error(`[TaskProcessor] 失败状态更新失败 #${task.id}:`, err)
       })
       console.log(`[TaskProcessor] 任务 #${task.id} 重试耗尽，标记为 failed`)
+      writeSystemLog(task.child_id, 'error', 'PreGeneration',
+        `课堂生成失败 (重试耗尽): ${errorMsg}`, task.id)
     }
   } finally {
     isProcessing = false
