@@ -224,7 +224,9 @@ export function NativeClassroom() {
       // 从缓存加载课堂
       const classroom = await cacheRef.current!.getClassroom(knowledgeNodeId, lessonIndex, date);
       if (!classroom) {
-        setCachedLessons([]);
+        console.warn('[NativeClassroom] 缓存中未找到课堂:', knowledgeNodeId, lessonIndex, date);
+        // 刷新列表（该条目可能已失效），但不清空整个列表
+        await loadLessons(selectedSubject);
         setIsLoading(false);
         return;
       }
