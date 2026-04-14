@@ -130,7 +130,7 @@ export function GenerationPreview() {
     if (!currentChild?.id) return
     try {
       const cache = new ClassroomCache(new PostgresCacheStore(Number(currentChild.id)))
-      const classroom = await cache.getClassroom(item.knowledgeNodeId, item.date)
+      const classroom = await cache.getClassroom(item.knowledgeNodeId, item.lessonIndex, item.date)
       if (classroom) {
         navigate('/classroom', {
           state: {

@@ -542,6 +542,7 @@ export function usePlacementTest(
         }
 
         // 写入 mastery_records — 让 LessonPlanner 基于评测结果做精准课程规划
+        // 统一使用 knowledge_nodes ID（而非 curriculum_nodes ID）
         if (curriculum) {
           try {
             const masteryMap = engine.applyResult(
@@ -549,20 +550,46 @@ export function usePlacementTest(
               curriculum.modules,
               phase2Session ?? undefined,
             )
+
+            // Build curriculum_node name → knowledge_node id mapping
+            const curriculumNameToKnNodeId = new Map<string, string>()
+            try {
+              const knNodes = await apiClient.get<{ id: string; name: string }>('/knowledge_nodes', {
+                filters: [{ column: 'subject', operator: 'eq', value: subject }],
+                select: 'id,name',
+              })
+              for (const kn of knNodes) {
+                curriculumNameToKnNodeId.set(kn.name, kn.id)
+              }
+            } catch {
+              log.warn('加载 knowledge_nodes 映射失败')
+            }
+
+            // Build curriculum_node id → name mapping
+            const currNodeIdToName = new Map<string, string>()
+            for (const mod of curriculum.modules) {
+              for (const cn of mod.knowledgeNodes) {
+                currNodeIdToName.set(cn.id, cn.name)
+              }
+            }
+
             const today = new Date()
-            for (const [nodeId, level] of masteryMap) {
-              // 计算下次复习时间：掌握度高则间隔长
+            for (const [currNodeId, level] of masteryMap) {
+              // Resolve to knowledge_nodes ID via name match
+              const currNodeName = currNodeIdToName.get(currNodeId) ?? ''
+              const knNodeId = curriculumNameToKnNodeId.get(currNodeName) ?? currNodeId
+
               const daysUntilReview = level >= 80 ? 7 : level >= 60 ? 3 : 1
               const nextReview = new Date(today.getTime() + daysUntilReview * 24 * 60 * 60 * 1000)
               await apiClient.upsert('/mastery_records', {
                 childId,
-                knowledgeNodeId: nodeId,
+                knowledgeNodeId: knNodeId,
                 masteryLevel: level,
                 lastPracticed: today.toISOString(),
                 nextReviewDate: nextReview.toISOString(),
               })
             }
-            log.info('mastery_records 写入完成, 共', masteryMap.size, '个知识点')
+            log.info('mastery_records 写入完成, 共', masteryMap.size, '个知识点 (已映射为 knowledge_nodes ID)')
           } catch {
             log.warn('mastery_records 写入失败，将由课堂完成后补充')
           }

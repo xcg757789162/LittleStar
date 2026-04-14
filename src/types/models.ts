@@ -229,6 +229,26 @@ export interface KnowledgeNode {
   difficulty: number // 1-10
   contentType: ContentType
   orderIndex: number // 学习顺序
+  templatePrompts: TemplatePromptData[]
+  totalLessons: number | null // null = AI 尚未拆分
+}
+
+/** 知识点课时模板提示 */
+export interface TemplatePromptData {
+  type: string
+  prompt: string
+  constraints: Record<string, unknown>
+}
+
+/** 知识点课时计划（AI 拆分的单课时） */
+export interface KnowledgeNodeLesson {
+  id?: number
+  knowledgeNodeId: string
+  lessonIndex: number
+  title: string
+  description: string
+  focusPoints: string[]
+  createdAt?: Date
 }
 
 /** 学习记录 */
@@ -370,6 +390,8 @@ export interface ClassroomHistory {
   correctCount: number
   /** 正确率 0-100 */
   accuracy: number
+  /** 课时序号（1-based，该知识点的第几节课） */
+  lessonIndex: number
 }
 
 // ===== Phase 2: 年级解锁 + 入学测评 + 学习报告 =====

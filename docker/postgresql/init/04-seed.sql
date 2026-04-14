@@ -4,98 +4,98 @@
 -- ============================================================
 
 -- ============================================================
--- 数学知识点 (8 个)
+-- 数学知识点 (8 个) — 含 template_prompts（合并自 curriculum_nodes）
 -- ============================================================
-INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index) VALUES
-('math-numbers-1-5', 'math', 'middle-kindergarten', '数字认知 1-5', '认识数字1到5，理解数字的含义', '[]', '["math-numbers-6-10"]', 1, 'flashcard', 1),
-('math-numbers-6-10', 'math', 'middle-kindergarten', '数字认知 6-10', '认识数字6到10，理解数字的含义', '["math-numbers-1-5"]', '["math-numbers-11-20","math-counting"]', 2, 'flashcard', 2),
-('math-numbers-11-20', 'math', 'senior-kindergarten', '数字认知 11-20', '认识数字11到20', '["math-numbers-6-10"]', '[]', 3, 'flashcard', 3),
-('math-counting', 'math', 'middle-kindergarten', '数数练习', '按顺序数数，倒数，跳数', '["math-numbers-6-10"]', '["math-compare"]', 2, 'quiz', 4),
-('math-compare', 'math', 'middle-kindergarten', '比大小', '比较两个数字的大小', '["math-counting"]', '["math-add-within-5"]', 2, 'quiz', 5),
-('math-add-within-5', 'math', 'senior-kindergarten', '5以内加法', '学习5以内的加法运算', '["math-compare"]', '["math-add-within-10"]', 3, 'quiz', 6),
-('math-add-within-10', 'math', 'senior-kindergarten', '10以内加法', '学习10以内的加法运算', '["math-add-within-5"]', '[]', 4, 'quiz', 7),
-('math-shapes', 'math', 'middle-kindergarten', '图形认识', '认识圆形、三角形、正方形、长方形', '[]', '[]', 1, 'flashcard', 8);
+INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index, template_prompts) VALUES
+('math-numbers-1-5', 'math', 'middle-kindergarten', '数字认知 1-5', '认识数字1到5，理解数字的含义', '[]', '["math-numbers-6-10"]', 1, 'flashcard', 1, '[{"type":"flashcard","prompt":"展示{n}个可爱的小动物，让孩子点数并说出数字{n}。范围：1-5。用生动有趣的方式引导。","constraints":{"min":1,"max":5}}]'),
+('math-numbers-6-10', 'math', 'middle-kindergarten', '数字认知 6-10', '认识数字6到10，理解数字的含义', '["math-numbers-1-5"]', '["math-numbers-11-20","math-counting"]', 2, 'flashcard', 2, '[{"type":"flashcard","prompt":"展示{n}个物体，让孩子点数并识别数字{n}。范围：6-10。","constraints":{"min":6,"max":10}}]'),
+('math-numbers-11-20', 'math', 'senior-kindergarten', '数字认知 11-20', '认识数字11到20', '["math-numbers-6-10"]', '[]', 3, 'flashcard', 3, '[]'),
+('math-counting', 'math', 'middle-kindergarten', '数数练习', '按顺序数数，倒数，跳数', '["math-numbers-6-10"]', '["math-compare"]', 2, 'quiz', 4, '[{"type":"flashcard","prompt":"请帮孩子一边指一边数：这里有几个{object}？引导手口一致点数。","constraints":{"max":10}}]'),
+('math-compare', 'math', 'middle-kindergarten', '比大小', '比较两个数字的大小', '["math-counting"]', '["math-add-within-5"]', 2, 'quiz', 5, '[{"type":"multiple-choice","prompt":"哪一组的{object}更多？展示两组物体（数量{a}和{b}），让孩子选择更多的一组。","constraints":{"maxDiff":3,"optionCount":2}}]'),
+('math-add-within-5', 'math', 'senior-kindergarten', '5以内加法', '学习5以内的加法运算', '["math-compare"]', '["math-add-within-10"]', 3, 'quiz', 6, '[{"type":"multiple-choice","prompt":"小明有{a}个苹果，妈妈又给了{b}个，现在有几个？a+b≤5。用实物图辅助。","constraints":{"maxSum":5,"optionCount":3}}]'),
+('math-add-within-10', 'math', 'senior-kindergarten', '10以内加法', '学习10以内的加法运算', '["math-add-within-5"]', '[]', 4, 'quiz', 7, '[{"type":"multiple-choice","prompt":"计算 {a} + {b} = ?，a+b≤10。配合实物图。","constraints":{"maxSum":10,"optionCount":3}}]'),
+('math-shapes', 'math', 'middle-kindergarten', '图形认识', '认识圆形、三角形、正方形、长方形', '[]', '[]', 1, 'flashcard', 8, '[{"type":"flashcard","prompt":"这是什么形状？展示{shape}，让孩子命名。形状：圆形/三角形/正方形/长方形。","constraints":{"shapes":["圆形","三角形","正方形","长方形"]}}]');
 
 -- ============================================================
 -- 语文知识点 (6 个)
 -- ============================================================
-INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index) VALUES
-('chinese-initials', 'chinese', 'middle-kindergarten', '声母认读', '认识拼音声母 b p m f d t n l', '[]', '["chinese-finals"]', 1, 'voice', 1),
-('chinese-finals', 'chinese', 'middle-kindergarten', '韵母认读', '认识拼音韵母 a o e i u ü', '["chinese-initials"]', '["chinese-pinyin-read"]', 2, 'voice', 2),
-('chinese-pinyin-read', 'chinese', 'senior-kindergarten', '拼读练习', '声母+韵母拼读，如 ba ma', '["chinese-finals"]', '["chinese-common-chars-1"]', 3, 'voice', 3),
-('chinese-common-chars-1', 'chinese', 'senior-kindergarten', '常见汉字（一）', '认读常见汉字：大、小、上、下、人、口、手', '["chinese-pinyin-read"]', '["chinese-common-chars-2"]', 3, 'flashcard', 4),
-('chinese-common-chars-2', 'chinese', 'senior-kindergarten', '常见汉字（二）', '认读常见汉字：日、月、水、火、山、石、田', '["chinese-common-chars-1"]', '["chinese-nursery-rhymes"]', 4, 'flashcard', 5),
-('chinese-nursery-rhymes', 'chinese', 'senior-kindergarten', '儿歌欣赏', '听儿歌、念儿歌，培养语感', '["chinese-common-chars-2"]', '[]', 2, 'voice', 6);
+INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index, template_prompts) VALUES
+('chinese-initials', 'chinese', 'middle-kindergarten', '声母认读', '认识拼音声母 b p m f d t n l', '[]', '["chinese-finals"]', 1, 'voice', 1, '[]'),
+('chinese-finals', 'chinese', 'middle-kindergarten', '韵母认读', '认识拼音韵母 a o e i u ü', '["chinese-initials"]', '["chinese-pinyin-read"]', 2, 'voice', 2, '[]'),
+('chinese-pinyin-read', 'chinese', 'senior-kindergarten', '拼读练习', '声母+韵母拼读，如 ba ma', '["chinese-finals"]', '["chinese-common-chars-1"]', 3, 'voice', 3, '[]'),
+('chinese-common-chars-1', 'chinese', 'senior-kindergarten', '常见汉字（一）', '认读常见汉字：大、小、上、下、人、口、手', '["chinese-pinyin-read"]', '["chinese-common-chars-2"]', 3, 'flashcard', 4, '[]'),
+('chinese-common-chars-2', 'chinese', 'senior-kindergarten', '常见汉字（二）', '认读常见汉字：日、月、水、火、山、石、田', '["chinese-common-chars-1"]', '["chinese-nursery-rhymes"]', 4, 'flashcard', 5, '[]'),
+('chinese-nursery-rhymes', 'chinese', 'senior-kindergarten', '儿歌欣赏', '听儿歌、念儿歌，培养语感', '["chinese-common-chars-2"]', '[]', 2, 'voice', 6, '[{"type":"voice","prompt":"跟唱儿歌：{rhyme}。注意节奏和韵律。","constraints":{"category":"nursery-rhyme"}}]');
 
 -- ============================================================
 -- 英语基础知识点 (5 个)
 -- ============================================================
-INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index) VALUES
-('english-letters-az', 'english', 'middle-kindergarten', '26个字母认知', '认识26个英文字母大小写', '[]', '["english-animals","english-colors"]', 1, 'flashcard', 1),
-('english-animals', 'english', 'middle-kindergarten', '动物单词', '学习常见动物的英文名：cat, dog, fish, bird, rabbit', '["english-letters-az"]', '["english-fruits"]', 2, 'flashcard', 2),
-('english-colors', 'english', 'middle-kindergarten', '颜色单词', '学习颜色的英文名：red, blue, green, yellow, pink', '["english-letters-az"]', '["english-fruits"]', 2, 'flashcard', 3),
-('english-fruits', 'english', 'senior-kindergarten', '水果单词', '学习水果的英文名：apple, banana, orange, grape, watermelon', '["english-animals","english-colors"]', '["english-numbers"]', 3, 'flashcard', 4),
-('english-numbers', 'english', 'senior-kindergarten', '数字单词', '学习数字的英文名：one, two, three ... ten', '["english-fruits"]', '[]', 3, 'flashcard', 5);
+INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index, template_prompts) VALUES
+('english-letters-az', 'english', 'middle-kindergarten', '26个字母认知', '认识26个英文字母大小写', '[]', '["english-animals","english-colors"]', 1, 'flashcard', 1, '[]'),
+('english-animals', 'english', 'middle-kindergarten', '动物单词', '学习常见动物的英文名：cat, dog, fish, bird, rabbit', '["english-letters-az"]', '["english-fruits"]', 2, 'flashcard', 2, '[{"type":"flashcard","prompt":"展示{animal}的可爱图片和英文\"{word}\"。引导说：It''s a {word}!","constraints":{"animals":["cat","dog","fish","bird","rabbit"]}}]'),
+('english-colors', 'english', 'middle-kindergarten', '颜色单词', '学习颜色的英文名：red, blue, green, yellow, pink', '["english-letters-az"]', '["english-fruits"]', 2, 'flashcard', 3, '[{"type":"flashcard","prompt":"展示{color}色块，让孩子跟读英文：{word}。","constraints":{"colors":["red","blue","green","yellow","black","white"]}}]'),
+('english-fruits', 'english', 'senior-kindergarten', '水果单词', '学习水果的英文名：apple, banana, orange, grape, watermelon', '["english-animals","english-colors"]', '["english-numbers"]', 3, 'flashcard', 4, '[{"type":"flashcard","prompt":"展示{fruit}的图片和英文\"{word}\"。练习：I like {word}s!","constraints":{"fruits":["apple","banana","orange","grape","watermelon"]}}]'),
+('english-numbers', 'english', 'senior-kindergarten', '数字单词', '学习数字的英文名：one, two, three ... ten', '["english-fruits"]', '[]', 3, 'flashcard', 5, '[{"type":"flashcard","prompt":"展示{n}个物体和英文数字\"{word}\"，一起数：one, two, three...","constraints":{"min":1,"max":10}}]');
 
 -- ============================================================
 -- 英语字母知识点 (26 个: A-Z)
 -- ============================================================
-INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index) VALUES
-('english-letter-a', 'english', 'middle-kindergarten', '字母 Aa', '认识字母 Aa，代表单词：Apple 🍎', '[]', '["english-letter-b"]', 1, 'flashcard', 1),
-('english-letter-b', 'english', 'middle-kindergarten', '字母 Bb', '认识字母 Bb，代表单词：Bear 🐻', '["english-letter-a"]', '["english-letter-c"]', 1, 'flashcard', 2),
-('english-letter-c', 'english', 'middle-kindergarten', '字母 Cc', '认识字母 Cc，代表单词：Cat 🐱', '["english-letter-b"]', '["english-letter-d"]', 1, 'flashcard', 3),
-('english-letter-d', 'english', 'middle-kindergarten', '字母 Dd', '认识字母 Dd，代表单词：Dog 🐶', '["english-letter-c"]', '["english-letter-e"]', 1, 'flashcard', 4),
-('english-letter-e', 'english', 'middle-kindergarten', '字母 Ee', '认识字母 Ee，代表单词：Elephant 🐘', '["english-letter-d"]', '["english-letter-f"]', 1, 'flashcard', 5),
-('english-letter-f', 'english', 'middle-kindergarten', '字母 Ff', '认识字母 Ff，代表单词：Fish 🐟', '["english-letter-e"]', '["english-letter-g"]', 1, 'flashcard', 6),
-('english-letter-g', 'english', 'middle-kindergarten', '字母 Gg', '认识字母 Gg，代表单词：Grape 🍇', '["english-letter-f"]', '["english-letter-h"]', 2, 'quiz', 7),
-('english-letter-h', 'english', 'middle-kindergarten', '字母 Hh', '认识字母 Hh，代表单词：Hat 🎩', '["english-letter-g"]', '["english-letter-i"]', 2, 'flashcard', 8),
-('english-letter-i', 'english', 'middle-kindergarten', '字母 Ii', '认识字母 Ii，代表单词：Ice cream 🍦', '["english-letter-h"]', '["english-letter-j"]', 2, 'quiz', 9),
-('english-letter-j', 'english', 'middle-kindergarten', '字母 Jj', '认识字母 Jj，代表单词：Juice 🧃', '["english-letter-i"]', '["english-letter-k"]', 2, 'flashcard', 10),
-('english-letter-k', 'english', 'middle-kindergarten', '字母 Kk', '认识字母 Kk，代表单词：Kite 🪁', '["english-letter-j"]', '["english-letter-l"]', 2, 'quiz', 11),
-('english-letter-l', 'english', 'middle-kindergarten', '字母 Ll', '认识字母 Ll，代表单词：Lion 🦁', '["english-letter-k"]', '["english-letter-m"]', 2, 'flashcard', 12),
-('english-letter-m', 'english', 'middle-kindergarten', '字母 Mm', '认识字母 Mm，代表单词：Moon 🌙', '["english-letter-l"]', '["english-letter-n"]', 2, 'quiz', 13),
-('english-letter-n', 'english', 'middle-kindergarten', '字母 Nn', '认识字母 Nn，代表单词：Nose 👃', '["english-letter-m"]', '["english-letter-o"]', 2, 'flashcard', 14),
-('english-letter-o', 'english', 'middle-kindergarten', '字母 Oo', '认识字母 Oo，代表单词：Orange 🍊', '["english-letter-n"]', '["english-letter-p"]', 2, 'quiz', 15),
-('english-letter-p', 'english', 'middle-kindergarten', '字母 Pp', '认识字母 Pp，代表单词：Pig 🐷', '["english-letter-o"]', '["english-letter-q"]', 2, 'flashcard', 16),
-('english-letter-q', 'english', 'middle-kindergarten', '字母 Qq', '认识字母 Qq，代表单词：Queen 👑', '["english-letter-p"]', '["english-letter-r"]', 3, 'quiz', 17),
-('english-letter-r', 'english', 'middle-kindergarten', '字母 Rr', '认识字母 Rr，代表单词：Rabbit 🐰', '["english-letter-q"]', '["english-letter-s"]', 3, 'flashcard', 18),
-('english-letter-s', 'english', 'middle-kindergarten', '字母 Ss', '认识字母 Ss，代表单词：Sun ☀️', '["english-letter-r"]', '["english-letter-t"]', 3, 'quiz', 19),
-('english-letter-t', 'english', 'middle-kindergarten', '字母 Tt', '认识字母 Tt，代表单词：Tree 🌳', '["english-letter-s"]', '["english-letter-u"]', 3, 'flashcard', 20),
-('english-letter-u', 'english', 'middle-kindergarten', '字母 Uu', '认识字母 Uu，代表单词：Umbrella ☂️', '["english-letter-t"]', '["english-letter-v"]', 3, 'quiz', 21),
-('english-letter-v', 'english', 'middle-kindergarten', '字母 Vv', '认识字母 Vv，代表单词：Violin 🎻', '["english-letter-u"]', '["english-letter-w"]', 3, 'flashcard', 22),
-('english-letter-w', 'english', 'middle-kindergarten', '字母 Ww', '认识字母 Ww，代表单词：Water 💧', '["english-letter-v"]', '["english-letter-x"]', 3, 'quiz', 23),
-('english-letter-x', 'english', 'middle-kindergarten', '字母 Xx', '认识字母 Xx，代表单词：X-ray 🩻', '["english-letter-w"]', '["english-letter-y"]', 3, 'flashcard', 24),
-('english-letter-y', 'english', 'middle-kindergarten', '字母 Yy', '认识字母 Yy，代表单词：Yellow 💛', '["english-letter-x"]', '["english-letter-z"]', 3, 'quiz', 25),
-('english-letter-z', 'english', 'middle-kindergarten', '字母 Zz', '认识字母 Zz，代表单词：Zebra 🦓', '["english-letter-y"]', '[]', 3, 'flashcard', 26);
+INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index, template_prompts) VALUES
+('english-letter-a', 'english', 'middle-kindergarten', '字母 Aa', '认识字母 Aa，代表单词：Apple 🍎', '[]', '["english-letter-b"]', 1, 'flashcard', 1, '[]'),
+('english-letter-b', 'english', 'middle-kindergarten', '字母 Bb', '认识字母 Bb，代表单词：Bear 🐻', '["english-letter-a"]', '["english-letter-c"]', 1, 'flashcard', 2, '[]'),
+('english-letter-c', 'english', 'middle-kindergarten', '字母 Cc', '认识字母 Cc，代表单词：Cat 🐱', '["english-letter-b"]', '["english-letter-d"]', 1, 'flashcard', 3, '[]'),
+('english-letter-d', 'english', 'middle-kindergarten', '字母 Dd', '认识字母 Dd，代表单词：Dog 🐶', '["english-letter-c"]', '["english-letter-e"]', 1, 'flashcard', 4, '[]'),
+('english-letter-e', 'english', 'middle-kindergarten', '字母 Ee', '认识字母 Ee，代表单词：Elephant 🐘', '["english-letter-d"]', '["english-letter-f"]', 1, 'flashcard', 5, '[]'),
+('english-letter-f', 'english', 'middle-kindergarten', '字母 Ff', '认识字母 Ff，代表单词：Fish 🐟', '["english-letter-e"]', '["english-letter-g"]', 1, 'flashcard', 6, '[]'),
+('english-letter-g', 'english', 'middle-kindergarten', '字母 Gg', '认识字母 Gg，代表单词：Grape 🍇', '["english-letter-f"]', '["english-letter-h"]', 2, 'quiz', 7, '[]'),
+('english-letter-h', 'english', 'middle-kindergarten', '字母 Hh', '认识字母 Hh，代表单词：Hat 🎩', '["english-letter-g"]', '["english-letter-i"]', 2, 'flashcard', 8, '[]'),
+('english-letter-i', 'english', 'middle-kindergarten', '字母 Ii', '认识字母 Ii，代表单词：Ice cream 🍦', '["english-letter-h"]', '["english-letter-j"]', 2, 'quiz', 9, '[]'),
+('english-letter-j', 'english', 'middle-kindergarten', '字母 Jj', '认识字母 Jj，代表单词：Juice 🧃', '["english-letter-i"]', '["english-letter-k"]', 2, 'flashcard', 10, '[]'),
+('english-letter-k', 'english', 'middle-kindergarten', '字母 Kk', '认识字母 Kk，代表单词：Kite 🪁', '["english-letter-j"]', '["english-letter-l"]', 2, 'quiz', 11, '[]'),
+('english-letter-l', 'english', 'middle-kindergarten', '字母 Ll', '认识字母 Ll，代表单词：Lion 🦁', '["english-letter-k"]', '["english-letter-m"]', 2, 'flashcard', 12, '[]'),
+('english-letter-m', 'english', 'middle-kindergarten', '字母 Mm', '认识字母 Mm，代表单词：Moon 🌙', '["english-letter-l"]', '["english-letter-n"]', 2, 'quiz', 13, '[]'),
+('english-letter-n', 'english', 'middle-kindergarten', '字母 Nn', '认识字母 Nn，代表单词：Nose 👃', '["english-letter-m"]', '["english-letter-o"]', 2, 'flashcard', 14, '[]'),
+('english-letter-o', 'english', 'middle-kindergarten', '字母 Oo', '认识字母 Oo，代表单词：Orange 🍊', '["english-letter-n"]', '["english-letter-p"]', 2, 'quiz', 15, '[]'),
+('english-letter-p', 'english', 'middle-kindergarten', '字母 Pp', '认识字母 Pp，代表单词：Pig 🐷', '["english-letter-o"]', '["english-letter-q"]', 2, 'flashcard', 16, '[]'),
+('english-letter-q', 'english', 'middle-kindergarten', '字母 Qq', '认识字母 Qq，代表单词：Queen 👑', '["english-letter-p"]', '["english-letter-r"]', 3, 'quiz', 17, '[]'),
+('english-letter-r', 'english', 'middle-kindergarten', '字母 Rr', '认识字母 Rr，代表单词：Rabbit 🐰', '["english-letter-q"]', '["english-letter-s"]', 3, 'flashcard', 18, '[]'),
+('english-letter-s', 'english', 'middle-kindergarten', '字母 Ss', '认识字母 Ss，代表单词：Sun ☀️', '["english-letter-r"]', '["english-letter-t"]', 3, 'quiz', 19, '[]'),
+('english-letter-t', 'english', 'middle-kindergarten', '字母 Tt', '认识字母 Tt，代表单词：Tree 🌳', '["english-letter-s"]', '["english-letter-u"]', 3, 'flashcard', 20, '[]'),
+('english-letter-u', 'english', 'middle-kindergarten', '字母 Uu', '认识字母 Uu，代表单词：Umbrella ☂️', '["english-letter-t"]', '["english-letter-v"]', 3, 'quiz', 21, '[]'),
+('english-letter-v', 'english', 'middle-kindergarten', '字母 Vv', '认识字母 Vv，代表单词：Violin 🎻', '["english-letter-u"]', '["english-letter-w"]', 3, 'flashcard', 22, '[]'),
+('english-letter-w', 'english', 'middle-kindergarten', '字母 Ww', '认识字母 Ww，代表单词：Water 💧', '["english-letter-v"]', '["english-letter-x"]', 3, 'quiz', 23, '[]'),
+('english-letter-x', 'english', 'middle-kindergarten', '字母 Xx', '认识字母 Xx，代表单词：X-ray 🩻', '["english-letter-w"]', '["english-letter-y"]', 3, 'flashcard', 24, '[]'),
+('english-letter-y', 'english', 'middle-kindergarten', '字母 Yy', '认识字母 Yy，代表单词：Yellow 💛', '["english-letter-x"]', '["english-letter-z"]', 3, 'quiz', 25, '[]'),
+('english-letter-z', 'english', 'middle-kindergarten', '字母 Zz', '认识字母 Zz，代表单词：Zebra 🦓', '["english-letter-y"]', '[]', 3, 'flashcard', 26, '[]');
 
 -- ============================================================
 -- 英语儿歌知识点 (5 个)
 -- ============================================================
-INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index) VALUES
-('english-song-abc', 'english', 'middle-kindergarten', 'ABC Song 字母歌', '学唱经典字母歌 ABC Song，通过旋律记住 26 个字母的顺序', '[]', '["english-song-twinkle"]', 1, 'voice', 101),
-('english-song-twinkle', 'english', 'middle-kindergarten', 'Twinkle Twinkle Little Star 一闪一闪小星星', '学唱 Twinkle Twinkle Little Star，感受英语的韵律和节奏', '[]', '["english-song-old-macdonald"]', 1, 'voice', 102),
-('english-song-old-macdonald', 'english', 'middle-kindergarten', 'Old MacDonald Had a Farm 老麦克唐纳有个农场', '学唱 Old MacDonald Had a Farm，认识各种农场动物的英文叫声', '[]', '["english-song-head-shoulders"]', 1, 'voice', 103),
-('english-song-head-shoulders', 'english', 'middle-kindergarten', 'Head, Shoulders, Knees and Toes 头肩膝脚趾', '学唱 TPR 儿歌 Head, Shoulders, Knees and Toes，边唱边指身体部位', '[]', '["english-song-happy"]', 1, 'voice', 104),
-('english-song-happy', 'english', 'middle-kindergarten', 'If You''re Happy and You Know It 如果感到快乐你就拍拍手', '学唱互动儿歌 If You''re Happy and You Know It，通过动作表达情感', '[]', '[]', 1, 'voice', 105);
+INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index, template_prompts) VALUES
+('english-song-abc', 'english', 'middle-kindergarten', 'ABC Song 字母歌', '学唱经典字母歌 ABC Song，通过旋律记住 26 个字母的顺序', '[]', '["english-song-twinkle"]', 1, 'voice', 101, '[]'),
+('english-song-twinkle', 'english', 'middle-kindergarten', 'Twinkle Twinkle Little Star 一闪一闪小星星', '学唱 Twinkle Twinkle Little Star，感受英语的韵律和节奏', '[]', '["english-song-old-macdonald"]', 1, 'voice', 102, '[]'),
+('english-song-old-macdonald', 'english', 'middle-kindergarten', 'Old MacDonald Had a Farm 老麦克唐纳有个农场', '学唱 Old MacDonald Had a Farm，认识各种农场动物的英文叫声', '[]', '["english-song-head-shoulders"]', 1, 'voice', 103, '[]'),
+('english-song-head-shoulders', 'english', 'middle-kindergarten', 'Head, Shoulders, Knees and Toes 头肩膝脚趾', '学唱 TPR 儿歌 Head, Shoulders, Knees and Toes，边唱边指身体部位', '[]', '["english-song-happy"]', 1, 'voice', 104, '[]'),
+('english-song-happy', 'english', 'middle-kindergarten', 'If You''re Happy and You Know It 如果感到快乐你就拍拍手', '学唱互动儿歌 If You''re Happy and You Know It，通过动作表达情感', '[]', '[]', 1, 'voice', 105, '[]');
 
 -- ============================================================
 -- 英语日常对话知识点 (5 个)
 -- ============================================================
-INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index) VALUES
-('english-dialogue-greeting', 'english', 'middle-kindergarten', '打招呼 Hello & Goodbye', '学习用英语打招呼和告别：Hello! Hi! Good morning! Goodbye! See you!', '[]', '["english-dialogue-intro"]', 1, 'voice', 201),
-('english-dialogue-intro', 'english', 'middle-kindergarten', '自我介绍 My Name Is...', '学习用英语做简单的自我介绍：My name is... I am ... years old.', '["english-dialogue-greeting"]', '["english-dialogue-food"]', 1, 'voice', 202),
-('english-dialogue-food', 'english', 'middle-kindergarten', '点餐 I Want...', '学习用英语表达想要什么食物：I want... Can I have...? Thank you!', '["english-dialogue-intro"]', '["english-dialogue-shopping"]', 2, 'voice', 203),
-('english-dialogue-shopping', 'english', 'middle-kindergarten', '购物 How Much?', '学习用英语购物：How much? I want this one. Here you are!', '["english-dialogue-food"]', '["english-dialogue-direction"]', 2, 'voice', 204),
-('english-dialogue-direction', 'english', 'middle-kindergarten', '问路 Where Is...?', '学习用英语问路：Where is...? It''s over there! Turn left/right.', '["english-dialogue-shopping"]', '[]', 2, 'voice', 205);
+INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index, template_prompts) VALUES
+('english-dialogue-greeting', 'english', 'middle-kindergarten', '打招呼 Hello & Goodbye', '学习用英语打招呼和告别：Hello! Hi! Good morning! Goodbye! See you!', '[]', '["english-dialogue-intro"]', 1, 'voice', 201, '[]'),
+('english-dialogue-intro', 'english', 'middle-kindergarten', '自我介绍 My Name Is...', '学习用英语做简单的自我介绍：My name is... I am ... years old.', '["english-dialogue-greeting"]', '["english-dialogue-food"]', 1, 'voice', 202, '[]'),
+('english-dialogue-food', 'english', 'middle-kindergarten', '点餐 I Want...', '学习用英语表达想要什么食物：I want... Can I have...? Thank you!', '["english-dialogue-intro"]', '["english-dialogue-shopping"]', 2, 'voice', 203, '[]'),
+('english-dialogue-shopping', 'english', 'middle-kindergarten', '购物 How Much?', '学习用英语购物：How much? I want this one. Here you are!', '["english-dialogue-food"]', '["english-dialogue-direction"]', 2, 'voice', 204, '[]'),
+('english-dialogue-direction', 'english', 'middle-kindergarten', '问路 Where Is...?', '学习用英语问路：Where is...? It''s over there! Turn left/right.', '["english-dialogue-shopping"]', '[]', 2, 'voice', 205, '[]');
 
 -- ============================================================
 -- 英语 TPR 知识点 (4 个)
 -- ============================================================
-INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index) VALUES
-('english-tpr-body', 'english', 'middle-kindergarten', 'TPR 身体动作指令', '听懂并做出身体动作指令：Stand up, Sit down, Clap your hands, Stomp your feet', '[]', '["english-tpr-move"]', 1, 'voice', 301),
-('english-tpr-move', 'english', 'middle-kindergarten', 'TPR 运动指令', '听懂并做出运动指令：Jump, Turn around, Walk, Run', '["english-tpr-body"]', '["english-tpr-face"]', 1, 'voice', 302),
-('english-tpr-face', 'english', 'middle-kindergarten', 'TPR 表情指令', '听懂并做出表情指令：Smile, Open your mouth, Close your eyes, Blink', '["english-tpr-body"]', '["english-tpr-touch"]', 1, 'voice', 303),
-('english-tpr-touch', 'english', 'middle-kindergarten', 'TPR 触摸指令', '听懂并做出触摸指令：Touch your head, Touch your nose, Point up, Wave', '["english-tpr-face"]', '[]', 2, 'voice', 304);
+INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index, template_prompts) VALUES
+('english-tpr-body', 'english', 'middle-kindergarten', 'TPR 身体动作指令', '听懂并做出身体动作指令：Stand up, Sit down, Clap your hands, Stomp your feet', '[]', '["english-tpr-move"]', 1, 'voice', 301, '[]'),
+('english-tpr-move', 'english', 'middle-kindergarten', 'TPR 运动指令', '听懂并做出运动指令：Jump, Turn around, Walk, Run', '["english-tpr-body"]', '["english-tpr-face"]', 1, 'voice', 302, '[]'),
+('english-tpr-face', 'english', 'middle-kindergarten', 'TPR 表情指令', '听懂并做出表情指令：Smile, Open your mouth, Close your eyes, Blink', '["english-tpr-body"]', '["english-tpr-touch"]', 1, 'voice', 303, '[]'),
+('english-tpr-touch', 'english', 'middle-kindergarten', 'TPR 触摸指令', '听懂并做出触摸指令：Touch your head, Touch your nose, Point up, Wave', '["english-tpr-face"]', '[]', 2, 'voice', 304, '[]');
 
 -- ============================================================
 -- 数学题目 (17 道)

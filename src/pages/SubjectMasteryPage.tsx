@@ -16,6 +16,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
 import { useKnowledgeNodesBySubject } from '@/hooks/queries/useKnowledgeNodes'
 import { useMasteryRecords } from '@/hooks/queries/useMasteryRecords'
+import { apiClient } from '@/services/api'
+import { useQuery } from '@tanstack/react-query'
 import type { Subject, KnowledgeNode } from '@/types/models'
 
 /* ═══════════════════════════════════════════
@@ -101,9 +103,11 @@ interface NodeWithStatus {
   node: KnowledgeNode
   status: NodeStatus
   masteryLevel?: number
+  completedLessons?: number
+  totalLessons?: number
 }
 
-function getStatusConfig(status: NodeStatus, color: string) {
+function getStatusConfig(status: NodeStatus, _color: string) {
   switch (status) {
     case 'mastered':
       return {
@@ -197,6 +201,22 @@ export function SubjectMasteryPage() {
   const { data: knowledgeNodes, isLoading: isLoadingNodes } = useKnowledgeNodesBySubject(subject as Subject | undefined)
   const { data: masteryRecords } = useMasteryRecords(childId)
 
+  // 查询课时完成情况
+  const { data: classroomHistory } = useQuery({
+    queryKey: ['classroom-history-lessons', childId, subject],
+    queryFn: async () => {
+      if (!childId) return []
+      return apiClient.get<{ knowledgeNodeId: string; lessonIndex: number }>('/classroom_history', {
+        filters: [
+          { column: 'childId', operator: 'eq', value: Number(childId) },
+          ...(subject ? [{ column: 'subject', operator: 'eq' as const, value: subject }] : []),
+        ],
+        select: 'knowledge_node_id,lesson_index',
+      })
+    },
+    enabled: !!childId,
+  })
+
   // 学习记录映射：knowledgeNodeId → masteryLevel
   const masteryMap = useMemo(() => {
     if (!masteryRecords) return new Map<string, number>()
@@ -207,7 +227,18 @@ export function SubjectMasteryPage() {
     return m
   }, [masteryRecords])
 
-  // 纯基于学习记录判定状态：≥80 已掌握 | <80 学习中 | 无记录 未学习
+  // 课时完成映射：knowledgeNodeId → Set<completedLessonIndex>
+  const lessonCompletionMap = useMemo(() => {
+    const m = new Map<string, Set<number>>()
+    if (!classroomHistory) return m
+    for (const h of classroomHistory) {
+      if (!m.has(h.knowledgeNodeId)) m.set(h.knowledgeNodeId, new Set())
+      m.get(h.knowledgeNodeId)!.add(h.lessonIndex)
+    }
+    return m
+  }, [classroomHistory])
+
+  // 基于课时完成度判定状态：全部完成→已掌握 | 部分完成→学习中 | 0→未学习
   const { nodesWithStatus, masteredCount, learningCount, notStartedCount } = useMemo(() => {
     if (!knowledgeNodes) return { nodesWithStatus: [], masteredCount: 0, learningCount: 0, notStartedCount: 0 }
 
@@ -218,6 +249,22 @@ export function SubjectMasteryPage() {
     const nodes: NodeWithStatus[] = knowledgeNodes.map((node) => {
       const nodeId = node.id ?? ''
       const level = masteryMap.get(nodeId)
+      const totalLessons = node.totalLessons ?? 0
+      const completedSet = lessonCompletionMap.get(nodeId)
+      const completedLessons = completedSet?.size ?? 0
+
+      if (totalLessons > 0) {
+        if (completedLessons >= totalLessons) {
+          mastered++
+          return { node, status: 'mastered' as NodeStatus, masteryLevel: level ?? 100, completedLessons, totalLessons }
+        }
+        if (completedLessons > 0) {
+          learning++
+          return { node, status: 'learning' as NodeStatus, masteryLevel: level ?? Math.round((completedLessons / totalLessons) * 100), completedLessons, totalLessons }
+        }
+        notStarted++
+        return { node, status: 'not_started' as NodeStatus, completedLessons: 0, totalLessons }
+      }
 
       if (level != null && level >= 80) {
         mastered++
@@ -232,7 +279,7 @@ export function SubjectMasteryPage() {
     })
 
     return { nodesWithStatus: nodes, masteredCount: mastered, learningCount: learning, notStartedCount: notStarted }
-  }, [knowledgeNodes, masteryMap])
+  }, [knowledgeNodes, masteryMap, lessonCompletionMap])
 
   const totalCount = nodesWithStatus.length
   const progressPercent = totalCount > 0 ? Math.round((masteredCount / totalCount) * 100) : 0
@@ -665,10 +712,10 @@ function KnowledgeNodeCard({
   item: NodeWithStatus
   themeColor: string
 }) {
-  const { node, status, masteryLevel } = item
+  const { node, status, masteryLevel, completedLessons, totalLessons } = item
   const cfg = getStatusConfig(status, themeColor)
+  const hasLessonPlan = totalLessons != null && totalLessons > 0
 
-  // 难度星星（1-10 映射为 1-5 颗星）
   const difficultyStars = Math.max(1, Math.min(5, Math.ceil(node.difficulty / 2)))
 
   return (
@@ -730,6 +777,43 @@ function KnowledgeNodeCard({
           </div>
         )}
 
+        {/* 课时进度条（有课时计划时显示） */}
+        {hasLessonPlan && (
+          <div style={{ marginBottom: '4px' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              marginBottom: '3px',
+            }}>
+              <div style={{
+                flex: 1,
+                height: '6px',
+                borderRadius: '3px',
+                backgroundColor: '#F0F2F5',
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  width: `${totalLessons! > 0 ? ((completedLessons ?? 0) / totalLessons!) * 100 : 0}%`,
+                  height: '100%',
+                  borderRadius: '3px',
+                  background: `linear-gradient(90deg, ${cfg.borderColor}, ${cfg.borderColor}CC)`,
+                  transition: 'width 0.5s ease',
+                }} />
+              </div>
+              <span style={{
+                fontFamily: T.fontBody,
+                fontSize: '11px',
+                fontWeight: 600,
+                color: cfg.textColor,
+                flexShrink: 0,
+              }}>
+                {completedLessons ?? 0}/{totalLessons} 堂课
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* 底部信息行 */}
         <div style={{
           display: 'flex',
@@ -759,8 +843,8 @@ function KnowledgeNodeCard({
             ))}
           </span>
 
-          {/* 掌握率（已掌握和学习中都显示） */}
-          {(status === 'mastered' || status === 'learning') && masteryLevel != null && (
+          {/* 掌握率（无课时计划的旧模式才显示百分比） */}
+          {!hasLessonPlan && (status === 'mastered' || status === 'learning') && masteryLevel != null && (
             <span style={{
               fontFamily: T.fontBody,
               fontSize: '11px',

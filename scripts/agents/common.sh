@@ -138,6 +138,35 @@ bulletize() {
   done <<< "$content"
 }
 
+
+normalize_realpath() {
+  local path="${1:-}"
+  local candidate=""
+
+  if [[ -z "$path" ]]; then
+    return 0
+  fi
+
+  if [[ "$path" == /* ]]; then
+    candidate="$path"
+  elif [[ -e "$path" ]]; then
+    candidate="$path"
+  else
+    candidate="$PROJECT_ROOT/$path"
+  fi
+
+  if [[ -e "$candidate" ]]; then
+    python3 - "$candidate" <<'PY'
+import pathlib
+import sys
+print(pathlib.Path(sys.argv[1]).resolve())
+PY
+  else
+    echo "$candidate"
+  fi
+}
+
+
 render_template() {
   local template_path="$1"
   local output_path="$2"

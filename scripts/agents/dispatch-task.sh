@@ -28,6 +28,9 @@ show_help() {
   --context-file <file>          额外上下文文件路径，可重复传入
   --acceptance <text>            验收标准
   --model <name>                 模型名（传给 gemini/codex；claude 当前忽略）
+  --no-default-context           关闭默认上下文自动注入
+
+辅助参数:
 
 辅助参数:
   --run-id <id>                  自定义 run id（若已存在会直接报错，避免覆盖旧结果）
@@ -60,6 +63,7 @@ ACCEPTANCE=""
 MODEL=""
 RUN_ID_OVERRIDE=""
 DRY_RUN=false
+NO_DEFAULT_CONTEXT=false
 PATH_LIST=()
 CONTEXT_FILES=()
 
@@ -121,6 +125,10 @@ while [[ $# -gt 0 ]]; do
       DRY_RUN=true
       shift
       ;;
+    --no-default-context)
+      NO_DEFAULT_CONTEXT=true
+      shift
+      ;;
     -h|--help)
       show_help
       exit 0
@@ -159,9 +167,85 @@ if [[ ${#PATH_LIST[@]} -eq 0 ]]; then
 fi
 
 if [[ ${#CONTEXT_FILES[@]} -gt 0 ]]; then
+  NORMALIZED_CONTEXT_FILES=()
   for file in "${CONTEXT_FILES[@]}"; do
-    [[ -f "$file" ]] || die "context 文件不存在: $file"
+    resolved_file="$(normalize_realpath "$file")"
+    [[ -f "$resolved_file" ]] || die "context 文件不存在: $file"
+
+    found=false
+    if [[ ${#NORMALIZED_CONTEXT_FILES[@]} -gt 0 ]]; then
+      for existing in "${NORMALIZED_CONTEXT_FILES[@]}"; do
+        if [[ "$existing" == "$resolved_file" ]]; then
+          found=true
+          break
+        fi
+      done
+    fi
+
+    if [[ "$found" == false ]]; then
+      NORMALIZED_CONTEXT_FILES+=("$resolved_file")
+    fi
   done
+
+  if [[ ${#NORMALIZED_CONTEXT_FILES[@]} -gt 0 ]]; then
+    CONTEXT_FILES=("${NORMALIZED_CONTEXT_FILES[@]}")
+  else
+    CONTEXT_FILES=()
+  fi
+fi
+
+# 自动注入默认上下文文件
+if [[ "$NO_DEFAULT_CONTEXT" != true ]]; then
+  DEFAULT_PROJECT_INDEX="$(normalize_realpath "$PROJECT_ROOT/.codebuddy/project-index.md")"
+  if [[ -f "$DEFAULT_PROJECT_INDEX" ]]; then
+    found=false
+    if [[ ${#CONTEXT_FILES[@]} -gt 0 ]]; then
+      for file in "${CONTEXT_FILES[@]}"; do
+        if [[ "$file" == "$DEFAULT_PROJECT_INDEX" ]]; then
+          found=true
+          break
+        fi
+      done
+    fi
+    if [[ "$found" == false ]]; then
+      CONTEXT_FILES+=("$DEFAULT_PROJECT_INDEX")
+    fi
+  fi
+
+  TASK_KEYWORDS_PATTERN="(OpenMAIC|openmaic|架构|链路|源码|source|architecture|pipeline|upstream|stage|slide|scene)"
+  SHOULD_INCLUDE_SOURCE_ANALYSIS=false
+
+  if [[ "$TASK" =~ $TASK_KEYWORDS_PATTERN ]] || [[ "$TITLE" =~ $TASK_KEYWORDS_PATTERN ]]; then
+    SHOULD_INCLUDE_SOURCE_ANALYSIS=true
+  else
+    for path in "${PATH_LIST[@]}"; do
+      path_real="$(normalize_realpath "$path")"
+      case "$path_real" in
+        "$PROJECT_ROOT"/src/lib/openmaic|"$PROJECT_ROOT"/src/lib/openmaic/*|"$PROJECT_ROOT"/src/components/openmaic|"$PROJECT_ROOT"/src/components/openmaic/*|"$PROJECT_ROOT"/src/services/openmaic|"$PROJECT_ROOT"/src/services/openmaic/*|"$PROJECT_ROOT"/src/stores/openmaic|"$PROJECT_ROOT"/src/stores/openmaic/*|"$PROJECT_ROOT"/src/types/openmaic|"$PROJECT_ROOT"/src/types/openmaic/*|"$PROJECT_ROOT"/src/server|"$PROJECT_ROOT"/src/server/*|"$PROJECT_ROOT"/docs/openmaic-source-analysis.md)
+          SHOULD_INCLUDE_SOURCE_ANALYSIS=true
+          break
+          ;;
+      esac
+    done
+  fi
+
+  if [[ "$SHOULD_INCLUDE_SOURCE_ANALYSIS" == true ]]; then
+    DEFAULT_SOURCE_ANALYSIS="$(normalize_realpath "$PROJECT_ROOT/docs/openmaic-source-analysis.md")"
+    if [[ -f "$DEFAULT_SOURCE_ANALYSIS" ]]; then
+      found=false
+      if [[ ${#CONTEXT_FILES[@]} -gt 0 ]]; then
+        for file in "${CONTEXT_FILES[@]}"; do
+          if [[ "$file" == "$DEFAULT_SOURCE_ANALYSIS" ]]; then
+            found=true
+            break
+          fi
+        done
+      fi
+      if [[ "$found" == false ]]; then
+        CONTEXT_FILES+=("$DEFAULT_SOURCE_ANALYSIS")
+      fi
+    fi
+  fi
 fi
 
 ensure_runtime_dirs

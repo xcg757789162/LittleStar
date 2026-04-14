@@ -17,7 +17,7 @@
  * const classroom = await client.pollUntilComplete(classroomId)
  *
  * // 缓存课堂
- * await cache.saveClassroom('kn-counting-1-5', '2026-04-08', classroom)
+ * await cache.saveClassroom('kn-counting-1-5', 1, '2026-04-08', classroom)
  * ```
  */
 

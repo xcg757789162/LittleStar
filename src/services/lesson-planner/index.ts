@@ -69,3 +69,17 @@ export type {
   AdjustmentResult,
   AdjustmentAction,
 } from './adjuster'
+
+// Lesson Plan Generator
+export {
+  generateDefaultLessonPlan,
+  buildLessonPlanSystemPrompt,
+  buildLessonPlanUserPrompt,
+  parseLessonPlanResponse,
+  LESSON_PLAN_DEFAULT_CONFIG,
+} from './lesson-plan-generator'
+export type {
+  LessonPlanOutput,
+  LessonPlanItem as LessonPlanLessonItem,
+  LessonPlanGeneratorConfig,
+} from './lesson-plan-generator'

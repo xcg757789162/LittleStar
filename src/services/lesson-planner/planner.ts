@@ -1,8 +1,14 @@
 /**
  * 课程规划引擎
  *
- * 根据课程体系、掌握率和复习队列，规划未来 N 天的知识点学习序列。
- * 每天安排 3-5 个知识点，新知识约 60%，复习约 40%。
+ * 规划粒度为具体课时（lesson），而非知识点。
+ * 每个知识点由 AI 拆分为 N 堂课，LessonPlanner 基于课时完成度
+ * 安排下一堂待学课程。
+ *
+ * 状态判定：
+ *   - 未开始：该知识点 0 堂课已完成
+ *   - 学习中：已完成部分课时
+ *   - 已掌握：全部课时已完成（mastery >= 80）
  */
 
 import type { KnowledgeNode, Subject } from '@/types/models'
@@ -18,6 +24,12 @@ export interface ReviewQueueItem {
   dueDate: Date
 }
 
+/** 知识点课时进度信息 */
+export interface NodeLessonProgress {
+  totalLessons: number
+  completedLessonIndices: number[]
+}
+
 /** 课程规划输入 */
 export interface LessonPlanInput {
   /** 该科目的知识点列表 */
@@ -30,6 +42,8 @@ export interface LessonPlanInput {
   reviewQueue: ReviewQueueItem[]
   /** 规划天数，默认 3 */
   days?: number
+  /** 每个知识点的课时进度 Map<nodeId, progress> */
+  lessonProgressMap?: Map<string, NodeLessonProgress>
 }
 
 /** 每日课程计划项 */
@@ -42,6 +56,10 @@ export interface LessonPlanItem {
   mode: RequirementMode
   /** 当前掌握率 */
   masteryLevel: number
+  /** 课时序号（1-based） */
+  lessonIndex: number
+  /** 知识点总课时数 */
+  totalLessons: number
 }
 
 /** 每日课程计划 */
@@ -91,27 +109,24 @@ export class LessonPlanner {
 
   /**
    * 规划未来 N 天的课程
+   *
+   * 规划粒度为具体课时：对于有课时计划的知识点，安排下一堂未完成的课。
    */
   planLessons(input: LessonPlanInput): DailyLessonPlan[] {
-    const { nodes, masteryMap, subject, reviewQueue, days = 3 } = input
+    const { nodes, masteryMap, subject, reviewQueue, days = 3, lessonProgressMap } = input
 
-    // 过滤当前科目的知识点并按 order 排序
-    // C2 修复：过滤掉 id 为 undefined 的节点，避免后续非空断言崩溃
     const subjectNodes = nodes
       .filter((n) => n.subject === subject && n.id != null)
       .sort((a, b) => a.orderIndex - b.orderIndex)
 
-    // 分类知识点
     const { newNodes, reviewNodes, consolidationNodes } = this.categorizeNodes(
       subjectNodes,
       masteryMap,
       reviewQueue,
     )
 
-    // 生成日期
     const dates = this.generateDates(days)
 
-    // 分配到每天
     const plans: DailyLessonPlan[] = []
     const usedNodeIds = new Set<string>()
 
@@ -122,6 +137,7 @@ export class LessonPlanner {
         consolidationNodes,
         masteryMap,
         usedNodeIds,
+        lessonProgressMap,
       )
 
       plans.push({
@@ -178,7 +194,28 @@ export class LessonPlanner {
   }
 
   /**
-   * 分配单日课程内容
+   * 获取知识点的下一个待学课时序号
+   */
+  private getNextLessonIndex(
+    nodeId: string,
+    lessonProgressMap?: Map<string, NodeLessonProgress>,
+  ): { lessonIndex: number; totalLessons: number } {
+    const progress = lessonProgressMap?.get(nodeId)
+    if (!progress || progress.totalLessons <= 0) {
+      return { lessonIndex: 1, totalLessons: 1 }
+    }
+
+    const completed = new Set(progress.completedLessonIndices)
+    for (let i = 1; i <= progress.totalLessons; i++) {
+      if (!completed.has(i)) {
+        return { lessonIndex: i, totalLessons: progress.totalLessons }
+      }
+    }
+    return { lessonIndex: 1, totalLessons: progress.totalLessons }
+  }
+
+  /**
+   * 分配单日课程内容（课时粒度）
    */
   private allocateDay(
     newNodes: KnowledgeNode[],
@@ -186,48 +223,48 @@ export class LessonPlanner {
     consolidationNodes: KnowledgeNode[],
     masteryMap: Map<string, number>,
     usedNodeIds: Set<string>,
+    lessonProgressMap?: Map<string, NodeLessonProgress>,
   ): LessonPlanItem[] {
     const items: LessonPlanItem[] = []
     const targetCount = this.maxNodesPerDay
     const newCount = Math.ceil(targetCount * this.newKnowledgeRatio)
 
-    // 1. 分配新知识
+    const buildItem = (node: KnowledgeNode, mode: RequirementMode): LessonPlanItem => {
+      const { lessonIndex, totalLessons } = this.getNextLessonIndex(node.id!, lessonProgressMap)
+      return {
+        nodeId: node.id!,
+        nodeName: node.name,
+        mode,
+        masteryLevel: masteryMap.get(node.id!) ?? 0,
+        lessonIndex,
+        totalLessons,
+      }
+    }
+
     let addedNew = 0
     for (const node of newNodes) {
       if (addedNew >= newCount) break
       if (usedNodeIds.has(node.id!)) continue
 
-      items.push({
-        nodeId: node.id!,
-        nodeName: node.name,
-        mode: 'new-teaching',
-        masteryLevel: 0,
-      })
+      items.push(buildItem(node, 'new-teaching'))
       usedNodeIds.add(node.id!)
       addedNew++
     }
 
-    // 2. 分配复习内容
     const reviewSorted = [...reviewNodes].sort((a, b) => {
       const mA = masteryMap.get(a.id!) ?? 0
       const mB = masteryMap.get(b.id!) ?? 0
-      return mA - mB // 掌握率低的优先
+      return mA - mB
     })
 
     for (const node of reviewSorted) {
       if (items.length >= targetCount) break
       if (usedNodeIds.has(node.id!)) continue
 
-      items.push({
-        nodeId: node.id!,
-        nodeName: node.name,
-        mode: 'reinforcement',
-        masteryLevel: masteryMap.get(node.id!) ?? 0,
-      })
+      items.push(buildItem(node, 'reinforcement'))
       usedNodeIds.add(node.id!)
     }
 
-    // 3. 如果还不够，从巩固列表补充
     if (items.length < this.minNodesPerDay) {
       const consolidationSorted = [...consolidationNodes].sort((a, b) => {
         const mA = masteryMap.get(a.id!) ?? 0
@@ -239,29 +276,18 @@ export class LessonPlanner {
         if (items.length >= this.minNodesPerDay) break
         if (usedNodeIds.has(node.id!)) continue
 
-        items.push({
-          nodeId: node.id!,
-          nodeName: node.name,
-          mode: 'reinforcement',
-          masteryLevel: masteryMap.get(node.id!) ?? 0,
-        })
+        items.push(buildItem(node, 'reinforcement'))
         usedNodeIds.add(node.id!)
       }
     }
 
-    // 4. 如果所有节点都已使用但仍不够，允许复用（巩固复习）
     if (items.length < this.minNodesPerDay) {
       const allAvailable = [...consolidationNodes, ...reviewNodes, ...newNodes]
       for (const node of allAvailable) {
         if (items.length >= this.minNodesPerDay) break
         if (items.some((i) => i.nodeId === node.id!)) continue
 
-        items.push({
-          nodeId: node.id!,
-          nodeName: node.name,
-          mode: 'reinforcement',
-          masteryLevel: masteryMap.get(node.id!) ?? 0,
-        })
+        items.push(buildItem(node, 'reinforcement'))
         usedNodeIds.add(node.id!)
       }
     }

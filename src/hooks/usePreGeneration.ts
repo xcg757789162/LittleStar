@@ -19,8 +19,9 @@ import {
   LessonPlanner,
   RequirementGenerator,
 } from '@/services/lesson-planner'
+import type { NodeLessonProgress } from '@/services/lesson-planner/planner'
 import type { TemplatePrompt } from '@/services/lesson-planner/requirement-generator'
-import type { Child, ChildSettings, Subject, KnowledgeNode, MasteryRecord, PlacementTest } from '@/types/models'
+import type { Child, ChildSettings, Subject, KnowledgeNode, KnowledgeNodeLesson, MasteryRecord, PlacementTest } from '@/types/models'
 import type { PipelineStepName } from '@/services/openmaic/pipeline-types'
 import { createLogger } from '@/lib/openmaic/logger'
 import {
@@ -68,7 +69,7 @@ const SUBJECT_LABELS: Record<Subject, string> = {
   chinese: '语文',
   english: '英语',
 }
-const MIN_CACHE_SIZE_PER_SUBJECT = 1
+const MIN_CACHE_SIZE_PER_SUBJECT = 3
 
 export function getMinCacheSizeForCompletedSubjects(completedSubjectCount: number): number {
   return Math.max(0, Math.min(completedSubjectCount, SUBJECTS.length))
@@ -103,6 +104,7 @@ interface BackendTask {
   date: string
   requirement: string
   language?: string
+  lessonIndex?: number
 }
 
 interface BackendSubmitResponse {
@@ -447,6 +449,31 @@ export function usePreGeneration(
         masteryMap.set(record.knowledgeNodeId, record.masteryLevel)
       }
 
+      // 4b. 获取课时进度：已完成的 lesson_index 列表
+      const historyWithLessons = await apiClient.get<{ knowledgeNodeId: string; lessonIndex: number }>('/classroom_history', {
+        filters: [{ column: 'childId', operator: 'eq', value: numChildId }],
+        select: 'knowledge_node_id,lesson_index',
+      })
+      const lessonCompletionMap = new Map<string, Set<number>>()
+      for (const h of historyWithLessons) {
+        if (!lessonCompletionMap.has(h.knowledgeNodeId)) {
+          lessonCompletionMap.set(h.knowledgeNodeId, new Set())
+        }
+        lessonCompletionMap.get(h.knowledgeNodeId)!.add(h.lessonIndex)
+      }
+
+      // 4c. 获取课时计划
+      const allLessonPlans = await apiClient.get<KnowledgeNodeLesson>('/knowledge_node_lessons', {
+        order: [{ column: 'lessonIndex', ascending: true }],
+      })
+      const lessonPlansByNode = new Map<string, KnowledgeNodeLesson[]>()
+      for (const lp of allLessonPlans) {
+        if (!lessonPlansByNode.has(lp.knowledgeNodeId)) {
+          lessonPlansByNode.set(lp.knowledgeNodeId, [])
+        }
+        lessonPlansByNode.get(lp.knowledgeNodeId)!.push(lp)
+      }
+
       // 5. 仅为缺课学科生成任务列表（排除已有未学习缓存的节点）
       const backendTasks: BackendTask[] = []
       const today = new Date()
@@ -467,12 +494,28 @@ export function usePreGeneration(
           })
           if (nodes.length === 0) continue
 
+          // Build lesson progress map for this subject
+          const lessonProgressMap = new Map<string, NodeLessonProgress>()
+          for (const node of nodes) {
+            const nodeId = node.id!
+            const totalLessons = node.totalLessons ?? 0
+            if (totalLessons > 0) {
+              const completed = lessonCompletionMap.get(nodeId)
+              lessonProgressMap.set(nodeId, {
+                totalLessons,
+                completedLessonIndices: completed ? [...completed] : [],
+              })
+            }
+          }
+
+          const neededCount = MIN_CACHE_SIZE_PER_SUBJECT - (unlearnedCounts[subject] ?? 0)
           const plans = planner.planLessons({
             nodes,
             masteryMap,
             subject,
             reviewQueue: [],
-            days: 2,
+            days: Math.max(neededCount, 2),
+            lessonProgressMap,
           })
 
           for (const dayPlan of plans) {
@@ -481,13 +524,17 @@ export function usePreGeneration(
               const node = nodes.find((n) => n.id === item.nodeId)
               if (!node) continue
 
+              // Resolve lesson-specific details
+              const lessonPlans = lessonPlansByNode.get(item.nodeId)
+              const currentLesson = lessonPlans?.find((l) => l.lessonIndex === item.lessonIndex)
+
               const requirement = reqGenerator.generate({
                 knowledgeNode: {
                   id: node.id!,
                   name: node.name,
                   description: node.description ?? '',
                   difficulty: node.difficulty,
-                  templatePrompts: ((node as unknown as Record<string, unknown>).templatePrompts ?? []) as TemplatePrompt[],
+                  templatePrompts: (node.templatePrompts ?? []) as TemplatePrompt[],
                   prerequisites: node.prerequisites ?? [],
                 },
                 child: {
@@ -496,6 +543,10 @@ export function usePreGeneration(
                 },
                 masteryLevel: item.masteryLevel,
                 mode: item.mode,
+                lessonIndex: item.lessonIndex,
+                totalLessons: item.totalLessons,
+                lessonTitle: currentLesson?.title,
+                lessonFocusPoints: currentLesson?.focusPoints,
               })
 
               backendTasks.push({
@@ -503,6 +554,7 @@ export function usePreGeneration(
                 date: dayPlan.date,
                 requirement,
                 language: 'zh-CN',
+                lessonIndex: item.lessonIndex,
               })
             }
           }
@@ -536,24 +588,7 @@ export function usePreGeneration(
         return
       }
 
-      // 6. 先检查后端是否已有活跃任务（pending/running）
-      //    如果有，直接进入轮询模式，不重复提交
-      try {
-        const existingStatus = await pollStatus(numChildId)
-        if (existingStatus.activeCount > 0) {
-          log.info(`⏳ 后端已有 ${existingStatus.activeCount} 个活跃任务，直接轮询`)
-          setTotalCount(existingStatus.totalCount)
-          setCompletedCount(existingStatus.completedCount)
-          setPendingCount(existingStatus.activeCount)
-          setStageText('AI 老师正在创作课堂内容...')
-          startPolling(numChildId)
-          return
-        }
-      } catch (checkErr) {
-        log.warn('检查后端任务状态失败，继续提交:', checkErr)
-      }
-
-      // 7. 提交到后端
+      // 6. 提交到后端（后端有去重机制，重复的 knowledgeNodeId+date 会被跳过）
       log.info(`📤 向后端提交 ${backendTasks.length} 个生成任务`)
       setStageText(`正在提交 ${backendTasks.length} 个备课任务...`)
       setPendingCount(backendTasks.length)

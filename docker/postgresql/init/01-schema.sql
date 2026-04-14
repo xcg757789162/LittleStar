@@ -49,12 +49,30 @@ CREATE TABLE api.knowledge_nodes (
   next_nodes JSONB NOT NULL DEFAULT '[]',
   difficulty INTEGER NOT NULL DEFAULT 1,
   content_type VARCHAR(20) NOT NULL DEFAULT 'flashcard',
-  order_index INTEGER NOT NULL DEFAULT 0
+  order_index INTEGER NOT NULL DEFAULT 0,
+  template_prompts JSONB NOT NULL DEFAULT '[]',
+  total_lessons INTEGER
 );
 
 CREATE INDEX idx_knowledge_nodes_subject_grade ON api.knowledge_nodes(subject, grade_level);
 CREATE INDEX idx_knowledge_nodes_difficulty ON api.knowledge_nodes(difficulty);
 CREATE INDEX idx_knowledge_nodes_order ON api.knowledge_nodes(order_index);
+
+-- ============================================================
+-- 3b. knowledge_node_lessons — 知识点课时表（AI 拆分的多课时计划）
+-- ============================================================
+CREATE TABLE api.knowledge_node_lessons (
+  id SERIAL PRIMARY KEY,
+  knowledge_node_id VARCHAR(100) NOT NULL REFERENCES api.knowledge_nodes(id),
+  lesson_index INTEGER NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  focus_points JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT knl_node_index_unique UNIQUE (knowledge_node_id, lesson_index)
+);
+
+CREATE INDEX idx_knl_node ON api.knowledge_node_lessons(knowledge_node_id);
 
 -- ============================================================
 -- 4. questions — 题目表（公共只读）
@@ -271,7 +289,8 @@ CREATE TABLE api.classroom_history (
   is_review BOOLEAN NOT NULL DEFAULT FALSE,
   questions_completed INTEGER NOT NULL DEFAULT 0,
   correct_count INTEGER NOT NULL DEFAULT 0,
-  accuracy NUMERIC(5,2) NOT NULL DEFAULT 0
+  accuracy NUMERIC(5,2) NOT NULL DEFAULT 0,
+  lesson_index INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX idx_classroom_history_child ON api.classroom_history(child_id);
@@ -298,6 +317,7 @@ CREATE TABLE api.classroom_cache (
   classroom_data JSONB NOT NULL,
   cached_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at TIMESTAMPTZ,
+  lesson_index INTEGER NOT NULL DEFAULT 1,
   CONSTRAINT classroom_cache_child_key_unique UNIQUE (child_id, cache_key)
 );
 
@@ -328,7 +348,8 @@ CREATE TABLE api.generation_tasks (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   started_at TIMESTAMPTZ,
-  completed_at TIMESTAMPTZ
+  completed_at TIMESTAMPTZ,
+  lesson_index INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX idx_generation_tasks_child ON api.generation_tasks(child_id);

@@ -799,7 +799,7 @@ export class PipelineExecutor {
 
     let sceneContent: unknown
     if (content.type === 'slide' && content.canvas) {
-      sceneContent = { type: 'slide' as const, canvas: content.canvas }
+      sceneContent = { type: 'slide' as const, canvas: this.ensureFullSlideCanvas(content.canvas) }
     } else if (content.type === 'quiz' && content.questions) {
       sceneContent = {
         type: 'quiz' as const,
@@ -815,12 +815,12 @@ export class PipelineExecutor {
     } else {
       sceneContent = {
         type: 'slide' as const,
-        canvas: {
+        canvas: this.ensureFullSlideCanvas({
           elements: [
             { type: 'text', content: `<p>${outline.title}</p>` },
             { type: 'text', content: `<p>${outline.description}</p>` },
           ],
-        },
+        }),
       }
     }
 
@@ -847,12 +847,20 @@ export class PipelineExecutor {
   ): GeneratedScene {
     const fallbackScene = this.assembleScene(outline, content, actions)
 
+    let finalContent = scene.content ?? fallbackScene.content
+    if (finalContent && typeof finalContent === 'object' && 'type' in finalContent) {
+      const typed = finalContent as { type: string; canvas?: Record<string, unknown> }
+      if (typed.type === 'slide' && typed.canvas) {
+        finalContent = { ...typed, canvas: this.ensureFullSlideCanvas(typed.canvas) }
+      }
+    }
+
     return {
       id: typeof scene.id === 'string' ? scene.id : fallbackScene.id,
       title: typeof scene.title === 'string' ? scene.title : fallbackScene.title,
       type: typeof scene.type === 'string' ? scene.type : fallbackScene.type,
       order: typeof scene.order === 'number' ? scene.order : fallbackScene.order,
-      content: scene.content ?? fallbackScene.content,
+      content: finalContent,
       actions: Array.isArray(scene.actions) ? scene.actions : fallbackScene.actions,
     }
   }
@@ -885,6 +893,25 @@ export class PipelineExecutor {
       typeof obj.html === 'string' ||
       (obj.projectConfig !== null && typeof obj.projectConfig === 'object')
     )
+  }
+
+  private static readonly DEFAULT_SLIDE_THEME = {
+    backgroundColor: '#ffffff',
+    themeColors: ['#5b9bd5', '#ed7d31', '#a5a5a5', '#ffc000', '#4472c4'],
+    fontColor: '#333333',
+    fontName: 'Microsoft YaHei',
+    outline: { color: '#d14424', width: 2, style: 'solid' },
+    shadow: { h: 0, v: 0, blur: 10, color: '#000000' },
+  }
+
+  private ensureFullSlideCanvas(canvas: Record<string, unknown>): Record<string, unknown> {
+    return {
+      id: canvas.id ?? `slide-${Date.now()}`,
+      viewportSize: canvas.viewportSize ?? 1000,
+      viewportRatio: canvas.viewportRatio ?? 0.5625,
+      theme: canvas.theme ?? PipelineExecutor.DEFAULT_SLIDE_THEME,
+      ...canvas,
+    }
   }
 
   private toSlideCanvas(content: GeneratedContent): Record<string, unknown> | null {

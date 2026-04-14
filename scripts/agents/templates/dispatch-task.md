@@ -17,6 +17,10 @@
 - 可参考上下文文件：
 {{CONTEXT_FILES_BLOCK}}
 
+> ⚠️ 请优先利用已提供的上下文文件建立项目背景！
+> - 如果已提供 project-index.md，先用它快速定位代码位置
+> - 如果已提供 openmaic-source-analysis.md，对 OpenMAIC/架构任务请优先参考其中的组件/API 映射
+
 ## 验收标准
 {{ACCEPTANCE_BLOCK}}
 

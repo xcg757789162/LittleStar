@@ -287,6 +287,7 @@ app.post('/api/pre-generate', async (req, res) => {
         date: string
         requirement: string
         language?: string
+        lessonIndex?: number
       }>
     }
 
@@ -322,31 +323,32 @@ app.post('/api/pre-generate', async (req, res) => {
         [childId],
       )
 
-      // 2. 检查已有的 pending/running 任务，用于去重
+      // 2. 检查已有的 pending/running 任务，用于去重（含 lesson_index）
       const { rows: existingTasks } = await client.query(
-        `SELECT knowledge_node_id, date
+        `SELECT knowledge_node_id, date, lesson_index
          FROM api.generation_tasks
          WHERE child_id = $1
            AND status IN ('pending', 'running')`,
         [childId],
       )
       const existingSet = new Set(
-        existingTasks.map((r: { knowledge_node_id: string; date: string }) =>
-          `${r.knowledge_node_id}|${r.date}`,
+        existingTasks.map((r: { knowledge_node_id: string; date: string; lesson_index: number }) =>
+          `${r.knowledge_node_id}|${r.lesson_index ?? 1}|${r.date}`,
         ),
       )
 
       // 3. 只插入不重复的任务
       for (const task of tasks) {
-        const key = `${task.knowledgeNodeId}|${task.date}`
+        const lessonIndex = task.lessonIndex ?? 1
+        const key = `${task.knowledgeNodeId}|${lessonIndex}|${task.date}`
         if (existingSet.has(key)) {
           console.log(`[API] 跳过重复任务: ${key}`)
           continue
         }
         const result = await client.query(
           `INSERT INTO api.generation_tasks
-             (child_id, knowledge_node_id, date, requirement, language, settings, status)
-           VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+             (child_id, knowledge_node_id, date, requirement, language, settings, status, lesson_index)
+           VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
            RETURNING id`,
           [
             childId,
@@ -355,6 +357,7 @@ app.post('/api/pre-generate', async (req, res) => {
             task.requirement,
             task.language || 'zh-CN',
             JSON.stringify(childSettings),
+            lessonIndex,
           ],
         )
         taskIds.push(result.rows[0].id)

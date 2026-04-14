@@ -509,7 +509,7 @@ export function Home() {
       if (subject) {
         const items = await cacheInstance.listCachedClassrooms(undefined, subject)
         for (const item of items) {
-          await cacheInstance.deleteClassroom(item.knowledgeNodeId, item.date)
+          await cacheInstance.deleteClassroom(item.knowledgeNodeId, item.lessonIndex, item.date)
         }
       } else {
         await cacheInstance.clearAll()

@@ -125,7 +125,7 @@ describe('GenerationScheduler', () => {
       await scheduler.executeTasks()
 
       expect(mockClient.pollUntilComplete).toHaveBeenCalledWith('cr-1', expect.any(Object))
-      expect(mockCache.saveClassroom).toHaveBeenCalledWith('kn-1', '2026-04-08', mockClassroom)
+      expect(mockCache.saveClassroom).toHaveBeenCalledWith('kn-1', 1, '2026-04-08', mockClassroom)
     })
 
     it('should mark task as completed on success', async () => {

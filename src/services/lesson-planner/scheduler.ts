@@ -55,6 +55,7 @@ export interface SchedulerConfig {
 /** 生成任务输入 */
 export interface GenerationTaskInput {
   knowledgeNodeId: string
+  lessonIndex?: number
   date: string
   requirement: string
   language?: string
@@ -67,6 +68,7 @@ export type TaskStatus = 'pending' | 'generating' | 'polling' | 'completed' | 'f
 export interface GenerationTask {
   id: string
   knowledgeNodeId: string
+  lessonIndex: number
   date: string
   requirement: string
   language?: string
@@ -111,6 +113,7 @@ export class GenerationScheduler {
     const task: GenerationTask = {
       id: `task-${++this.taskIdCounter}`,
       knowledgeNodeId: input.knowledgeNodeId,
+      lessonIndex: input.lessonIndex ?? 1,
       date: input.date,
       requirement: input.requirement,
       language: input.language,
@@ -256,6 +259,7 @@ export class GenerationScheduler {
         // Pipeline 成功 → 写入缓存
         await this.cache.saveClassroom(
           task.knowledgeNodeId,
+          task.lessonIndex,
           task.date,
           classroom,
         )

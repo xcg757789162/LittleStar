@@ -160,8 +160,9 @@ export function NativeClassroom() {
     completedSubjects.size,
   );
 
-  // 追踪当前课堂的知识点 ID
+  // 追踪当前课堂的知识点 ID 和课时序号
   const currentNodeIdRef = useRef<string>('');
+  const currentLessonIndexRef = useRef<number>(1);
 
   // 如果从 Home 页带了科目进来，自动加载课程列表
   useEffect(() => {
@@ -207,16 +208,17 @@ export function NativeClassroom() {
     await loadLessons(subject);
   }, [loadLessons, activateAudio]);
 
-  const handleStartLesson = useCallback(async (knowledgeNodeId: string, date: string) => {
+  const handleStartLesson = useCallback(async (knowledgeNodeId: string, lessonIndex: number, date: string) => {
     if (!selectedSubject) return;
     setIsLoading(true);
 
     try {
       // 记录当前课堂信息
       currentNodeIdRef.current = knowledgeNodeId;
+      currentLessonIndexRef.current = lessonIndex;
 
       // 从缓存加载课堂
-      const classroom = await cacheRef.current!.getClassroom(knowledgeNodeId, date);
+      const classroom = await cacheRef.current!.getClassroom(knowledgeNodeId, lessonIndex, date);
       if (!classroom) {
         setCachedLessons([]);
         setIsLoading(false);
@@ -294,6 +296,7 @@ export function NativeClassroom() {
       // 写入 classroom_history
       if (currentClassroom) {
         const knowledgeNodeId = currentNodeIdRef.current || currentClassroom.id || 'unknown';
+        const lessonIndex = currentLessonIndexRef.current;
         const existingHistory = await apiClient.get<{ id: number }>('/classroom_history', {
           filters: [
             { column: 'child_id', operator: 'eq', value: numChildId },
@@ -317,6 +320,7 @@ export function NativeClassroom() {
           questions_completed: stats.questionsCompleted,
           correct_count: stats.correctCount,
           accuracy,
+          lesson_index: lessonIndex,
         });
 
         if (historyRecord?.id) {
@@ -326,19 +330,49 @@ export function NativeClassroom() {
           });
         }
 
-        // Atomic mastery update via DB function (avoids read-modify-write race)
-        const correctRate = stats.questionsCompleted > 0 ? stats.correctCount / stats.questionsCompleted : 0;
-        const masteryDelta = correctRate >= 0.8 ? 15 : correctRate >= 0.5 ? 5 : -5;
+        // Completion-based mastery: count distinct completed lesson indices
+        try {
+          const nodeInfo = await apiClient.get<{ totalLessons: number | null }>('/knowledge_nodes', {
+            filters: [{ column: 'id', operator: 'eq', value: knowledgeNodeId }],
+            select: 'total_lessons',
+          });
+          const totalLessons = nodeInfo[0]?.totalLessons ?? 1;
 
-        await apiClient.rpc('update_mastery', {
-          p_child_id: numChildId,
-          p_knowledge_node_id: knowledgeNodeId,
-          p_delta: masteryDelta,
-          p_questions: stats.questionsCompleted,
-          p_correct: stats.correctCount,
-        }).catch((err: unknown) => {
-          console.error('[NativeClassroom] Atomic mastery update failed, falling back:', err);
-        });
+          if (totalLessons > 0) {
+            const completedHistory = await apiClient.get<{ lessonIndex: number }>('/classroom_history', {
+              filters: [
+                { column: 'child_id', operator: 'eq', value: numChildId },
+                { column: 'knowledge_node_id', operator: 'eq', value: knowledgeNodeId },
+              ],
+              select: 'lesson_index',
+            });
+            const uniqueCompleted = new Set(completedHistory.map(h => h.lessonIndex)).size;
+            const masteryLevel = Math.round((uniqueCompleted / totalLessons) * 100);
+
+            await apiClient.upsert('/mastery_records', {
+              childId: numChildId,
+              knowledgeNodeId,
+              masteryLevel,
+              lastPracticed: today.toISOString(),
+              nextReviewDate: new Date(today.getTime() + (masteryLevel >= 80 ? 7 : 3) * 86400000).toISOString(),
+              totalAttempts: (existingHistory.length + 1),
+              totalCorrect: stats.correctCount,
+            }).catch((upsertErr: unknown) => {
+              console.error('[NativeClassroom] mastery upsert failed, falling back to RPC:', upsertErr);
+              const correctRate = stats.questionsCompleted > 0 ? stats.correctCount / stats.questionsCompleted : 0;
+              const masteryDelta = correctRate >= 0.8 ? 15 : correctRate >= 0.5 ? 5 : -5;
+              return apiClient.rpc('update_mastery', {
+                p_child_id: numChildId,
+                p_knowledge_node_id: knowledgeNodeId,
+                p_delta: masteryDelta,
+                p_questions: stats.questionsCompleted,
+                p_correct: stats.correctCount,
+              });
+            });
+          }
+        } catch (err: unknown) {
+          console.error('[NativeClassroom] Completion-based mastery update failed:', err);
+        }
       }
 
       // 触发新一轮预生成（不删除缓存，已完成的课堂保留用于复习）
@@ -424,7 +458,7 @@ export function NativeClassroom() {
 
       // 1. Delete selected caches
       for (const lesson of lessonsToRegen) {
-        await cacheRef.current!.deleteClassroom(lesson.knowledgeNodeId, lesson.date).catch(() => {});
+        await cacheRef.current!.deleteClassroom(lesson.knowledgeNodeId, lesson.lessonIndex, lesson.date).catch(() => {});
       }
 
       // 2. Build backend tasks
@@ -433,6 +467,7 @@ export function NativeClassroom() {
         date: lesson.date,
         requirement: `为一位 ${currentChild.age} 岁的 ${currentChild.gradeLevel} 学生重新生成关于「${lesson.classroomTitle}」的课堂。包含教学和测验环节，以趣味互动为主。`,
         language: 'zh-CN',
+        lessonIndex: lesson.lessonIndex,
       }));
 
       // 3. Submit to backend
@@ -478,14 +513,14 @@ export function NativeClassroom() {
     }
   }, [phase, selectedSubject, preGeneration.completedCount, preGeneration.status, loadLessons]);
 
-  // 正在生成但尚未缓存的任务（排除已完成/已缓存的）
+  // 正在生成但尚未有可用（未学习）缓存的任务
   const generatingTasks = useMemo(() => {
     if (preGeneration.status !== 'checking' && preGeneration.status !== 'generating') return [];
-    const cachedNodeIds = new Set(cachedLessons.map((l) => l.knowledgeNodeId));
+    const readyNodeIds = new Set(pendingLessons.map((l) => l.knowledgeNodeId));
     return preGeneration.taskDetails.filter(
-      (t) => (t.status === 'pending' || t.status === 'running') && !cachedNodeIds.has(t.knowledgeNodeId),
+      (t) => (t.status === 'pending' || t.status === 'running') && !readyNodeIds.has(t.knowledgeNodeId),
     );
-  }, [preGeneration.status, preGeneration.taskDetails, cachedLessons]);
+  }, [preGeneration.status, preGeneration.taskDetails, pendingLessons]);
 
   const hasAnyContent = pendingLessons.length > 0 || generatingTasks.length > 0 || completedLessons.length > 0;
 
@@ -651,7 +686,7 @@ export function NativeClassroom() {
                           subject={selectedSubject ?? 'english'}
                           isLocked={false}
                           index={idx}
-                          onTap={() => handleStartLesson(lesson.knowledgeNodeId, lesson.date)}
+                          onTap={() => handleStartLesson(lesson.knowledgeNodeId, lesson.lessonIndex, lesson.date)}
                           selectable={selectMode}
                           selected={selectedKeys.has(key)}
                           onToggleSelect={() => toggleSelect(key)}
@@ -662,115 +697,136 @@ export function NativeClassroom() {
                 </div>
               )}
 
-              {/* ── 生成中 ── */}
+              {/* ── 生成中 / 排队中 ── */}
               {generatingTasks.length > 0 && (
                 <div style={{ width: '100%', maxWidth: '1080px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, paddingLeft: 4 }}>
                     <motion.span style={{ fontSize: 18, display: 'inline-block' }}
                       animate={{ rotate: 360 }} transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}>⚙️</motion.span>
                     <span style={{ fontSize: 15, fontWeight: 700, color: T.textDark, fontFamily: T.fontDisplay }}>
-                      生成中
+                      准备中
                     </span>
                     <span style={{ fontSize: 12, fontWeight: 600, color: T.textLight, background: '#FFF3E7', padding: '2px 10px', borderRadius: 10 }}>
                       {generatingTasks.length}
                     </span>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px', width: '100%', justifyItems: 'center' }}>
-                    {generatingTasks.map((task, idx) => (
-                      <motion.div
-                        key={`gen-${task.id}`}
-                        layout
-                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        transition={{ delay: idx * 0.08, type: 'spring', stiffness: 300, damping: 24 }}
-                        style={{
-                          position: 'relative',
-                          width: '100%',
-                          maxWidth: 320,
-                          borderRadius: 22,
-                          overflow: 'hidden',
-                          cursor: 'default',
-                          background: '#FFFFFF',
-                          boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
-                          border: '3px dashed #E0D6CC',
-                        }}
-                      >
-                        <div style={{
-                          width: '100%',
-                          height: 150,
-                          background: 'linear-gradient(135deg, #FFF5EE 0%, #FFF0E6 50%, #FFE8D6 100%)',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 8,
-                        }}>
-                          <motion.span
-                            style={{ fontSize: 28 }}
-                            animate={{ rotate: 360 }}
-                            transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
-                          >
-                            ⚙️
-                          </motion.span>
-                          <span style={{
-                            fontSize: 16,
-                            fontWeight: 700,
-                            color: T.sunOrange,
-                            fontFamily: T.fontDisplay,
-                            letterSpacing: 2,
-                          }}>
-                            生成中
-                          </span>
-                          {task.status === 'running' && task.progress > 0 && (
-                            <div style={{ width: '60%', height: 4, borderRadius: 999, background: '#F5E6DC', overflow: 'hidden' }}>
-                              <motion.div
-                                initial={{ width: 0 }}
-                                animate={{ width: `${task.progress}%` }}
-                                transition={{ duration: 0.4 }}
-                                style={{ height: '100%', borderRadius: 999, background: `linear-gradient(90deg, ${T.sunOrange}, ${T.candyPink})` }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                        <div style={{
-                          position: 'absolute',
-                          top: 8,
-                          left: 8,
-                          width: 26,
-                          height: 26,
-                          borderRadius: '50%',
-                          background: '#D5D5D5',
-                          color: '#FFFFFF',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: 12,
-                          fontWeight: 800,
-                          fontFamily: T.fontDisplay,
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                        }}>
-                          {idx + 1}
-                        </div>
-                        <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <p style={{
-                            fontSize: 16,
-                            fontWeight: 700,
-                            fontFamily: "'Nunito', 'PingFang SC', sans-serif",
-                            color: T.textLight,
-                            margin: 0,
-                            lineHeight: 1.35,
+                    {generatingTasks.map((task, idx) => {
+                      const isPending = task.status === 'pending';
+                      const statusLabel = isPending ? '排队中' : '生成中';
+                      const statusColor = isPending ? T.skyBlue : T.sunOrange;
+                      const statusIcon = isPending ? '⏳' : '⚙️';
+                      const borderStyle = isPending ? '3px dashed #C8E9FA' : '3px dashed #E0D6CC';
+                      const bgGradient = isPending
+                        ? 'linear-gradient(135deg, #F0F8FF 0%, #E8F4FD 50%, #D4F1F9 100%)'
+                        : 'linear-gradient(135deg, #FFF5EE 0%, #FFF0E6 50%, #FFE8D6 100%)';
+
+                      return (
+                        <motion.div
+                          key={`gen-${task.id}`}
+                          layout
+                          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          transition={{ delay: idx * 0.08, type: 'spring', stiffness: 300, damping: 24 }}
+                          style={{
+                            position: 'relative',
+                            width: '100%',
+                            maxWidth: 320,
+                            borderRadius: 22,
                             overflow: 'hidden',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            minHeight: '2.7em',
-                            flex: 1,
+                            cursor: 'default',
+                            background: '#FFFFFF',
+                            boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                            border: borderStyle,
+                          }}
+                        >
+                          <div style={{
+                            width: '100%',
+                            height: 150,
+                            background: bgGradient,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 8,
                           }}>
-                            {task.knowledgeNodeName || `课堂 ${idx + 1}`}
-                          </p>
-                        </div>
-                      </motion.div>
-                    ))}
+                            {isPending ? (
+                              <motion.span
+                                style={{ fontSize: 28 }}
+                                animate={{ scale: [1, 1.15, 1] }}
+                                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                              >
+                                {statusIcon}
+                              </motion.span>
+                            ) : (
+                              <motion.span
+                                style={{ fontSize: 28 }}
+                                animate={{ rotate: 360 }}
+                                transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+                              >
+                                {statusIcon}
+                              </motion.span>
+                            )}
+                            <span style={{
+                              fontSize: 16,
+                              fontWeight: 700,
+                              color: statusColor,
+                              fontFamily: T.fontDisplay,
+                              letterSpacing: 2,
+                            }}>
+                              {statusLabel}
+                            </span>
+                            {task.status === 'running' && task.progress > 0 && (
+                              <div style={{ width: '60%', height: 4, borderRadius: 999, background: '#F5E6DC', overflow: 'hidden' }}>
+                                <motion.div
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${task.progress}%` }}
+                                  transition={{ duration: 0.4 }}
+                                  style={{ height: '100%', borderRadius: 999, background: `linear-gradient(90deg, ${T.sunOrange}, ${T.candyPink})` }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                          <div style={{
+                            position: 'absolute',
+                            top: 8,
+                            left: 8,
+                            width: 26,
+                            height: 26,
+                            borderRadius: '50%',
+                            background: isPending ? '#B0D4E8' : '#D5D5D5',
+                            color: '#FFFFFF',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 12,
+                            fontWeight: 800,
+                            fontFamily: T.fontDisplay,
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                          }}>
+                            {idx + 1}
+                          </div>
+                          <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <p style={{
+                              fontSize: 16,
+                              fontWeight: 700,
+                              fontFamily: "'Nunito', 'PingFang SC', sans-serif",
+                              color: T.textLight,
+                              margin: 0,
+                              lineHeight: 1.35,
+                              overflow: 'hidden',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              minHeight: '2.7em',
+                              flex: 1,
+                            }}>
+                              {task.knowledgeNodeName || `课堂 ${idx + 1}`}
+                            </p>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

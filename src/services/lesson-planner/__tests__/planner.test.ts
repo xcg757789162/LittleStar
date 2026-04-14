@@ -5,8 +5,8 @@
  * 输出未来 3 天的知识点学习序列。
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { LessonPlanner, type LessonPlanInput, type DailyLessonPlan } from '../planner'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { LessonPlanner, type LessonPlanInput } from '../planner'
 import type { KnowledgeNode, Subject } from '@/types/models'
 
 // 创建测试用知识点
@@ -22,6 +22,8 @@ function createNode(overrides: Partial<KnowledgeNode> = {}): KnowledgeNode {
     difficulty: 3,
     contentType: 'quiz',
     orderIndex: 1,
+    templatePrompts: [],
+    totalLessons: null,
     ...overrides,
   }
 }
@@ -32,21 +34,21 @@ function createNodes(count: number, subject: Subject = 'math'): KnowledgeNode[] 
       id: `${subject}-node-${i + 1}`,
       name: `${subject} Node ${i + 1}`,
       subject,
-      order: i + 1,
+      orderIndex: i + 1,
       difficulty: Math.min(1 + Math.floor(i / 2), 10),
-      prerequisites: [], // 独立节点，无前置依赖
+      prerequisites: [],
     }),
   )
 }
 
 /** 创建有依赖链的节点 */
-function createChainedNodes(count: number, subject: Subject = 'math'): KnowledgeNode[] {
+function _createChainedNodes(count: number, subject: Subject = 'math'): KnowledgeNode[] {
   return Array.from({ length: count }, (_, i) =>
     createNode({
       id: `${subject}-node-${i + 1}`,
       name: `${subject} Node ${i + 1}`,
       subject,
-      order: i + 1,
+      orderIndex: i + 1,
       difficulty: Math.min(1 + Math.floor(i / 2), 10),
       prerequisites: i > 0 ? [`${subject}-node-${i}`] : [],
     }),

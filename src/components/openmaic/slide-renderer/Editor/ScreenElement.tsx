@@ -37,15 +37,13 @@ export function ScreenElement({ elementInfo, elementIndex, animate }: ScreenElem
     return elementTypeMap[elementInfo.type] || null;
   }, [elementInfo.type]);
 
+  const defaultTheme = { fontColor: '#333333', fontName: 'Microsoft YaHei' };
   const theme = useSceneSelector<SceneContent, { fontColor: string; fontName: string }>(
     (content) => {
       if (content.type === 'slide') {
-        return content.canvas.theme;
+        return content.canvas?.theme ?? defaultTheme;
       }
-      return {
-        fontColor: '#333333',
-        fontName: 'Microsoft YaHei',
-      };
+      return defaultTheme;
     },
   );
 

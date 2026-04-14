@@ -54,6 +54,14 @@ export interface RequirementInput {
   mode: RequirementMode
   /** 目标语言（默认 zh-CN） */
   language?: string
+  /** 课时序号（1-based），若有课时计划 */
+  lessonIndex?: number
+  /** 该知识点总课时数 */
+  totalLessons?: number
+  /** 本课时标题（来自 knowledge_node_lessons） */
+  lessonTitle?: string
+  /** 本课时聚焦要点 */
+  lessonFocusPoints?: string[]
 }
 
 // ============================================================
@@ -85,29 +93,34 @@ export class RequirementGenerator {
 
     const sections: string[] = []
 
-    // 1. 课堂目标
-    sections.push(this.buildObjective(knowledgeNode, mode, masteryLevel))
+    // 1. 课堂目标（含课时上下文）
+    sections.push(this.buildObjective(knowledgeNode, mode, masteryLevel, input))
 
-    // 2. 学生画像
+    // 2. 课时信息（多课时知识点）
+    if (input.lessonIndex && input.totalLessons && input.totalLessons > 1) {
+      sections.push(this.buildLessonContext(input))
+    }
+
+    // 3. 学生画像
     sections.push(this.buildStudentProfile(child))
 
-    // 3. 内容要求
-    sections.push(this.buildContentRequirements(knowledgeNode, mode, masteryLevel))
+    // 4. 内容要求
+    sections.push(this.buildContentRequirements(knowledgeNode, mode, masteryLevel, input.lessonFocusPoints))
 
-    // 4. 教学风格
+    // 5. 教学风格
     sections.push(this.buildTeachingStyle(child))
 
-    // 5. 模板提示（如有）
+    // 6. 模板提示（如有）
     if (knowledgeNode.templatePrompts.length > 0) {
       sections.push(this.buildTemplateHints(knowledgeNode.templatePrompts))
     }
 
-    // 6. 前置知识点（如有）
+    // 7. 前置知识点（如有）
     if (knowledgeNode.prerequisites.length > 0) {
       sections.push(this.buildPrerequisites(knowledgeNode.prerequisites))
     }
 
-    // 7. 语言要求
+    // 8. 语言要求
     sections.push(this.buildLanguageRequirement(language))
 
     return sections.join('\n\n')
@@ -154,14 +167,44 @@ export class RequirementGenerator {
     node: KnowledgeNodeInput,
     mode: RequirementMode,
     masteryLevel: number,
+    input?: RequirementInput,
   ): string {
+    const lessonSuffix = (input?.lessonIndex && input?.totalLessons && input.totalLessons > 1)
+      ? `（第 ${input.lessonIndex}/${input.totalLessons} 课${input.lessonTitle ? `：${input.lessonTitle}` : ''}）`
+      : ''
+
     if (mode === 'new-teaching') {
-      return `【课堂目标】\n新知识教学：${node.name}\n${node.description}\n要求以趣味互动的方式介绍和学习该知识点，帮助学生认识和理解核心概念。`
+      return `【课堂目标】\n新知识教学：${node.name}${lessonSuffix}\n${node.description}\n要求以趣味互动的方式介绍和学习该知识点，帮助学生认识和理解核心概念。`
     }
 
-    // reinforcement
     const intensity = masteryLevel < 30 ? '基础入门' : masteryLevel < 60 ? '巩固练习' : '提升拓展'
-    return `【课堂目标】\n加固复习：${node.name}（当前掌握率 ${masteryLevel}%）\n${node.description}\n本次课堂重点为${intensity}，通过大量简单练习帮助学生巩固和加固该知识点。`
+    return `【课堂目标】\n加固复习：${node.name}${lessonSuffix}（当前掌握率 ${masteryLevel}%）\n${node.description}\n本次课堂重点为${intensity}，通过大量简单练习帮助学生巩固和加固该知识点。`
+  }
+
+  private buildLessonContext(input: RequirementInput): string {
+    const lines = ['【课时信息】']
+    lines.push(`本节课是【${input.knowledgeNode.name}】的第 ${input.lessonIndex}/${input.totalLessons} 节课。`)
+
+    if (input.lessonTitle) {
+      lines.push(`本课主题：${input.lessonTitle}`)
+    }
+
+    if (input.lessonFocusPoints && input.lessonFocusPoints.length > 0) {
+      lines.push('本课聚焦要点：')
+      for (const point of input.lessonFocusPoints) {
+        lines.push(`- ${point}`)
+      }
+    }
+
+    if (input.lessonIndex === 1) {
+      lines.push('这是该知识点的第一堂课，请以认知引入为主，建立基本概念。')
+    } else if (input.lessonIndex === input.totalLessons) {
+      lines.push('这是该知识点的最后一堂课，请包含综合练习和回顾总结。')
+    } else {
+      lines.push('请在前面课程的基础上，逐步深入本课聚焦要点的教学。')
+    }
+
+    return lines.join('\n')
   }
 
   private buildStudentProfile(child: ChildProfile): string {
@@ -173,6 +216,7 @@ export class RequirementGenerator {
     node: KnowledgeNodeInput,
     mode: RequirementMode,
     masteryLevel: number,
+    focusPoints?: string[],
   ): string {
     const lines = ['【内容要求】']
 
@@ -189,6 +233,13 @@ export class RequirementGenerator {
         lines.push('- 复习内容包含基础和中等难度的混合练习')
       } else {
         lines.push('- 复习内容以中等和拓展题为主，适当增加挑战性')
+      }
+    }
+
+    if (focusPoints && focusPoints.length > 0) {
+      lines.push('- 本课内容应聚焦于以下要点，不要超出范围：')
+      for (const point of focusPoints) {
+        lines.push(`  · ${point}`)
       }
     }
 

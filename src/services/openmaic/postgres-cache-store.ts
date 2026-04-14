@@ -20,6 +20,7 @@ interface DbCacheRow {
   id: number
   childId: number
   knowledgeNodeId: string
+  lessonIndex: number
   date: string
   cacheKey: string
   classroomData: Classroom
@@ -31,6 +32,7 @@ interface DbCacheRow {
 function toEntry(row: DbCacheRow): CacheEntry {
   return {
     knowledgeNodeId: row.knowledgeNodeId,
+    lessonIndex: row.lessonIndex ?? 1,
     date: row.date,
     classroom: row.classroomData,
     cachedAt: new Date(row.cachedAt).getTime(),
@@ -85,6 +87,7 @@ export class PostgresCacheStore implements CacheStore {
       childId: this.childId,
       cacheKey: key,
       knowledgeNodeId: value.knowledgeNodeId,
+      lessonIndex: value.lessonIndex ?? 1,
       date: value.date,
       classroomData: value.classroom,
       cachedAt: new Date(value.cachedAt).toISOString(),
@@ -163,11 +166,12 @@ export class PostgresCacheStore implements CacheStore {
       filters: [
         { column: 'childId', operator: 'eq', value: this.childId },
       ],
-      select: 'cache_key,knowledge_node_id,date,cached_at',
+      select: 'cache_key,knowledge_node_id,lesson_index,date,cached_at',
     })
     return rows.map((r) => ({
       cacheKey: r.cacheKey,
       knowledgeNodeId: r.knowledgeNodeId,
+      lessonIndex: r.lessonIndex ?? 1,
       date: r.date,
       cachedAt: new Date(r.cachedAt).getTime(),
     }))

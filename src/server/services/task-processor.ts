@@ -32,6 +32,7 @@ interface TaskRow {
   checkpoint: PipelineCheckpoint | null
   retry_count: number
   max_retries: number
+  lesson_index: number
 }
 
 // ============================================================
@@ -198,7 +199,7 @@ async function processNextTask(): Promise<void> {
        FOR UPDATE SKIP LOCKED
      )
      RETURNING id, child_id, knowledge_node_id, date, requirement, language,
-               settings, checkpoint, retry_count, max_retries`,
+               settings, checkpoint, retry_count, max_retries, lesson_index`,
   )
 
   if (rows.length === 0) return
@@ -257,17 +258,19 @@ async function processNextTask(): Promise<void> {
     }
 
     // 成功：写入 classroom_cache (no TTL — evicted on completion or by LRU capacity limit)
-    const cacheKey = `${task.knowledge_node_id}::${task.date}`
+    const lessonIdx = task.lesson_index ?? 1
+    const cacheKey = `${task.knowledge_node_id}::${lessonIdx}::${task.date}`
 
     await pool.query(
       `INSERT INTO api.classroom_cache
-         (child_id, knowledge_node_id, date, cache_key, classroom_data, cached_at, expires_at)
-       VALUES ($1, $2, $3, $4, $5, NOW(), NULL)
+         (child_id, knowledge_node_id, date, cache_key, classroom_data, cached_at, expires_at, lesson_index)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NULL, $6)
        ON CONFLICT (child_id, cache_key) DO UPDATE
          SET classroom_data = EXCLUDED.classroom_data,
              cached_at = NOW(),
-             expires_at = NULL`,
-      [task.child_id, task.knowledge_node_id, task.date, cacheKey, JSON.stringify(classroom)],
+             expires_at = NULL,
+             lesson_index = EXCLUDED.lesson_index`,
+      [task.child_id, task.knowledge_node_id, task.date, cacheKey, JSON.stringify(classroom), lessonIdx],
     )
 
     // Evict oldest cache entries if this child exceeds capacity (20 per child)

@@ -13,7 +13,12 @@ interface ShapeCreateCanvasProps {
 export function ShapeCreateCanvas({ onCreated }: ShapeCreateCanvasProps) {
   const ctrlOrShiftKeyActive = useKeyboardStore((state) => state.ctrlOrShiftKeyActive());
   const setCreatingCustomShapeState = useCanvasStore.use.setCreatingCustomShapeState();
-  const theme = useSceneSelector<SlideContent, SlideTheme>((content) => content.canvas.theme);
+  const theme = useSceneSelector<SlideContent, SlideTheme>((content) => content.canvas?.theme ?? {
+    backgroundColor: '#ffffff',
+    themeColors: ['#5b9bd5', '#ed7d31', '#a5a5a5', '#ffc000', '#4472c4'],
+    fontColor: '#333333',
+    fontName: 'Microsoft YaHei',
+  } as SlideTheme);
 
   const shapeCanvasRef = useRef<HTMLDivElement>(null);
   const [isMouseDown, setIsMouseDown] = useState(false);

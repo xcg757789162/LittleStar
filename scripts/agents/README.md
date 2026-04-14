@@ -195,3 +195,37 @@ bash scripts/agents/dispatch-task.sh \
 3. `review` 验收
 
 比三个员工都去全仓重扫更省 token，也更不容易互相打架。
+
+## 7. 自动上下文注入
+
+默认情况下（未使用 `--no-default-context`），`dispatch-task.sh` 会根据任务类型自动补充上下文文件：
+
+### 默认注入项目索引
+
+- **文件路径**：`.codebuddy/project-index.md`
+- **触发条件**：所有任务（除非使用 `--no-default-context`）
+- **用途**：快速定位代码位置，避免全仓搜索
+
+### OpenMAIC 源码分析文档
+
+- **文件路径**：`docs/openmaic-source-analysis.md`
+- **触发条件**：满足以下任一条件
+  1. **关键词命中**：任务描述或标题包含以下任一关键词：
+     - `OpenMAIC`、`架构`、`链路`、`源码`、`source`、`architecture`、`pipeline`、`upstream`
+  2. **路径命中**：相关路径命中以下任一目录或文件：
+     - `src/lib/openmaic/`、`src/components/openmaic/`、`src/services/openmaic/`、`src/stores/openmaic/`、`src/types/openmaic/`、`src/server/`、`docs/openmaic-source-analysis.md`
+- **用途**：对 OpenMAIC/架构任务提供组件与 API 映射
+
+bash scripts/agents/dispatch-task.sh \
+  --role research \
+  --task "分析某段代码" \
+  --context-file .codebuddy/project-index.md
+```
+
+- 支持相对路径和绝对路径，会先归一化成稳定路径再去重
+- 显式传入的文件如果与默认注入文件相同，不会重复添加
+- 多个 `--context-file` 可以重复传入
+
+### 去重机制
+
+内部使用路径归一化（`normalize_realpath`）确保 `.codebuddy/project-index.md` 等文件不会因相对/绝对路径的差异而被重复注入。

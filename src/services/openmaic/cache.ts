@@ -2,7 +2,7 @@
  * 课堂缓存管理
  *
  * 管理 OpenMAIC 生成的课堂 JSON 数据的缓存。
- * 按 knowledgeNodeId + date 索引，支持 3 天预生成缓存策略。
+ * 按 knowledgeNodeId + lessonIndex + date 索引，支持 3 天预生成缓存策略。
  *
  * 存储抽象：通过 CacheStore 接口解耦存储实现。
  * 默认使用内存 Map（兼容 jsdom 测试环境），
@@ -20,6 +20,8 @@ const log = createLogger('ClassroomCache')
 export interface CacheEntry {
   /** 知识点 ID */
   knowledgeNodeId: string
+  /** 课时序号（1-based） */
+  lessonIndex: number
   /** 日期 YYYY-MM-DD */
   date: string
   /** 课堂数据 */
@@ -31,6 +33,7 @@ export interface CacheEntry {
 /** 缓存列表项（不含完整课堂数据） */
 export interface CacheListItem {
   knowledgeNodeId: string
+  lessonIndex: number
   date: string
   classroomId: string
   classroomTitle: string
@@ -80,6 +83,7 @@ export interface CacheStore {
 export interface CacheEntryMetadata {
   cacheKey: string
   knowledgeNodeId: string
+  lessonIndex: number
   date: string
   cachedAt: number
 }
@@ -115,9 +119,9 @@ class MemoryCacheStore implements CacheStore {
   }
 }
 
-/** 生成缓存 key */
-function makeCacheKey(knowledgeNodeId: string, date: string): string {
-  return `${knowledgeNodeId}::${date}`
+/** 生成缓存 key（三段式：knowledgeNodeId::lessonIndex::date） */
+function makeCacheKey(knowledgeNodeId: string, lessonIndex: number, date: string): string {
+  return `${knowledgeNodeId}::${lessonIndex}::${date}`
 }
 
 function isPlaceholderTitle(title: string | undefined): boolean {
@@ -226,17 +230,20 @@ export class ClassroomCache {
   /**
    * 保存课堂到缓存
    * @param knowledgeNodeId 知识点 ID
+   * @param lessonIndex 课时序号（1-based）
    * @param date 日期 YYYY-MM-DD
    * @param classroom 课堂数据
    */
   async saveClassroom(
     knowledgeNodeId: string,
+    lessonIndex: number,
     date: string,
     classroom: Classroom,
   ): Promise<void> {
-    const key = makeCacheKey(knowledgeNodeId, date)
+    const key = makeCacheKey(knowledgeNodeId, lessonIndex, date)
     const entry: CacheEntry = {
       knowledgeNodeId,
+      lessonIndex,
       date,
       classroom,
       cachedAt: Date.now(),
@@ -247,14 +254,16 @@ export class ClassroomCache {
   /**
    * 获取缓存的课堂
    * @param knowledgeNodeId 知识点 ID
+   * @param lessonIndex 课时序号（1-based）
    * @param date 日期 YYYY-MM-DD
    * @returns 课堂数据，不存在时返回 null
    */
   async getClassroom(
     knowledgeNodeId: string,
+    lessonIndex: number,
     date: string,
   ): Promise<Classroom | null> {
-    const key = makeCacheKey(knowledgeNodeId, date)
+    const key = makeCacheKey(knowledgeNodeId, lessonIndex, date)
     const entry = await this.store.get(key)
     if (!entry) return null
 
@@ -344,6 +353,7 @@ export class ClassroomCache {
 
       items.push({
         knowledgeNodeId: entry.knowledgeNodeId,
+        lessonIndex: entry.lessonIndex ?? 1,
         date: entry.date,
         classroomId: entry.classroom.id,
         classroomTitle: resolveClassroomTitle(entry.classroom),
@@ -363,13 +373,15 @@ export class ClassroomCache {
   /**
    * 删除缓存的课堂
    * @param knowledgeNodeId 知识点 ID
+   * @param lessonIndex 课时序号（1-based）
    * @param date 日期 YYYY-MM-DD
    */
   async deleteClassroom(
     knowledgeNodeId: string,
+    lessonIndex: number,
     date: string,
   ): Promise<void> {
-    const key = makeCacheKey(knowledgeNodeId, date)
+    const key = makeCacheKey(knowledgeNodeId, lessonIndex, date)
     await this.store.delete(key)
   }
 
@@ -408,7 +420,7 @@ export class ClassroomCache {
     let cleared = 0
     for (const [, entry] of entries) {
       if (entry.date < cutoffDate) {
-        const key = `${entry.knowledgeNodeId}::${entry.date}`
+        const key = makeCacheKey(entry.knowledgeNodeId, entry.lessonIndex ?? 1, entry.date)
         await this.store.delete(key)
         cleared++
       }
@@ -435,6 +447,7 @@ export class ClassroomCache {
     return entries.map(([key, entry]) => ({
       cacheKey: key,
       knowledgeNodeId: entry.knowledgeNodeId,
+      lessonIndex: entry.lessonIndex ?? 1,
       date: entry.date,
       cachedAt: entry.cachedAt,
     }))
