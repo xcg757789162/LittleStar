@@ -21,7 +21,7 @@ export function InteractiveRenderer({ content, mode: _mode, sceneId }: Interacti
         src={patchedHtml ? undefined : content.url}
         className="absolute inset-0 w-full h-full border-0"
         title={`Interactive Scene ${sceneId}`}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        sandbox="allow-scripts allow-forms allow-popups"
       />
     </div>
   );
@@ -45,10 +45,11 @@ function patchHtmlForIframe(html: string): string {
     overflow-x: hidden;
     overflow-y: auto;
   }
-  /* Fix min-h-screen: in iframes 100vh is the iframe height, which is correct,
-     but ensure body actually fills it */
   body { min-height: 100vh; }
-</style>`;
+</style>
+<script data-iframe-patch>
+(function(){var w=console.warn;console.warn=function(){if(arguments[0]&&typeof arguments[0]==='string'&&arguments[0].indexOf('cdn.tailwindcss.com')!==-1)return;w.apply(console,arguments)};})();
+</script>`;
 
   // Insert right after <head> or at the start of the document
   const headIdx = html.indexOf('<head>');

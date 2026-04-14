@@ -22,6 +22,9 @@ export function postProcessInteractiveHtml(html: string): string {
     processed = injectKatex(processed);
   }
 
+  // Inject overlay auto-dismiss safety net
+  processed = injectOverlayAutoDismiss(processed);
+
   return processed;
 }
 
@@ -157,4 +160,76 @@ document.addEventListener("DOMContentLoaded", function() {
 
   // Last resort: append at end
   return html + katexInjection;
+}
+
+/**
+ * Inject a safety-net script that auto-dismisses blocking overlays/modals.
+ *
+ * AI-generated games sometimes create success/feedback overlays that never
+ * auto-dismiss, permanently blocking the game. This observer detects such
+ * overlays and either clicks their "next" button or hides them after a timeout.
+ */
+function injectOverlayAutoDismiss(html: string): string {
+  const script = `
+<script data-overlay-safety>
+(function() {
+  var DISMISS_DELAY = 4000;
+  var tracked = new WeakSet();
+
+  function isBlockingOverlay(el) {
+    var s = getComputedStyle(el);
+    if (s.position !== 'fixed' && s.position !== 'absolute') return false;
+    if (parseFloat(s.opacity) < 0.1 || s.display === 'none' || s.visibility === 'hidden') return false;
+    var r = el.getBoundingClientRect();
+    var vw = window.innerWidth, vh = window.innerHeight;
+    return r.width >= vw * 0.5 && r.height >= vh * 0.5;
+  }
+
+  function tryDismiss(el) {
+    var btns = el.querySelectorAll('button, [role="button"], a');
+    for (var i = 0; i < btns.length; i++) {
+      var txt = (btns[i].textContent || '').trim();
+      if (/下一[关关步题]|next|continue|继续|确[定认]/i.test(txt)) {
+        btns[i].click();
+        return;
+      }
+    }
+    el.style.transition = 'opacity 0.3s';
+    el.style.opacity = '0';
+    el.style.pointerEvents = 'none';
+    setTimeout(function() {
+      el.style.display = 'none';
+    }, 350);
+  }
+
+  function scan() {
+    var all = document.body.querySelectorAll('*');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (tracked.has(el)) continue;
+      if (!isBlockingOverlay(el)) continue;
+      tracked.add(el);
+      (function(target) {
+        setTimeout(function() {
+          if (target.offsetParent !== null || getComputedStyle(target).display !== 'none') {
+            if (isBlockingOverlay(target)) tryDismiss(target);
+          }
+        }, DISMISS_DELAY);
+      })(el);
+    }
+  }
+
+  var mo = new MutationObserver(function() { setTimeout(scan, 300); });
+  document.addEventListener('DOMContentLoaded', function() {
+    mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style','class'] });
+    scan();
+  });
+})();
+</script>`;
+
+  const bodyCloseIdx = html.indexOf('</body>');
+  if (bodyCloseIdx !== -1) {
+    return html.substring(0, bodyCloseIdx) + script + '\n' + html.substring(bodyCloseIdx);
+  }
+  return html + script;
 }

@@ -49,6 +49,28 @@ Generate a complete, self-contained HTML document that provides an interactive v
 3. **Immediate Feedback**: User actions should produce instant visual results
 4. **Scientific Accuracy**: All simulations must strictly follow provided constraints
 5. **Progressive Discovery**: Guide users from simple to complex through interaction
+6. **Age-Appropriate Math**: Match math notation to the concept level. For basic concepts (counting, shapes, simple arithmetic), use plain numbers and simple expressions (e.g., "1 + 2 = 3") — NEVER use advanced notation like ∑, ∈, ∀, ∃, set-builder notation, or Greek letters. Only use formal math notation for advanced topics where students would understand it.
+
+## Game / Multi-Level Interaction Rules
+
+When creating multi-level games or activities with stages:
+
+1. **Auto-advance**: After the user answers correctly, show brief positive feedback (1.5-2 seconds) then AUTOMATICALLY proceed to the next level. Do NOT require the user to click a "next" button.
+2. **Feedback overlay**: Any success/completion overlay or popup MUST auto-dismiss. Use `setTimeout` to remove it after 1500-2000ms and advance to the next level automatically.
+3. **No blocking modals**: NEVER create modals or overlays that permanently block the page until user interaction. All overlays must have an auto-dismiss timeout.
+4. **Final completion**: When all levels are complete, show a final summary screen. This can remain visible since the activity is done.
+
+Example pattern for level completion:
+```javascript
+function showFeedback(message) {
+  // Show overlay...
+  setTimeout(() => {
+    // Hide overlay and advance to next level
+    hideFeedback();
+    nextLevel();
+  }, 1800);
+}
+```
 
 ## Output
 

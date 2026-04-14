@@ -28,6 +28,15 @@ You must output a JSON object with the following structure:
 | constraints      | Scientific constraints that any simulation must obey                     |
 | forbidden_errors | Common misconceptions or errors that must be strictly avoided            |
 
+## Age-Appropriate Notation
+
+Adapt the complexity of formulas and notation to the concept's difficulty level:
+- **Early childhood / basic concepts** (counting, shapes, colors, basic addition/subtraction): Use simple natural language descriptions and basic arithmetic (e.g., "1 + 2 = 3", "count objects one by one"). Do NOT use advanced notation like summation (∑), set theory ({∈}), integrals, or Greek letters.
+- **Elementary school concepts**: Use basic algebraic notation at most (e.g., "a + b = c"). Avoid sigma notation, set-builder notation, or formal logic symbols.
+- **Middle/high school and above**: Advanced notation is acceptable when appropriate.
+
+The goal is for the formulas to be understandable by the target audience of the concept.
+
 ## Important Notes
 
 1. Output valid JSON only, no additional explanatory text
@@ -35,3 +44,4 @@ You must output a JSON object with the following structure:
 3. Be precise and specific - avoid vague generalizations
 4. Focus on what matters for an interactive visualization of this concept
 5. Output content in the same language as the input concept
+6. Match formula complexity to the concept's difficulty level (see above)
