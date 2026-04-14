@@ -544,22 +544,26 @@ export function usePreGeneration(
           }
 
           const neededCount = MIN_CACHE_SIZE_PER_SUBJECT - (unlearnedCounts[subject] ?? 0)
+          if (neededCount <= 0) continue
+
           const plans = planner.planLessons({
             nodes,
             masteryMap,
             subject,
             reviewQueue: [],
-            days: Math.max(neededCount, 2),
+            days: Math.ceil(neededCount / 3),
             lessonProgressMap,
           })
 
+          let addedForSubject = 0
           for (const dayPlan of plans) {
+            if (addedForSubject >= neededCount) break
             for (const item of dayPlan.items) {
+              if (addedForSubject >= neededCount) break
               if (unlearnedCachedNodeIds.has(item.nodeId)) continue
               const node = nodes.find((n) => n.id === item.nodeId)
               if (!node) continue
 
-              // Resolve lesson-specific details
               const lessonPlans = lessonPlansByNode.get(item.nodeId)
               const currentLesson = lessonPlans?.find((l) => l.lessonIndex === item.lessonIndex)
 
@@ -591,6 +595,7 @@ export function usePreGeneration(
                 language: 'zh-CN',
                 lessonIndex: item.lessonIndex,
               })
+              addedForSubject++
             }
           }
         } catch (subjectError) {
