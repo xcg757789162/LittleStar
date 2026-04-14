@@ -321,9 +321,8 @@ export function usePreGeneration(
           setStageText(`正在生成第 ${data.completedCount + 1} / ${data.totalCount} 堂课 (${running.progress}%)...`)
         }
 
-        // 判断是否全部完成
-        if (active.length === 0 && data.totalCount > 0) {
-          // 无活跃任务 → 完成或全部失败
+        // 判断是否全部完成（含任务过期清理后 totalCount 归零的情况）
+        if (active.length === 0 && (data.totalCount > 0 || data.tasks.length === 0)) {
           stopPolling()
           if (data.completedCount > 0) {
             log.info(`🎉 全部生成完成: ${data.completedCount} 节课堂已就绪${failed.length > 0 ? `，${failed.length} 个失败` : ''}`)
