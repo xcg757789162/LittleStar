@@ -245,6 +245,8 @@ export function isScene(value: unknown): value is Scene {
 
   // v2: 有 content 字段说明是原生格式（不需要 slides）
   if (obj.content !== undefined) return true
+  // slides 若存在则必须是数组
+  if (obj.slides !== undefined && !Array.isArray(obj.slides)) return false
   // v1: 有 slides 字段说明是旧格式
   if (Array.isArray(obj.slides)) return true
   // 容错：允许两者都没有

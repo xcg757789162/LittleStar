@@ -115,7 +115,7 @@ describe('OpenMAICClient', () => {
       const result = await client.getClassroom('classroom-123')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:3000/api/classroom/classroom-123',
+        'http://localhost:3000/api/classroom?id=classroom-123',
         expect.objectContaining({ method: 'GET' })
       )
       expect(result.id).toBe('classroom-123')
@@ -136,36 +136,30 @@ describe('OpenMAICClient', () => {
 
   describe('getClassroomStatus', () => {
     it('should return processing status with progress', async () => {
-      const mockStatus: ClassroomStatusResponse = {
-        status: 'processing',
-        progress: 0.6,
-      }
-
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockStatus,
+        json: async () => ({ status: 'running', progress: 60 }),
       })
 
       const result = await client.getClassroomStatus('classroom-123')
 
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:3000/api/generate-classroom/classroom-123',
+        expect.objectContaining({ method: 'GET' }),
+      )
       expect(result.status).toBe('processing')
       expect(result.progress).toBe(0.6)
     })
 
     it('should return completed status with classroom data', async () => {
-      const mockStatus: ClassroomStatusResponse = {
-        status: 'completed',
-        classroom: {
-          id: 'classroom-123',
-          title: 'Test',
-          status: 'completed',
-          scenes: [],
-        },
-      }
-
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockStatus,
+        json: async () => ({
+          status: 'succeeded',
+          done: true,
+          result: { classroomId: 'classroom-123' },
+          message: 'Test',
+        }),
       })
 
       const result = await client.getClassroomStatus('classroom-123')
@@ -176,14 +170,12 @@ describe('OpenMAICClient', () => {
     })
 
     it('should return failed status with error message', async () => {
-      const mockStatus: ClassroomStatusResponse = {
-        status: 'failed',
-        error: 'LLM API quota exceeded',
-      }
-
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockStatus,
+        json: async () => ({
+          status: 'failed',
+          error: 'LLM API quota exceeded',
+        }),
       })
 
       const result = await client.getClassroomStatus('classroom-123')
@@ -195,38 +187,39 @@ describe('OpenMAICClient', () => {
 
   describe('pollUntilComplete', () => {
     it('should poll and return classroom when completed', async () => {
-      const mockClassroom: Classroom = {
+      const fullClassroom: Classroom = {
         id: 'classroom-123',
         title: 'Complete Classroom',
         status: 'completed',
         scenes: [],
       }
 
-      // First call: processing
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          status: 'processing',
-          progress: 0.5,
-        } as ClassroomStatusResponse),
+        json: async () => ({ status: 'running', progress: 50 }),
       })
-      // Second call: completed
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          status: 'completed',
-          classroom: mockClassroom,
-        } as ClassroomStatusResponse),
+          status: 'succeeded',
+          done: true,
+          result: { classroomId: 'classroom-123' },
+          message: 'Complete Classroom',
+        }),
+      })
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => fullClassroom,
       })
 
       const result = await client.pollUntilComplete('classroom-123', {
-        intervalMs: 10, // Short interval for testing
+        intervalMs: 10,
         maxAttempts: 5,
       })
 
       expect(result).toBeDefined()
       expect(result.id).toBe('classroom-123')
-      expect(mockFetch).toHaveBeenCalledTimes(2)
+      expect(mockFetch).toHaveBeenCalledTimes(3)
     })
 
     it('should throw after max attempts exceeded', async () => {
@@ -265,36 +258,33 @@ describe('OpenMAICClient', () => {
     })
 
     it('should invoke onProgress callback with progress value', async () => {
-      const mockClassroom: Classroom = {
+      const fullClassroom: Classroom = {
         id: 'classroom-456',
         title: 'Progress Classroom',
         status: 'completed',
         scenes: [],
       }
 
-      // Call 1: processing with progress 0.3
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          status: 'processing',
-          progress: 0.3,
-        } as ClassroomStatusResponse),
+        json: async () => ({ status: 'running', progress: 30 }),
       })
-      // Call 2: processing with progress 0.7
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          status: 'processing',
-          progress: 0.7,
-        } as ClassroomStatusResponse),
+        json: async () => ({ status: 'running', progress: 70 }),
       })
-      // Call 3: completed
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          status: 'completed',
-          classroom: mockClassroom,
-        } as ClassroomStatusResponse),
+          status: 'succeeded',
+          done: true,
+          result: { classroomId: 'classroom-456' },
+          message: 'Progress Classroom',
+        }),
+      })
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => fullClassroom,
       })
 
       const onProgress = vi.fn()
@@ -311,27 +301,29 @@ describe('OpenMAICClient', () => {
     })
 
     it('should not invoke onProgress when progress is undefined', async () => {
-      const mockClassroom: Classroom = {
+      const fullClassroom: Classroom = {
         id: 'classroom-789',
         title: 'No Progress Classroom',
         status: 'completed',
         scenes: [],
       }
 
-      // Call 1: processing without progress
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          status: 'processing',
-        } as ClassroomStatusResponse),
+        json: async () => ({ status: 'running' }),
       })
-      // Call 2: completed
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          status: 'completed',
-          classroom: mockClassroom,
-        } as ClassroomStatusResponse),
+          status: 'succeeded',
+          done: true,
+          result: { classroomId: 'classroom-789' },
+          message: 'No Progress Classroom',
+        }),
+      })
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => fullClassroom,
       })
 
       const onProgress = vi.fn()

@@ -174,18 +174,14 @@ export class LessonPlanner {
       const mastery = masteryMap.get(node.id!) ?? -1
 
       if (reviewNodeIds.has(node.id!)) {
-        // 在复习队列中
         reviewNodes.push(node)
       } else if (mastery < 0) {
-        // 从未学过，检查是否已解锁
-        if (this.isUnlocked(node, masteryMap)) {
-          newNodes.push(node)
-        }
+        // 从未学过 — 无论前置条件是否满足都加入预生成规划。
+        // 前置条件仅在学习入口（NativeClassroom UI）做锁定。
+        newNodes.push(node)
       } else if (mastery < this.unlockThreshold) {
-        // 学过但掌握率不够
         reviewNodes.push(node)
       } else {
-        // 已掌握，可以用于巩固
         consolidationNodes.push(node)
       }
     }
@@ -293,17 +289,6 @@ export class LessonPlanner {
     }
 
     return items
-  }
-
-  /**
-   * 检查知识点是否已解锁
-   */
-  private isUnlocked(node: KnowledgeNode, masteryMap: Map<string, number>): boolean {
-    if (node.prerequisites.length === 0) return true
-    return node.prerequisites.every((preId) => {
-      const mastery = masteryMap.get(preId) ?? 0
-      return mastery >= this.unlockThreshold
-    })
   }
 
   /**

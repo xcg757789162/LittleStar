@@ -3,8 +3,7 @@
  *
  * 保留内容：
  *   1. 孩子信息（名字+年龄） — 支持编辑
- *   2. 年级解锁条件配置 — 可调节
- *   3. AI 服务设置面板入口
+ *   2. AI 服务设置面板入口
  *
  * 设计：温暖明快的儿童向风格，圆角卡片+柔和渐变+微交互动画
  */
@@ -13,9 +12,9 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import { useChildStore } from '@/stores/childStore'
-import { useGradeUnlockStore } from '@/stores/gradeUnlockStore'
 import { SettingsDialog } from '@/components/openmaic/settings'
 import { apiClient } from '@/services/api'
+import { RequirePin } from '@/components/parent/RequirePin'
 
 /* ═══════════════════════════════════════════
    设计 Token — Warm & Playful
@@ -44,7 +43,6 @@ export function ParentSettings() {
   const navigate = useNavigate()
   const currentChild = useChildStore((s) => s.currentChild)
   const updateChild = useChildStore((s) => s.updateChild)
-  const { unlockConfig, updateUnlockConfig } = useGradeUnlockStore()
   const [showAISettings, setShowAISettings] = useState(false)
 
   // 编辑状态
@@ -117,6 +115,7 @@ export function ParentSettings() {
   }
 
   return (
+    <RequirePin title="高级设置 · 家长 PIN">
     <div
       data-testid="parent-settings"
       style={{
@@ -170,7 +169,7 @@ export function ParentSettings() {
               ⚙️ 高级设置
             </h1>
             <p style={{ fontSize: '11px', color: T.textLight, margin: '1px 0 0' }}>
-              管理孩子信息 · 年级解锁 · AI 服务
+              管理孩子信息 · AI 服务
             </p>
           </div>
         </motion.div>
@@ -363,117 +362,7 @@ export function ParentSettings() {
           </div>
         </motion.section>
 
-        {/* ═══ 2. 年级解锁条件 ═══ */}
-        <motion.section
-          data-testid="unlock-config-section"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          style={sectionStyle}
-        >
-          <p style={sectionTitleStyle}>
-            <span>🎓</span> 年级解锁条件
-          </p>
-
-          {/* 掌握度阈值 */}
-          <div style={{ marginBottom: '14px' }}>
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              marginBottom: '6px',
-            }}>
-              <label htmlFor="mastery-threshold" style={{
-                fontSize: '13px', color: T.textMedium, fontWeight: 600,
-              }}>
-                知识点掌握度阈值
-              </label>
-              <span style={{
-                fontSize: '15px', fontWeight: 'bold', color: T.sunOrange,
-                fontFamily: T.fontDisplay,
-                padding: '1px 10px', borderRadius: '10px',
-                background: `${T.sunOrange}12`,
-              }}>
-                {unlockConfig.masteryThreshold}%
-              </span>
-            </div>
-            <div style={{ position: 'relative', padding: '4px 0' }}>
-              <input
-                id="mastery-threshold"
-                data-testid="mastery-threshold-input"
-                type="range" min={50} max={100} step={5}
-                value={unlockConfig.masteryThreshold}
-                onChange={(e) => updateUnlockConfig({ masteryThreshold: Number(e.target.value) })}
-                style={{
-                  width: '100%', accentColor: T.sunOrange,
-                  height: '8px', borderRadius: '4px',
-                  cursor: 'pointer',
-                }}
-              />
-              <div style={{
-                display: 'flex', justifyContent: 'space-between',
-                fontSize: '11px', color: T.textLight, marginTop: '4px',
-              }}>
-                <span>50%</span><span>100%</span>
-              </div>
-            </div>
-          </div>
-
-          {/* 最少掌握比例 */}
-          <div style={{ marginBottom: '10px' }}>
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              marginBottom: '6px',
-            }}>
-              <label htmlFor="mastered-ratio" style={{
-                fontSize: '13px', color: T.textMedium, fontWeight: 600,
-              }}>
-                最少掌握知识点比例
-              </label>
-              <span style={{
-                fontSize: '15px', fontWeight: 'bold', color: T.grassGreen,
-                fontFamily: T.fontDisplay,
-                padding: '1px 10px', borderRadius: '10px',
-                background: `${T.grassGreen}12`,
-              }}>
-                {Math.round(unlockConfig.minMasteredRatio * 100)}%
-              </span>
-            </div>
-            <div style={{ position: 'relative', padding: '4px 0' }}>
-              <input
-                id="mastered-ratio"
-                data-testid="mastered-ratio-input"
-                type="range" min={50} max={100} step={5}
-                value={Math.round(unlockConfig.minMasteredRatio * 100)}
-                onChange={(e) => updateUnlockConfig({ minMasteredRatio: Number(e.target.value) / 100 })}
-                style={{
-                  width: '100%', accentColor: T.grassGreen,
-                  height: '8px', borderRadius: '4px',
-                  cursor: 'pointer',
-                }}
-              />
-              <div style={{
-                display: 'flex', justifyContent: 'space-between',
-                fontSize: '11px', color: T.textLight, marginTop: '4px',
-              }}>
-                <span>50%</span><span>100%</span>
-              </div>
-            </div>
-          </div>
-
-          {/* 解锁说明 */}
-          <div style={{
-            padding: '10px 12px', borderRadius: '12px',
-            background: 'linear-gradient(135deg, #FFF3E7, #FFECD2)',
-            fontSize: '12px', color: T.textMedium, lineHeight: 1.5,
-          }}>
-            💡 当孩子的知识点掌握度 ≥{' '}
-            <b style={{ color: T.sunOrange }}>{unlockConfig.masteryThreshold}%</b>{' '}
-            的比例达到{' '}
-            <b style={{ color: T.grassGreen }}>{Math.round(unlockConfig.minMasteredRatio * 100)}%</b>{' '}
-            时，将自动解锁下一年级
-          </div>
-        </motion.section>
-
-        {/* ═══ 3. AI 服务设置 ═══ */}
+        {/* ═══ 2. AI 服务设置 ═══ */}
         <motion.section
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -513,5 +402,6 @@ export function ParentSettings() {
         <SettingsDialog open={showAISettings} onOpenChange={setShowAISettings} />
       </div>
     </div>
+    </RequirePin>
   )
 }

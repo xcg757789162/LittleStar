@@ -148,8 +148,10 @@ describe('OpenMAIC Types', () => {
       expect(isScene(undefined)).toBe(false)
       expect(isScene({})).toBe(false)
       expect(isScene({ id: 'test' })).toBe(false)
-      expect(isScene({ id: 'test', title: 'Test', type: 'teaching' })).toBe(false) // missing slides
+      // v2/v1 容错：有合法 id、title、type 时即使没有 slides/content 也视为有效 Scene
+      expect(isScene({ id: 'test', title: 'Test', type: 'teaching' })).toBe(true)
       expect(isScene({ id: 'test', title: 'Test', type: 'teaching', slides: 'not-array' })).toBe(false)
+      expect(isScene({ id: 'test', title: 'Test', type: 'not-a-real-scene-type' })).toBe(false)
     })
   })
 

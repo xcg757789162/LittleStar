@@ -76,7 +76,6 @@ async function ensurePlacementTestRecord(
   token: string,
   childId: number,
   subject: Subject,
-  gradeLevel: Child['gradeLevel'],
 ) {
   const existingTest = await restGetOne<PlacementTest>(request, env, token, '/placement_tests', {
     filters: [
@@ -94,7 +93,6 @@ async function ensurePlacementTestRecord(
   return restPost<PlacementTest>(request, env, token, '/placement_tests', {
     childId,
     subject,
-    gradeLevel,
     phase: 'phase1',
     questions: [
       {
@@ -138,14 +136,13 @@ export async function seedLessonPickerUser(
   const childId = toNumericChildId(child)
   const subject = LESSON_PICKER_SUBJECT_CANDIDATES[0]
 
-  await ensurePlacementTestRecord(request, env, session.token, childId, subject, child.gradeLevel)
+  await ensurePlacementTestRecord(request, env, session.token, childId, subject)
 
   return {
     token: session.token,
     userId: session.user.id,
     childId,
     childName: child.name,
-    gradeLevel: child.gradeLevel,
     subject,
     subjectLabel: SUBJECT_LABELS[subject],
     credentials,

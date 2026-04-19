@@ -1,20 +1,27 @@
 /**
  * LittleStar 核心数据模型类型定义
+ *
+ * 年级（GradeLevel）概念已于 2026-04 下线：改以"孩子年龄 + 课程 requirement_spec"
+ * 作为难度锚点，课程按需通过 Socratic 初始化 + 课程链动态续作来衔接难度。
  */
 
-/** 年级等级 */
-export type GradeLevel =
-  | 'middle-kindergarten'   // 中班 (4-5岁)
-  | 'senior-kindergarten'   // 大班 (5-6岁)
-  | 'grade-1'              // 一年级 (6-7岁)
-  | 'grade-2'              // 二年级 (7-8岁)
-  | 'grade-3'              // 三年级 (8-9岁)
-  | 'grade-4'              // 四年级 (9-10岁)
-  | 'grade-5'              // 五年级 (10-11岁)
-  | 'grade-6'              // 六年级 (11-12岁)
+/**
+ * 科目 slug
+ *
+ * 历史上只有 'math' | 'chinese' | 'english' 三个字面量，新的热拔插课程体系下，
+ * 任何 `api.courses.slug` 值都是合法 Subject（如 'biology' / 'finance' / 'trigonometry'）。
+ * 保留 BUILTIN_SUBJECTS 作为预置回退。
+ */
+export type Subject = string
 
-/** 科目 */
-export type Subject = 'math' | 'chinese' | 'english'
+/** 预置系统课程 slug（与 api.courses.is_system=TRUE 的种子数据对应） */
+export const BUILTIN_SUBJECTS = ['math', 'chinese', 'english'] as const
+export type BuiltinSubject = typeof BUILTIN_SUBJECTS[number]
+
+/** 判断是否为预置课程 slug */
+export function isBuiltinSubject(s: string): s is BuiltinSubject {
+  return (BUILTIN_SUBJECTS as readonly string[]).includes(s)
+}
 
 /** 题目类型 */
 export type QuestionType = 'flashcard' | 'multiple-choice' | 'handwriting' | 'voice'
@@ -212,7 +219,6 @@ export interface Child {
   name: string
   avatar: string
   age: number
-  gradeLevel: GradeLevel
   createdAt: Date
   settings: ChildSettings
 }
@@ -221,7 +227,6 @@ export interface Child {
 export interface KnowledgeNode {
   id?: string
   subject: Subject
-  gradeLevel: GradeLevel
   name: string
   description: string
   prerequisites: string[] // 前置知识点 ID
@@ -316,7 +321,6 @@ export interface Question {
 export interface QuestionTemplate {
   id?: string
   subject: Subject
-  gradeLevel: GradeLevel
   knowledgeNodeId: string
   templateType: string
   prompt: string
@@ -394,26 +398,7 @@ export interface ClassroomHistory {
   lessonIndex: number
 }
 
-// ===== Phase 2: 年级解锁 + 入学测评 + 学习报告 =====
-
-/** 年级解锁配置 */
-export interface UnlockConfig {
-  /** 解锁掌握度阈值（默认 80） */
-  masteryThreshold: number
-  /** 最少掌握知识点比例（默认 0.8） */
-  minMasteredRatio: number
-}
-
-/** 年级解锁记录 — 每个孩子每个科目独立追踪 */
-export interface GradeUnlock {
-  id?: string
-  childId: string
-  subject: Subject
-  gradeLevel: GradeLevel
-  unlockedAt: Date
-  masteryAtUnlock: number
-  placementTestId?: string
-}
+// ===== 入学测评 =====
 
 /** 评测阶段 */
 export type PlacementPhase = 'single' | 'phase1' | 'phase2'
@@ -423,7 +408,6 @@ export interface PlacementTest {
   id?: string
   childId: string
   subject: Subject
-  gradeLevel: GradeLevel
   questions: PlacementQuestion[]
   startedAt: Date
   completedAt?: Date
@@ -543,79 +527,6 @@ export interface PlacementResult {
   masteredNodes: string[]
   startingNodes: string[]
   overallScore: number // 0-100
-}
-
-/** 学习报告数据（聚合缓存） */
-export interface ReportData {
-  id?: string
-  childId: string
-  type: 'weekly' | 'monthly'
-  gradeLevel: GradeLevel
-  subject?: Subject
-  periodStart: string // YYYY-MM-DD
-  periodEnd: string
-  metrics: ReportMetrics
-  generatedAt: Date
-}
-
-/** 报告指标 */
-export interface ReportMetrics {
-  /** 总学习时长（分钟） */
-  totalLearningMinutes: number
-  /** 每天学习时长（分钟） */
-  dailyLearningMinutes: number[]
-  /** 知识点掌握趋势 */
-  knowledgeMastery: KnowledgeMasteryTrend[]
-  /** 成就列表 */
-  achievements: ReportAchievement[]
-  /** 薄弱知识点 */
-  weakPoints: WeakPoint[]
-  /** 年级进度 */
-  gradeProgress: GradeProgress
-}
-
-/** 知识点掌握趋势 */
-export interface KnowledgeMasteryTrend {
-  nodeId: string
-  nodeName: string
-  startLevel: number
-  endLevel: number
-  trend: 'up' | 'down' | 'stable'
-}
-
-/** 报告中的成就 */
-export interface ReportAchievement {
-  name: string
-  earnedAt: Date
-}
-
-/** 薄弱知识点 */
-export interface WeakPoint {
-  nodeId: string
-  nodeName: string
-  masteryLevel: number
-  suggestion: string
-}
-
-/** 年级进度 */
-export interface GradeProgress {
-  totalNodes: number
-  masteredNodes: number
-  percentage: number
-  estimatedCompletionDays?: number
-}
-
-/** 掌握度每日快照 */
-export interface MasterySnapshot {
-  id?: string
-  childId: string
-  date: string // YYYY-MM-DD
-  subject: Subject
-  gradeLevel: GradeLevel
-  /** 各知识点掌握度 */
-  nodesMastery: Record<string, number>
-  /** 平均掌握度 */
-  averageMastery: number
 }
 
 // ===== MiniMax 音色与预设角色 =====

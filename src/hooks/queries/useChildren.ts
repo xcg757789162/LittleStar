@@ -43,7 +43,6 @@ export interface CreateChildInput {
   name: string
   avatar: string
   age: number
-  gradeLevel: string
   settings: ChildSettings
 }
 

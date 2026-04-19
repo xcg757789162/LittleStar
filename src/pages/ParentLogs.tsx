@@ -13,6 +13,7 @@ import {
   type LogEntry,
 } from '@/lib/openmaic/logger'
 import { useChildStore } from '@/stores/childStore'
+import { RequirePin } from '@/components/parent/RequirePin'
 
 const T = {
   fontDisplay: "'Baloo 2', 'Nunito', sans-serif",
@@ -164,6 +165,7 @@ export function ParentLogs() {
   }, [filteredEntries])
 
   return (
+    <RequirePin title="系统日志 · 家长 PIN">
     <div style={{
       minHeight: '100vh', fontFamily: T.fontBody,
       background: 'linear-gradient(170deg, #FFF8E7 0%, #FFE8D6 30%, #FFDEE9 60%, #D4F1F9 100%)',
@@ -393,5 +395,6 @@ export function ParentLogs() {
         </div>
       </div>
     </div>
+    </RequirePin>
   )
 }

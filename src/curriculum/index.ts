@@ -4,27 +4,18 @@
  * 从 PostgREST API 加载课程大纲数据（curricula → modules → nodes 三级结构），
  * 通过内存 Map 缓存避免重复请求。
  *
- * 替代原先的 Vite 动态 import 方式，数据源从 TS 文件迁移到 PostgreSQL 数据库。
+ * 年级维度已下线：每个 subject 对应唯一一条 curricula 行（DB UNIQUE(subject)）。
  */
 
-import type { GradeLevel, Subject } from '@/types/models'
+import type { Subject } from '@/types/models'
 import type { GradeCurriculum, CurriculumModule, CurriculumTemplatePrompt } from './types'
 import { apiClient } from '@/services/api'
 import type { Curriculum, CurriculumModuleApi, CurriculumNodeApi } from '@/services/api/types'
 
 export type { GradeCurriculum, CurriculumModule, CurriculumKnowledgeNode, CurriculumTemplatePrompt } from './types'
 
-/** 大纲缓存（避免重复加载） */
 const curriculumCache = new Map<string, GradeCurriculum>()
 
-/** 生成缓存 key */
-function getCacheKey(gradeLevel: GradeLevel, subject: Subject): string {
-  return `${gradeLevel}:${subject}`
-}
-
-/**
- * 将 API 响应转换为前端 GradeCurriculum 类型
- */
 function toGradeCurriculum(data: Curriculum): GradeCurriculum {
   const modules: CurriculumModule[] = (data.curriculumModules ?? [])
     .sort((a: CurriculumModuleApi, b: CurriculumModuleApi) => a.orderIndex - b.orderIndex)
@@ -45,7 +36,6 @@ function toGradeCurriculum(data: Curriculum): GradeCurriculum {
     }))
 
   return {
-    gradeLevel: data.gradeLevel as GradeLevel,
     subject: data.subject as Subject,
     version: data.version,
     reference: data.reference,
@@ -54,32 +44,21 @@ function toGradeCurriculum(data: Curriculum): GradeCurriculum {
 }
 
 /**
- * 按需加载指定年级和科目的知识点大纲
- * 从 PostgREST API 加载，利用嵌套 select 一次获取三级数据。
- * 已加载的大纲会被缓存。
+ * 按需加载指定学科的知识点大纲
  *
- * @param gradeLevel 年级
- * @param subject 科目
- * @returns 大纲数据，加载失败时返回 null
+ * @param subject 学科 slug（对应 api.courses.slug / api.curricula.subject）
+ * @returns 大纲数据；不存在或 API 失败时返回 null
  */
-export async function loadCurriculum(
-  gradeLevel: GradeLevel,
-  subject: Subject,
-): Promise<GradeCurriculum | null> {
-  const cacheKey = getCacheKey(gradeLevel, subject)
-
-  // 检查缓存
-  const cached = curriculumCache.get(cacheKey)
+export async function loadCurriculum(subject: Subject): Promise<GradeCurriculum | null> {
+  const cached = curriculumCache.get(subject)
   if (cached) return cached
 
   try {
-    // 从 API 加载（PostgREST 嵌套 select），添加 8 秒超时
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 8000)
 
     const data = await apiClient.getOne<Curriculum>('/curricula', {
       filters: [
-        { column: 'gradeLevel', operator: 'eq', value: gradeLevel },
         { column: 'subject', operator: 'eq', value: subject },
         { column: 'isActive', operator: 'eq', value: true },
       ],
@@ -88,25 +67,16 @@ export async function loadCurriculum(
 
     clearTimeout(timeout)
 
-    if (!data) {
-      return null
-    }
+    if (!data) return null
 
     const curriculum = toGradeCurriculum(data)
-
-    // 缓存
-    curriculumCache.set(cacheKey, curriculum)
-
+    curriculumCache.set(subject, curriculum)
     return curriculum
   } catch {
-    // API 不可达、超时或其他错误 → 返回 null
     return null
   }
 }
 
-/**
- * 清除大纲缓存（测试用）
- */
 export function clearCurriculumCache(): void {
   curriculumCache.clear()
 }

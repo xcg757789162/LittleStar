@@ -14,8 +14,10 @@ import { ClassroomCache } from '@/services/openmaic/cache'
 import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
 import { OpenMAICClient } from '@/services/openmaic/client'
 import { PinVerification } from '@/components/parent/PinVerification'
+import { isParentPinUnlocked, markParentPinUnlocked } from '@/components/parent/RequirePin'
+import { useCourses } from '@/hooks/queries/useCourses'
 
-import type { Subject, DailySession, KnowledgeNode, MasteryRecord } from '@/types/models'
+import type { DailySession, KnowledgeNode, MasteryRecord } from '@/types/models'
 
 /* ═══════════════════════════════════════════
    设计 Token
@@ -43,14 +45,24 @@ const T = {
 }
 
 interface SubjectMastery {
-  subject: Subject; label: string; emoji: string; color: string; mastery: number
+  subject: string
+  label: string
+  emoji: string
+  color: string
+  mastery: number
 }
 
-const SUBJECT_CONFIG: Omit<SubjectMastery, 'mastery'>[] = [
-  { subject: 'math', label: '数学', emoji: '🔢', color: T.sunOrange },
-  { subject: 'chinese', label: '语文', emoji: '📖', color: T.grassGreen },
-  { subject: 'english', label: '英语', emoji: '🌍', color: T.skyBlue },
-]
+function avgMasteryForSubject(
+  slug: string,
+  allNodes: KnowledgeNode[],
+  recordMap: Map<string, number>,
+): number {
+  const nodeIds = allNodes.filter((n) => n.subject === slug).map((n) => n.id).filter(Boolean) as string[]
+  if (nodeIds.length === 0) return 0
+  const levels = nodeIds.map((id) => recordMap.get(id)).filter((v): v is number => v !== undefined)
+  if (levels.length === 0) return 0
+  return Math.round(levels.reduce((a, b) => a + b, 0) / levels.length)
+}
 
 interface DailyStats { durationMinutes: number; questionsCompleted: number; accuracy: number }
 
@@ -63,9 +75,13 @@ export function ParentDashboard() {
   const navigate = useNavigate()
   const logout = useAuthStore((s) => s.logout)
   const user = useAuthStore((s) => s.user)
+  const currentChild = useChildStore((s) => s.currentChild)
+  const childIdNum = currentChild?.id != null ? Number(currentChild.id) : undefined
+  const { data: courseList } = useCourses({ childId: childIdNum })
   const [stats, setStats] = useState<DailyStats>({ durationMinutes: 0, questionsCompleted: 0, accuracy: 0 })
   const [cachedCount, setCachedCount] = useState(0)
   const [showPinVerify, setShowPinVerify] = useState(false)
+  const [showPinForLogout, setShowPinForLogout] = useState(false)
   const [isAdvancedUnlocked, setIsAdvancedUnlocked] = useState(false)
   const [savedPin, setSavedPin] = useState<string | null>(() => user?.parentPin ?? null)
   const [serviceOnline, setServiceOnline] = useState<boolean | null>(null)
@@ -159,7 +175,11 @@ export function ParentDashboard() {
           try {
             const child = useChildStore.getState().currentChild
             if (!child) return
-            // 一次性拉取所有科目的 knowledge_nodes 和 mastery_records
+            const ready = (courseList || []).filter((c) => c.status === 'ready')
+            if (!ready.length) {
+              setSubjectMasteries([])
+              return
+            }
             const [allNodes, allRecords] = await Promise.all([
               apiClient.get<KnowledgeNode>('/knowledge_nodes', { select: 'id,subject' }),
               apiClient.get<MasteryRecord>('/mastery_records', {
@@ -168,13 +188,13 @@ export function ParentDashboard() {
               }),
             ])
             const recordMap = new Map(allRecords.map((r) => [r.knowledgeNodeId, r.masteryLevel]))
-            const masteryData: SubjectMastery[] = SUBJECT_CONFIG.map((config) => {
-              const nodeIds = allNodes.filter((n) => n.subject === config.subject).map((n) => n.id).filter(Boolean) as string[]
-              if (nodeIds.length === 0) return { ...config, mastery: 0 }
-              const levels = nodeIds.map((id) => recordMap.get(id)).filter((v): v is number => v !== undefined)
-              if (levels.length === 0) return { ...config, mastery: 0 }
-              return { ...config, mastery: Math.round(levels.reduce((a, b) => a + b, 0) / levels.length) }
-            })
+            const masteryData: SubjectMastery[] = ready.map((c) => ({
+              subject: c.slug,
+              label: c.name,
+              emoji: c.emoji,
+              color: c.colorHex,
+              mastery: avgMasteryForSubject(c.slug, allNodes, recordMap),
+            }))
             setSubjectMasteries(masteryData)
           } catch { /* ignore */ }
         }
@@ -184,7 +204,7 @@ export function ParentDashboard() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [])
+  }, [courseList])
 
   // 课堂完成事件监听：学完课堂后自动刷新统计数据和缓存数量
   useEffect(() => {
@@ -239,7 +259,11 @@ export function ParentDashboard() {
       try {
         const child = useChildStore.getState().currentChild
         if (!child) return
-        // 一次性拉取（而非每科目重复 3 次），只查必要列
+        const ready = (courseList || []).filter((c) => c.status === 'ready')
+        if (!ready.length) {
+          setSubjectMasteries([])
+          return
+        }
         const [allNodes, allRecords] = await Promise.all([
           apiClient.get<KnowledgeNode>('/knowledge_nodes', { select: 'id,subject' }),
           apiClient.get<MasteryRecord>('/mastery_records', {
@@ -248,18 +272,18 @@ export function ParentDashboard() {
           }),
         ])
         const recordMap = new Map(allRecords.map((r) => [r.knowledgeNodeId, r.masteryLevel]))
-        const masteryData: SubjectMastery[] = SUBJECT_CONFIG.map((config) => {
-          const nodeIds = allNodes.filter((n) => n.subject === config.subject).map((n) => n.id).filter(Boolean) as string[]
-          if (nodeIds.length === 0) return { ...config, mastery: 0 }
-          const levels = nodeIds.map((id) => recordMap.get(id)).filter((v): v is number => v !== undefined)
-          if (levels.length === 0) return { ...config, mastery: 0 }
-          return { ...config, mastery: Math.round(levels.reduce((a, b) => a + b, 0) / levels.length) }
-        })
+        const masteryData: SubjectMastery[] = ready.map((c) => ({
+          subject: c.slug,
+          label: c.name,
+          emoji: c.emoji,
+          color: c.colorHex,
+          mastery: avgMasteryForSubject(c.slug, allNodes, recordMap),
+        }))
         setSubjectMasteries(masteryData)
       } catch { /* ignore */ }
     }
-    loadSubjectMasteries()
-  }, [])
+    void loadSubjectMasteries()
+  }, [courseList, currentChild?.id])
 
   const handlePinVerify = useCallback((isCorrect: boolean) => {
     if (isCorrect) {
@@ -289,6 +313,23 @@ export function ParentDashboard() {
 
   const handlePinCancel = useCallback(() => setShowPinVerify(false), [])
 
+  const runLogout = useCallback(() => {
+    if (window.confirm('确定要退出登录吗？')) logout()
+  }, [logout])
+
+  const onHeaderLogoutClick = useCallback(() => {
+    const pin = user?.parentPin ?? ''
+    if (!pin) {
+      runLogout()
+      return
+    }
+    if (isParentPinUnlocked()) {
+      runLogout()
+      return
+    }
+    setShowPinForLogout(true)
+  }, [user?.parentPin, runLogout])
+
   const STAT_CARDS = [
     { key: 'duration', value: `${stats.durationMinutes}分`, label: '今日学习', emoji: '⏰', bg: 'linear-gradient(135deg, #FFE0C2, #FFECD2)', color: T.sunOrange },
     { key: 'completed', value: `${stats.questionsCompleted}题`, label: '完成题数', emoji: '📝', bg: 'linear-gradient(135deg, #C8F7F1, #DEFFF9)', color: T.grassGreen },
@@ -316,7 +357,7 @@ export function ParentDashboard() {
           <motion.button
             data-testid="header-logout-btn"
             whileTap={{ scale: 0.95 }}
-            onClick={() => { if (window.confirm('确定要退出登录吗？')) logout() }}
+            onClick={onHeaderLogoutClick}
             style={{
               padding: '6px 14px', borderRadius: '16px',
               border: `1.5px solid ${T.errorRed}33`,
@@ -411,7 +452,12 @@ export function ParentDashboard() {
       {subjectMasteries.length > 0 && (
         <div
           data-testid="subject-masteries"
-          style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))',
+            gap: '12px',
+            marginBottom: '24px',
+          }}
         >
           {subjectMasteries.map((sm) => (
             <motion.div
@@ -436,23 +482,6 @@ export function ParentDashboard() {
           ))}
         </div>
       )}
-
-      {/* 学习报告入口 */}
-      <motion.button
-        data-testid="reports-btn"
-        whileTap={{ scale: 0.97 }}
-        onClick={() => navigate('/reports')}
-        style={{
-          width: '100%', padding: '16px', borderRadius: '18px',
-          border: '2px solid #FFE8D6', backgroundColor: T.cardBg,
-          cursor: 'pointer', display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between', fontSize: '16px', color: T.textDark,
-          fontFamily: T.fontBody, fontWeight: 600, marginBottom: '12px',
-        }}
-      >
-        <span>📊 学习报告</span>
-        <span style={{ color: T.sunOrange }}>→</span>
-      </motion.button>
 
       {/* 系统日志入口 */}
       <motion.button
@@ -505,22 +534,21 @@ export function ParentDashboard() {
         />
       )}
 
-      {/* 退出登录 */}
-      <motion.button
-        data-testid="logout-btn"
-        whileTap={{ scale: 0.95 }}
-        onClick={() => { if (window.confirm('确定要退出登录吗？')) logout() }}
-        style={{
-          width: '100%', padding: '16px', borderRadius: '18px',
-          border: `2px solid ${T.errorRed}33`,
-          backgroundColor: T.cardBg, color: T.errorRed,
-          fontSize: '16px', fontWeight: 'bold',
-          fontFamily: T.fontDisplay, cursor: 'pointer',
-          marginTop: '24px', marginBottom: '32px',
-        }}
-      >
-        👋 退出登录
-      </motion.button>
+      {showPinForLogout && (
+        <PinVerification
+          correctPin={savedPin ?? ''}
+          mode={savedPin ? 'verify' : 'setup'}
+          onVerify={(ok) => {
+            if (!ok) return
+            markParentPinUnlocked()
+            setShowPinForLogout(false)
+            runLogout()
+          }}
+          onCancel={() => setShowPinForLogout(false)}
+          onSetPin={handleSetPin}
+          maxAttempts={5}
+        />
+      )}
     </div>
   )
 }

@@ -7,6 +7,14 @@ import { buildHeadersFromSettings } from '../headers-builder'
 import type { ChildSettings } from '@/types/models'
 import { PRESET_AGENTS } from '@/types/models'
 
+function parseAgentProfiles(headers: Record<string, string>): unknown[] {
+  const raw = headers['x-agent-profiles']
+  if (headers['x-agent-profiles-encoding'] === 'base64') {
+    return JSON.parse(Buffer.from(raw, 'base64').toString('utf-8')) as unknown[]
+  }
+  return JSON.parse(raw) as unknown[]
+}
+
 /** 创建完整的测试用 ChildSettings */
 function createTestSettings(overrides: Partial<ChildSettings> = {}): ChildSettings {
   return {
@@ -48,7 +56,7 @@ describe('Headers Builder — 角色配置 Headers', () => {
         selectedAgents: ['assistant', 'showoff'],
       })
       const headers = buildHeadersFromSettings(settings)
-      const profiles = JSON.parse(headers['x-agent-profiles'])
+      const profiles = parseAgentProfiles(headers)
       expect(profiles).toHaveLength(3) // teacher + assistant + showoff
       expect(profiles[0].id).toBe('teacher')
       expect(profiles[1].id).toBe('assistant')
@@ -62,7 +70,7 @@ describe('Headers Builder — 角色配置 Headers', () => {
         agentVoiceMap: { assistant: 'male-qn-daxuesheng' },
       })
       const headers = buildHeadersFromSettings(settings)
-      const profiles = JSON.parse(headers['x-agent-profiles'])
+      const profiles = parseAgentProfiles(headers)
       const assistantProfile = profiles.find((p: { id: string }) => p.id === 'assistant')
       expect(assistantProfile.voiceId).toBe('male-qn-daxuesheng')
     })
@@ -74,7 +82,7 @@ describe('Headers Builder — 角色配置 Headers', () => {
         agentVoiceMap: {},
       })
       const headers = buildHeadersFromSettings(settings)
-      const profiles = JSON.parse(headers['x-agent-profiles'])
+      const profiles = parseAgentProfiles(headers)
       const assistantProfile = profiles.find((p: { id: string }) => p.id === 'assistant')
       const assistantAgent = PRESET_AGENTS.find(a => a.id === 'assistant')!
       expect(assistantProfile.voiceId).toBe(assistantAgent.defaultVoice)
@@ -86,7 +94,7 @@ describe('Headers Builder — 角色配置 Headers', () => {
         teacherVoice: 'female-yujie',
       })
       const headers = buildHeadersFromSettings(settings)
-      const profiles = JSON.parse(headers['x-agent-profiles'])
+      const profiles = parseAgentProfiles(headers)
       expect(profiles[0].voiceId).toBe('female-yujie')
     })
 
@@ -96,7 +104,7 @@ describe('Headers Builder — 角色配置 Headers', () => {
         teacherVoice: '',
       })
       const headers = buildHeadersFromSettings(settings)
-      const profiles = JSON.parse(headers['x-agent-profiles'])
+      const profiles = parseAgentProfiles(headers)
       const teacherAgent = PRESET_AGENTS.find(a => a.id === 'teacher')!
       expect(profiles[0].voiceId).toBe(teacherAgent.defaultVoice)
     })
@@ -107,7 +115,7 @@ describe('Headers Builder — 角色配置 Headers', () => {
         selectedAgents: [],
       })
       const headers = buildHeadersFromSettings(settings)
-      const profiles = JSON.parse(headers['x-agent-profiles'])
+      const profiles = parseAgentProfiles(headers)
       expect(profiles).toHaveLength(1)
       expect(profiles[0].id).toBe('teacher')
     })
@@ -118,7 +126,7 @@ describe('Headers Builder — 角色配置 Headers', () => {
         selectedAgents: ['curious'],
       })
       const headers = buildHeadersFromSettings(settings)
-      const profiles = JSON.parse(headers['x-agent-profiles'])
+      const profiles = parseAgentProfiles(headers)
       profiles.forEach((profile: Record<string, unknown>) => {
         expect(profile).toHaveProperty('id')
         expect(profile).toHaveProperty('name')

@@ -1,13 +1,14 @@
 /**
  * 知识点大纲体系类型定义
- * 参考教育部 2022 年版课程标准
+ *
+ * 年级维度已下线（2026-04），按 subject 唯一匹配一份大纲。难度/学段由
+ * requirement_spec（按年龄/目标水平）承载，不再由 gradeLevel 承载。
  */
 
-import type { GradeLevel, Subject, ContentType, QuestionType } from '@/types/models'
+import type { Subject, ContentType, QuestionType } from '@/types/models'
 
-/** 年级大纲定义 */
+/** 学科大纲定义 */
 export interface GradeCurriculum {
-  gradeLevel: GradeLevel
   subject: Subject
   /** 大纲版本（如 '2022-v1'） */
   version: string

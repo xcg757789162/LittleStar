@@ -24,7 +24,8 @@ import { syncSettingsToOpenMAIC } from '@/stores/openmaic/settings-sync';
 import { ClassroomCache, type CacheListItem } from '@/services/openmaic/cache';
 import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store';
 import { usePlacementTests } from '@/hooks/queries';
-import { usePreGeneration, buildPreGenerationChildSettings } from '@/hooks/usePreGeneration';
+import { useCourses } from '@/hooks/queries/useCourses';
+import { usePreGeneration, buildPreGenerationChildSettings, isRateLimitMessage } from '@/hooks/usePreGeneration';
 import { useChildStore } from '@/stores/childStore';
 import { useLearningStore } from '@/stores/learningStore';
 import { SessionSummary } from '@/components/learning/SessionSummary';
@@ -33,7 +34,7 @@ import { CelebrationAnimation } from '@/components/feedback/CelebrationAnimation
 import { useSoundEffects } from '@/hooks/useSoundEffects';
 import { useAudioActivation } from '@/hooks/useAudioActivation';
 import { apiClient } from '@/services/api';
-import type { Subject, Achievement } from '@/types/models';
+import type { Subject, Achievement, KnowledgeNode } from '@/types/models';
 import type { Classroom } from '@/services/openmaic/types';
 import type { CelebrationLevel } from '@/components/feedback/CelebrationAnimation';
 
@@ -83,11 +84,35 @@ const T = {
   englishShadow: 'rgba(91, 192, 235, 0.3)',
 };
 
-const SUBJECTS: { key: Subject; label: string; emoji: string; color: string; bg: string; shadow: string }[] = [
-  { key: 'math', label: '数学', emoji: '🔢', color: T.mathColor, bg: T.mathBg, shadow: T.mathShadow },
-  { key: 'chinese', label: '语文', emoji: '📖', color: T.chineseColor, bg: T.chineseBg, shadow: T.chineseShadow },
-  { key: 'english', label: '英语', emoji: '🔤', color: T.englishColor, bg: T.englishBg, shadow: T.englishShadow },
-];
+interface SubjectCardModel {
+  key: Subject;
+  label: string;
+  emoji: string;
+  color: string;
+  bg: string;
+  shadow: string;
+}
+
+/** 预置三科的精调主题（保留视觉记忆） */
+const BUILTIN_SUBJECT_THEME: Record<string, { color: string; bg: string; shadow: string; emoji: string; label: string }> = {
+  math: { color: T.mathColor, bg: T.mathBg, shadow: T.mathShadow, emoji: '🔢', label: '数学' },
+  chinese: { color: T.chineseColor, bg: T.chineseBg, shadow: T.chineseShadow, emoji: '📖', label: '语文' },
+  english: { color: T.englishColor, bg: T.englishBg, shadow: T.englishShadow, emoji: '🔤', label: '英语' },
+};
+
+/** 动态课程：从 colorHex 派生主题 */
+function deriveThemeFromHex(hex: string): { color: string; bg: string; shadow: string } {
+  const match = /^#?([0-9a-fA-F]{6})$/.exec((hex || '').trim());
+  const clean = match ? match[1] : 'f4b66b';
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return {
+    color: `#${clean}`,
+    bg: `linear-gradient(135deg, rgba(${r},${g},${b},0.18) 0%, rgba(${Math.min(r + 30, 255)},${Math.min(g + 30, 255)},${Math.min(b + 30, 255)},0.14) 100%)`,
+    shadow: `rgba(${r},${g},${b},0.3)`,
+  };
+}
 
 interface LocationState {
   subject?: Subject;
@@ -105,11 +130,41 @@ export function NativeClassroom() {
   const childId = currentChild?.id;
 
   const { data: placementTests } = usePlacementTests(childId);
+  const { data: courses } = useCourses();
   const completedSubjects = useMemo(() => {
     if (!placementTests) return new Set<Subject>();
     return new Set(placementTests.map((t) => t.subject as Subject));
   }, [placementTests]);
   const hasPlacementTest = placementTests ? placementTests.length > 0 : null;
+
+  /** 动态 subject 卡片：展示所有 ready 课程（系统 + 用户热拔插），与系统课完全平等 */
+  const subjectCards = useMemo<SubjectCardModel[]>(() => {
+    if (!courses) return [];
+    return courses
+      .filter((c) => c.status === 'ready')
+      .map((c) => {
+        const builtin = BUILTIN_SUBJECT_THEME[c.slug];
+        if (builtin) {
+          return {
+            key: c.slug as Subject,
+            label: builtin.label,
+            emoji: builtin.emoji,
+            color: builtin.color,
+            bg: builtin.bg,
+            shadow: builtin.shadow,
+          };
+        }
+        const theme = deriveThemeFromHex(c.colorHex);
+        return {
+          key: c.slug as Subject,
+          label: c.name,
+          emoji: c.emoji || '✨',
+          color: theme.color,
+          bg: theme.bg,
+          shadow: theme.shadow,
+        };
+      });
+  }, [courses]);
 
   // 页面状态
   const [phase, setPhase] = useState<Phase>(locationState?.subject ? 'lesson-picker' : 'subject-select');
@@ -120,6 +175,7 @@ export function NativeClassroom() {
   const [showCompleteCelebration, setShowCompleteCelebration] = useState(false);
   const [sessionSummary, setSessionSummary] = useState<{ questionsCompleted: number; correctCount: number; accuracy: number; subject: Subject } | null>(null);
   const [completedLessons, setCompletedLessons] = useState<CompletedLesson[]>([]);
+  const [knowledgeNodes, setKnowledgeNodes] = useState<KnowledgeNode[]>([]);
 
   // 选择模式（用于重新生成）
   const [selectMode, setSelectMode] = useState(false);
@@ -149,7 +205,7 @@ export function NativeClassroom() {
   // Filter out lessons that already appear in completedLessons to avoid
   // showing the same lesson in both "即将学习" and "已学完" sections.
   // 必须用 knowledgeNodeId+lessonIndex 匹配；仅用 knowledgeNodeId 会把同点多课时全部误隐藏
-  const pendingLessons = useMemo(() => {
+  const pendingLessonsRaw = useMemo(() => {
     if (completedLessons.length === 0) return cachedLessons;
     const completedKeys = new Set(
       completedLessons.map((l) => `${l.knowledgeNodeId}|${l.lessonIndex ?? 1}`),
@@ -160,9 +216,73 @@ export function NativeClassroom() {
   const preGeneration = usePreGeneration(
     childId,
     hasPlacementTest,
-    pendingLessons.length,
+    pendingLessonsRaw.length,
     completedSubjects.size,
   );
+
+  // 前置条件锁定策略：
+  // - 只有当「前置知识点已经进入用户学习视野」（即已有缓存课堂或已完成历史）但尚未掌握时，
+  //   才锁定当前知识点；
+  // - 如果前置知识点根本还没有被生成或没有历史，不视为障碍（允许用户按实际可学范围学习）。
+  // 这样热拔插课程首批生成的课时可以立刻开始学习，不会因为前置链条尚未预生成而被锁死。
+  const lockedNodeIds = useMemo(() => {
+    if (knowledgeNodes.length === 0) return new Set<string>();
+    const completedByNode = new Map<string, Set<number>>();
+    for (const l of completedLessons) {
+      if (!completedByNode.has(l.knowledgeNodeId)) completedByNode.set(l.knowledgeNodeId, new Set());
+      completedByNode.get(l.knowledgeNodeId)!.add(l.lessonIndex);
+    }
+    const cachedNodeIds = new Set<string>();
+    for (const lesson of cachedLessons) {
+      cachedNodeIds.add(lesson.knowledgeNodeId);
+    }
+    const nodeMap = new Map(knowledgeNodes.map((n) => [n.id!, n]));
+    const isMastered = (nodeId: string): boolean => {
+      const node = nodeMap.get(nodeId);
+      if (!node) return false;
+      const total = node.totalLessons ?? 0;
+      if (total <= 0) return (completedByNode.get(nodeId)?.size ?? 0) > 0;
+      return (completedByNode.get(nodeId)?.size ?? 0) >= total;
+    };
+    const isVisibleToLearner = (nodeId: string): boolean => {
+      return cachedNodeIds.has(nodeId) || completedByNode.has(nodeId);
+    };
+    const locked = new Set<string>();
+    for (const node of knowledgeNodes) {
+      if (!node.id || !node.prerequisites?.length) continue;
+      const blockingPrereq = node.prerequisites.find(
+        (prereqId) => isVisibleToLearner(prereqId) && !isMastered(prereqId),
+      );
+      if (blockingPrereq) locked.add(node.id);
+    }
+    return locked;
+  }, [knowledgeNodes, completedLessons, cachedLessons]);
+
+  // 课程学习的期望顺序：先按知识点 topoRank（由后端规划时定义的 order/difficulty），
+  // 再按 lessonIndex；为防止视觉错乱（"1,2,3 锁，4,5 解锁"），我们把未锁课程排到最前。
+  const pendingLessons = useMemo(() => {
+    const nodeOrderMap = new Map<string, number>();
+    knowledgeNodes.forEach((n, i) => {
+      if (n.id) nodeOrderMap.set(n.id, i);
+    });
+    const byNodeOrder = (a: CacheListItem, b: CacheListItem) => {
+      const ra = nodeOrderMap.get(a.knowledgeNodeId) ?? Number.MAX_SAFE_INTEGER;
+      const rb = nodeOrderMap.get(b.knowledgeNodeId) ?? Number.MAX_SAFE_INTEGER;
+      if (ra !== rb) return ra - rb;
+      if (a.knowledgeNodeId !== b.knowledgeNodeId) {
+        return a.knowledgeNodeId.localeCompare(b.knowledgeNodeId);
+      }
+      return (a.lessonIndex ?? 1) - (b.lessonIndex ?? 1);
+    };
+    // 先把已解锁的排到前面，再按节点顺序+课时号排序；
+    // 同组内保持稳定顺序，避免随着缓存写入时序抖动。
+    return [...pendingLessonsRaw].sort((a, b) => {
+      const la = lockedNodeIds.has(a.knowledgeNodeId) ? 1 : 0;
+      const lb = lockedNodeIds.has(b.knowledgeNodeId) ? 1 : 0;
+      if (la !== lb) return la - lb;
+      return byNodeOrder(a, b);
+    });
+  }, [pendingLessonsRaw, lockedNodeIds, knowledgeNodes]);
 
   // 追踪当前课堂的知识点 ID 和课时序号
   const currentNodeIdRef = useRef<string>('');
@@ -181,7 +301,7 @@ export function NativeClassroom() {
   const loadLessons = useCallback(async (subject: Subject) => {
     setIsLoading(true);
     try {
-      const [list, history] = await Promise.all([
+      const [list, history, nodes] = await Promise.all([
         cacheRef.current!.listCachedClassrooms(undefined, subject),
         childId
           ? apiClient.get<CompletedLesson>('/classroom_history', {
@@ -193,13 +313,19 @@ export function NativeClassroom() {
               select: 'id,knowledgeNodeId:knowledge_node_id,knowledgeNodeName:knowledge_node_name,subject,classroomTitle:classroom_title,date,lessonIndex:lesson_index,completedAt:completed_at,round,questionsCompleted:questions_completed,correctCount:correct_count,accuracy',
             })
           : Promise.resolve([]),
+        apiClient.get<KnowledgeNode>('/knowledge_nodes', {
+          filters: [{ column: 'subject', operator: 'eq', value: subject }],
+          select: 'id,prerequisites,total_lessons',
+        }),
       ]);
       setCachedLessons(list);
       setCompletedLessons(history);
+      setKnowledgeNodes(nodes);
       setPhase('lesson-picker');
     } catch {
       setCachedLessons([]);
       setCompletedLessons([]);
+      setKnowledgeNodes([]);
       setPhase('lesson-picker');
     } finally {
       setIsLoading(false);
@@ -211,6 +337,70 @@ export function NativeClassroom() {
     setSelectedSubject(subject);
     await loadLessons(subject);
   }, [loadLessons, activateAudio]);
+
+  /**
+   * 复习已完成的课程。
+   * 优先从本地缓存（classroom_cache）取完整课堂；取不到时回落到 classroom_snapshots.classroom_data。
+   */
+  const handleReviewLesson = useCallback(async (lesson: CompletedLesson) => {
+    if (!selectedSubject) return;
+    setIsLoading(true);
+    try {
+      currentNodeIdRef.current = lesson.knowledgeNodeId;
+      currentLessonIndexRef.current = lesson.lessonIndex ?? 1;
+
+      // 1) 优先本地缓存（缓存条目在"已学完"后不再删除，大多数情况仍在）
+      let classroom: Classroom | null = null;
+      try {
+        classroom = await cacheRef.current!.getClassroom(
+          lesson.knowledgeNodeId,
+          lesson.lessonIndex ?? 1,
+          lesson.date,
+        );
+      } catch {
+        classroom = null;
+      }
+
+      // 2) 回落：从 classroom_snapshots 拉取完整课堂
+      if (!classroom) {
+        try {
+          const rows = await apiClient.get<{ classroomData: Classroom }>(
+            '/classroom_snapshots',
+            {
+              filters: [{ column: 'history_id', operator: 'eq', value: lesson.id }],
+              select: 'classroom_data',
+              limit: 1,
+            },
+          );
+          if (rows[0]?.classroomData) classroom = rows[0].classroomData;
+        } catch (err) {
+          console.warn('[NativeClassroom] 读取 classroom_snapshots 失败:', err);
+        }
+      }
+
+      if (!classroom) {
+        console.warn('[NativeClassroom] 无法复习此课堂：缓存与快照都已不存在', lesson);
+        setIsLoading(false);
+        return;
+      }
+
+      if (currentChild?.settings) {
+        syncSettingsToOpenMAIC(
+          currentChild.settings,
+          currentChild.id ? String(currentChild.id) : undefined,
+        );
+      }
+
+      startSession(selectedSubject);
+      setCurrentClassroom(classroom);
+      loadClassroom(classroom, lesson.knowledgeNodeId);
+      setPhase('playing');
+    } catch (err) {
+      console.error('[NativeClassroom] 加载复习课堂失败:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedSubject, currentChild, startSession, loadClassroom]);
 
   const handleStartLesson = useCallback(async (knowledgeNodeId: string, lessonIndex: number, date: string) => {
     if (!selectedSubject) return;
@@ -332,6 +522,7 @@ export function NativeClassroom() {
         if (historyRecord?.id) {
           await apiClient.post('/classroom_snapshots', {
             history_id: historyRecord.id,
+            child_id: numChildId,
             classroom_data: currentClassroom,
           });
         }
@@ -363,7 +554,7 @@ export function NativeClassroom() {
               nextReviewDate: new Date(today.getTime() + (masteryLevel >= 80 ? 7 : 3) * 86400000).toISOString(),
               totalAttempts: (existingHistory.length + 1),
               totalCorrect: stats.correctCount,
-            }).catch((upsertErr: unknown) => {
+            }, 'child_id,knowledge_node_id').catch((upsertErr: unknown) => {
               console.error('[NativeClassroom] mastery upsert failed, falling back to RPC:', upsertErr);
               const correctRate = stats.questionsCompleted > 0 ? stats.correctCount / stats.questionsCompleted : 0;
               const masteryDelta = correctRate >= 0.8 ? 15 : correctRate >= 0.5 ? 5 : -5;
@@ -471,18 +662,22 @@ export function NativeClassroom() {
       const tasks = lessonsToRegen.map((lesson) => ({
         knowledgeNodeId: lesson.knowledgeNodeId,
         date: lesson.date,
-        requirement: `为一位 ${currentChild.age} 岁的 ${currentChild.gradeLevel} 学生重新生成关于「${lesson.classroomTitle}」的课堂。包含教学和测验环节，以趣味互动为主。`,
+        requirement: `为一位 ${currentChild.age} 岁的学生重新生成关于「${lesson.classroomTitle}」的课堂。包含教学和测验环节，以趣味互动为主。`,
         language: 'zh-CN',
         lessonIndex: lesson.lessonIndex,
       }));
 
       // 3. Submit to backend
       const childSettings = buildPreGenerationChildSettings(currentChild);
-      await fetch('/api/pre-generate/', {
+      const submitRes = await fetch('/api/pre-generate/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ childId: numChildId, childSettings, tasks }),
       });
+      if (!submitRes.ok) {
+        const errBody = await submitRes.json().catch(() => ({})) as { error?: string };
+        throw new Error(errBody.error || `提交失败: ${submitRes.status}`);
+      }
 
       // 4. Exit select mode and reload lessons
       setSelectMode(false);
@@ -535,6 +730,19 @@ export function NativeClassroom() {
 
   const hasAnyContent = pendingLessons.length > 0 || generatingTasks.length > 0 || completedLessons.length > 0;
 
+  // 检测是否存在 MiniMax/LLM 服务商限流导致的"假 pending"——任务在 1 分钟后会自动重试，
+  // 但用户侧看到的是转圈圈，完全不知情。这里抽出来展示一条醒目的提示条。
+  const rateLimitInfo = useMemo(() => {
+    const affected = preGeneration.taskDetails.filter(
+      (t) => (t.status === 'pending' || t.status === 'failed') && isRateLimitMessage(t.error),
+    );
+    if (affected.length === 0) return null;
+    return {
+      count: affected.length,
+      sample: affected[0].error || '',
+    };
+  }, [preGeneration.taskDetails]);
+
   const isSubjectPending =
     pendingLessons.length === 0 &&
     (preGeneration.status === 'checking' || preGeneration.status === 'generating');
@@ -555,11 +763,14 @@ export function NativeClassroom() {
       : '🚀 检查课程';
 
   return (
-    <div style={{
+    <div
+      data-testid="native-classroom"
+      style={{
       minHeight: '100vh',
       background: phase === 'playing' ? '#1a1a2e' : T.bgGradient,
       fontFamily: T.fontBody,
-    }}>
+    }}
+    >
       {/* ═══ 科目选择 ═══ */}
       {phase === 'subject-select' && (
         <div style={{ padding: '24px' }}>
@@ -578,8 +789,8 @@ export function NativeClassroom() {
               今天想学什么？
             </h2>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', width: '100%', maxWidth: '480px' }}>
-              {SUBJECTS.map((subject) => {
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '16px', width: '100%', maxWidth: '640px' }}>
+              {subjectCards.map((subject) => {
                 const isCompleted = completedSubjects.has(subject.key);
                 const isSelected = selectedSubject === subject.key;
                 return (
@@ -674,6 +885,36 @@ export function NativeClassroom() {
                 <p style={{ fontSize: '14px', color: T.textMedium }}>选择一节课开始学习 ✨</p>
               </div>
 
+              {rateLimitInfo && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  style={{
+                    width: '100%', maxWidth: 1080,
+                    padding: '14px 18px',
+                    borderRadius: 18,
+                    background: 'linear-gradient(135deg, #FFF8E1 0%, #FFECB3 100%)',
+                    border: '2px solid #FFD166',
+                    display: 'flex', alignItems: 'flex-start', gap: 12,
+                    boxShadow: '0 4px 16px rgba(255,209,102,0.25)',
+                  }}
+                >
+                  <span style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }}>⏳</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: '#B45309', fontFamily: T.fontDisplay }}>
+                      AI 老师正在排队等候（{rateLimitInfo.count} 堂课被限流）
+                    </p>
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: '#92400E', lineHeight: 1.5 }}>
+                      语音 / 图片生成服务达到了使用上限，系统将在约 1 分钟后自动重试。
+                      如果你是家长，可以到「家长面板 → 高级设置」更换 AI 服务商或升级配额。
+                    </p>
+                    <p style={{ margin: '6px 0 0', fontSize: 11, color: '#9A7400', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                      {rateLimitInfo.sample.slice(0, 160)}
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+
               {/* ── 即将学习 ── */}
               {pendingLessons.length > 0 && (
                 <div style={{ width: '100%', maxWidth: '1080px' }}>
@@ -689,13 +930,14 @@ export function NativeClassroom() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px', width: '100%', justifyItems: 'center' }}>
                     {pendingLessons.map((lesson, idx) => {
                       const key = `${lesson.knowledgeNodeId}::${lesson.date}`;
+                      const isNodeLocked = lockedNodeIds.has(lesson.knowledgeNodeId);
                       return (
                         <LessonCard key={key}
                           title={lesson.classroomTitle}
                           thumbnailUrl={lesson.thumbnailUrl}
                           slide={lesson.firstSlideCanvas}
                           subject={selectedSubject ?? 'english'}
-                          isLocked={false}
+                          isLocked={isNodeLocked}
                           index={idx}
                           onTap={() => handleStartLesson(lesson.knowledgeNodeId, lesson.lessonIndex, lesson.date)}
                           selectable={selectMode}
@@ -862,9 +1104,10 @@ export function NativeClassroom() {
                         subject={lesson.subject}
                         isLocked={false}
                         index={idx}
-                        onTap={() => {}}
+                        onTap={() => handleReviewLesson(lesson)}
                         status="completed"
                         accuracy={lesson.accuracy}
+                        questionsCompleted={lesson.questionsCompleted}
                         completedAt={lesson.completedAt}
                       />
                     ))}

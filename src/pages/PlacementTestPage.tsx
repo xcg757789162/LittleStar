@@ -12,8 +12,7 @@ import type { PlacementUIPhase, ChoiceAnswerFeedback } from '@/hooks/usePlacemen
 import { useSoundEffects } from '@/hooks/useSoundEffects'
 import { CelebrationAnimation } from '@/components/feedback/CelebrationAnimation'
 import { EncouragementOverlay } from '@/components/feedback/EncouragementOverlay'
-import { GRADE_LABELS } from '@/types/grades'
-import type { GradeLevel, Subject, PlacementResult } from '@/types/models'
+import type { Subject, PlacementResult } from '@/types/models'
 import type { CelebrationLevel } from '@/components/feedback/CelebrationAnimation'
 import type { ChoiceQuestion } from '@/engine/placement-test-engine'
 import { loadCurriculum } from '@/curriculum'
@@ -61,7 +60,6 @@ const SUBJECT_LABELS: Record<Subject, string> = {
 
 interface PlacementTestPageProps {
   subject: Subject
-  gradeLevel: GradeLevel
   onComplete: (result: PlacementResult) => void
   onExit: () => void
 }
@@ -398,11 +396,10 @@ function LevelDisplay({ level }: { level: number }) {
 }
 
 /** 结果页模块掌握度展示 */
-function ModuleMasteryDisplay({ result, phase1Analysis, subject, gradeLevel }: {
+function ModuleMasteryDisplay({ result, phase1Analysis, subject }: {
   result: PlacementResult
   phase1Analysis: { moduleScores?: Record<string, number> } | null
   subject: Subject
-  gradeLevel: GradeLevel
 }) {
   const scores = phase1Analysis?.moduleScores
   const [moduleNames, setModuleNames] = useState<Record<string, string>>({})
@@ -410,7 +407,7 @@ function ModuleMasteryDisplay({ result, phase1Analysis, subject, gradeLevel }: {
   // 从已缓存的课程大纲中获取模块中文名称
   useEffect(() => {
     if (!scores || Object.keys(scores).length === 0) return
-    loadCurriculum(gradeLevel, subject).then(curriculum => {
+    loadCurriculum(subject).then(curriculum => {
       if (!curriculum) return
       const names: Record<string, string> = {}
       for (const mod of curriculum.modules) {
@@ -418,7 +415,7 @@ function ModuleMasteryDisplay({ result, phase1Analysis, subject, gradeLevel }: {
       }
       setModuleNames(names)
     })
-  }, [scores, gradeLevel, subject])
+  }, [scores, subject])
 
   if (!scores || Object.keys(scores).length === 0) return null
 
@@ -478,7 +475,6 @@ function ModuleMasteryDisplay({ result, phase1Analysis, subject, gradeLevel }: {
 
 export function PlacementTestPage({
   subject,
-  gradeLevel,
   onComplete,
   onExit,
 }: PlacementTestPageProps) {
@@ -501,7 +497,7 @@ export function PlacementTestPage({
     submitAnswer,
     dismissFeedback,
     finishAndNavigate,
-  } = usePlacementTest(subject, gradeLevel, onComplete)
+  } = usePlacementTest(subject, onComplete)
 
   const { playCorrect, playWrong, playCelebration, playStar } = useSoundEffects()
 
@@ -565,7 +561,6 @@ export function PlacementTestPage({
     dismissFeedback()
   }, [dismissFeedback])
 
-  const gradeName = GRADE_LABELS[gradeLevel]
   const subjectName = SUBJECT_LABELS[subject]
 
   /** 判断是否在答题阶段 */
@@ -659,7 +654,7 @@ export function PlacementTestPage({
                     fontFamily: T.fontBody,
                   }}
                 >
-                  {subjectName} · {gradeName}
+                  {subjectName}
                 </motion.p>
               </motion.div>
             )}
@@ -932,7 +927,7 @@ export function PlacementTestPage({
           )}
 
           {/* 模块掌握度 */}
-          <ModuleMasteryDisplay result={result} phase1Analysis={phase1Analysis} subject={subject} gradeLevel={gradeLevel} />
+          <ModuleMasteryDisplay result={result} phase1Analysis={phase1Analysis} subject={subject} />
 
           {/* 鼓励语 */}
           <motion.p

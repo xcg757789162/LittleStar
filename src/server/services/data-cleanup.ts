@@ -20,6 +20,8 @@ const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000
 const LEARNING_RECORDS_RETENTION_DAYS = 180
 const FAILED_TASKS_RETENTION_DAYS = 30
 const SYSTEM_LOGS_RETENTION_DAYS = 7
+/** 草稿课程（status='draft'，用户在苏格拉底对话中途退出）的过期时间 */
+const STALE_DRAFT_COURSE_HOURS = 24
 
 let cleanupTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -53,6 +55,7 @@ async function runCleanup(): Promise<void> {
   await cleanExpiredTasks()
   await cleanExpiredSystemLogs()
   await cleanOldLearningRecords()
+  await cleanStaleDraftCourses()
   await cleanOrphanAudioFiles()
 
   console.log(`[DataCleanup] Cleanup cycle completed in ${Date.now() - start}ms`)
@@ -116,6 +119,34 @@ async function cleanOldLearningRecords(): Promise<void> {
     }
   } catch (error) {
     console.error('[DataCleanup] cleanOldLearningRecords failed:', error)
+  }
+}
+
+/**
+ * 删除被用户放弃的 draft 课程（苏格拉底对话中途退出）。
+ *
+ * 判定：status = 'draft' 且 updated_at 超过 STALE_DRAFT_COURSE_HOURS 小时。
+ * draft 状态下还未初始化 knowledge_nodes / placement_* 等下游表，
+ * 所以只需清 api.courses 行，FK 级联即可清干净 curricula / generation_tasks。
+ */
+async function cleanStaleDraftCourses(): Promise<void> {
+  try {
+    const result = await pool.query(
+      `DELETE FROM api.courses
+       WHERE status = 'draft'
+         AND is_system = FALSE
+         AND updated_at < NOW() - $1::interval
+       RETURNING id, slug`,
+      [`${STALE_DRAFT_COURSE_HOURS} hours`],
+    )
+    const count = result.rowCount ?? 0
+    if (count > 0) {
+      console.log(
+        `[DataCleanup] Removed ${count} stale draft courses (>${STALE_DRAFT_COURSE_HOURS}h)`,
+      )
+    }
+  } catch (error) {
+    console.error('[DataCleanup] cleanStaleDraftCourses failed:', error)
   }
 }
 

@@ -7,6 +7,7 @@
 import type { ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { BottomNav } from './BottomNav'
+import { CourseInitWatcher } from '@/components/knowledge/CourseInitWatcher'
 
 /** 需要隐藏底部导航的路径（精确匹配或路径段前缀匹配） */
 const HIDDEN_NAV_PATHS = ['/classroom', '/preview', '/parent/settings', '/parent/logs']
@@ -26,6 +27,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     <div style={{ minHeight: '100vh', paddingBottom: hideNav ? 0 : '64px' }}>
       {children}
       {!hideNav && <BottomNav />}
+      <CourseInitWatcher />
     </div>
   )
 }

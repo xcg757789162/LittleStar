@@ -21,6 +21,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       # 初始化脚本（按文件名顺序执行，仅首次创建数据库时运行）
       - ../postgresql/init/01-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../postgresql/init/02-assessment-migration.sql:/docker-entrypoint-initdb.d/02-assessment-migration.sql:ro
       - ../postgresql/init/02-roles.sql:/docker-entrypoint-initdb.d/02-roles.sql:ro
       - ../postgresql/init/03-rls.sql:/docker-entrypoint-initdb.d/03-rls.sql:ro
       - ../postgresql/init/04-seed.sql:/docker-entrypoint-initdb.d/04-seed.sql:ro
@@ -29,7 +30,11 @@ services:
       - ../postgresql/init/07-add-parent-pin.sql:/docker-entrypoint-initdb.d/07-add-parent-pin.sql:ro
       - ../postgresql/init/08-avatar-to-text.sql:/docker-entrypoint-initdb.d/08-avatar-to-text.sql:ro
       - ../postgresql/init/09-generation-tasks.sql:/docker-entrypoint-initdb.d/09-generation-tasks.sql:ro
+      - ../postgresql/init/10-perf-optimizations.sql:/docker-entrypoint-initdb.d/10-perf-optimizations.sql:ro
       - ../postgresql/init/10-system-logs.sql:/docker-entrypoint-initdb.d/10-system-logs.sql:ro
+      - ../postgresql/init/11-cache-lru.sql:/docker-entrypoint-initdb.d/11-cache-lru.sql:ro
+      - ../postgresql/init/12-migrate-audio-to-files.sql:/docker-entrypoint-initdb.d/12-migrate-audio-to-files.sql:ro
+      - ../postgresql/init/13-courses.sql:/docker-entrypoint-initdb.d/13-courses.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-littlestar}"]
       interval: 10s

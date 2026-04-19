@@ -8,14 +8,11 @@ import { useAuthStore } from '@/stores/authStore'
 import { useChildStore } from '@/stores/childStore'
 import { Home } from '@/pages/Home'
 import { LearningHistory } from '@/pages/LearningHistory'
-import { StarMap } from '@/pages/StarMap'
 import { ParentDashboard } from '@/pages/ParentDashboard'
 import { ParentSettings } from '@/pages/ParentSettings'
 import { ParentLogs } from '@/pages/ParentLogs'
 import { PlacementTestWrapper } from '@/pages/PlacementTestWrapper'
 import { PlacementTestSelectPage } from '@/pages/PlacementTestSelectPage'
-import { LearningReportPage } from '@/pages/LearningReportPage'
-import { ReportDetailPage } from '@/pages/ReportDetailPage'
 import { AuthPage } from '@/pages/AuthPage'
 import { CreateChildPage } from '@/pages/CreateChildPage'
 import { NotFound } from '@/pages/NotFound'
@@ -23,6 +20,7 @@ import { NativeClassroom } from '@/pages/NativeClassroom'
 import { ClassroomSettings } from '@/pages/ClassroomSettings'
 import { GenerationPreview } from '@/pages/GenerationPreview'
 import { SubjectMasteryPage } from '@/pages/SubjectMasteryPage'
+import { KnowledgePage } from '@/pages/KnowledgePage'
 import { AppLayout } from '@/components/layout/AppLayout'
 
 /** 认证守卫：未登录 → /auth */
@@ -76,15 +74,13 @@ export function AppRoutes() {
           <Route path="/classroom" element={<NativeClassroom />} />
           <Route path="/classroom-settings" element={<ClassroomSettings />} />
           <Route path="/history" element={<LearningHistory />} />
-          <Route path="/starmap" element={<StarMap />} />
           <Route path="/parent" element={<ParentDashboard />} />
           <Route path="/parent/settings" element={<ParentSettings />} />
           <Route path="/parent/logs" element={<ParentLogs />} />
           <Route path="/placement-test-select" element={<PlacementTestSelectPage />} />
-          <Route path="/placement-test/:subject/:grade" element={<PlacementTestWrapper />} />
-          <Route path="/reports" element={<LearningReportPage />} />
-          <Route path="/reports/:reportId" element={<ReportDetailPage />} />
+          <Route path="/placement-test/:courseSlug" element={<PlacementTestWrapper />} />
           <Route path="/subject-mastery/:subject" element={<SubjectMasteryPage />} />
+          <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Route>

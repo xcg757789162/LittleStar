@@ -26,6 +26,7 @@ import { syncChildProfileToOpenMAIC, syncChildToOpenMAIC } from '@/stores/openma
 import { stripLegacyBioField } from '@/stores/openmaic/child-settings-compat'
 import { extractChildSettingsFromStore } from '@/stores/openmaic/settings-reverse-sync'
 import { resolveAgentVoice, getAvailableProvidersWithVoices, getCurrentProviderVoices } from '@/lib/openmaic/audio/voice-resolver'
+import { apiClient } from '@/services/api'
 
 import type { TTSProviderId } from '@/lib/openmaic/audio/types'
 import type { ProviderWithVoices } from '@/lib/openmaic/audio/voice-resolver'
@@ -221,7 +222,6 @@ export function ClassroomSettings() {
     }
 
     try {
-      const { apiClient } = await import('@/services/api')
       await apiClient.patch('/children', {
         settings: { ...currentSettings, ...persistedSettings },
       }, {
@@ -311,7 +311,6 @@ export function ClassroomSettings() {
     }
 
     try {
-      const { apiClient } = await import('@/services/api')
       await apiClient.patch('/children', { name: trimmed }, {
         filters: [{ column: 'id', operator: 'eq', value: Number(targetChildId) }],
       })
@@ -336,7 +335,6 @@ export function ClassroomSettings() {
 
       const child = getChildSnapshot(scheduledChild.id) || scheduledChild
       try {
-        const { apiClient } = await import('@/services/api')
         await apiClient.patch('/children', {
           settings: buildSelfIntroductionSettingsPayload(child, newBio),
         }, {
@@ -389,7 +387,6 @@ export function ClassroomSettings() {
 
     try {
       // 直接使用 apiClient.patch 确保写入数据库
-      const { apiClient } = await import('@/services/api')
       const result = await apiClient.patch('/children', { avatar: newAvatar }, {
         filters: [{ column: 'id', operator: 'eq', value: Number(child.id) }],
       })

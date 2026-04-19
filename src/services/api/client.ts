@@ -216,7 +216,7 @@ const PUBLIC_READONLY_PATHS = new Set([
 
 /** 判断路径是否是公共只读表 */
 function isPublicPath(path: string): boolean {
-  // 精确匹配或带查询参数（如 /curricula?gradeLevel=eq.1）
+  // 精确匹配或带查询参数（如 /curricula?subject=eq.math）
   return PUBLIC_READONLY_PATHS.has(path) ||
     [...PUBLIC_READONLY_PATHS].some((p) => path.startsWith(`${p}?`))
 }

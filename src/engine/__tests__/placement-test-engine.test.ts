@@ -3,7 +3,7 @@ import { PlacementTestEngine } from '../placement-test-engine'
 import type { CurriculumModule } from '@/curriculum/types'
 
 describe('PlacementTestEngine', () => {
-  let engine: PlacementTestEngine
+  let engine: InstanceType<typeof PlacementTestEngine>
 
   /** 模拟模块数据：3 个模块，每模块 2 个知识点 */
   const mockModules: CurriculumModule[] = [

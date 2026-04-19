@@ -47,6 +47,23 @@ export interface TaskProgressInfo {
   status: string
   progress: number
   currentStep: string | null
+  /** 最近一次失败消息（可能是限流提示，也可能是真正失败） */
+  error: string | null
+  /** 已触发的重试次数 */
+  retryCount: number
+}
+
+/** 识别 API 限流类错误（与后端 RATE_LIMIT_PATTERNS 保持一致） */
+const RATE_LIMIT_HINTS = [
+  'rate limit', 'rate_limit', 'ratelimit',
+  'quota', 'usage limit', '429', 'too many requests',
+  'ttsratelimiterror', 'concurrency', '2056',
+] as const
+
+export function isRateLimitMessage(msg: string | null | undefined): boolean {
+  if (!msg) return false
+  const lower = msg.toLowerCase()
+  return RATE_LIMIT_HINTS.some((p) => lower.includes(p))
 }
 
 /** Hook 返回值 */
@@ -72,7 +89,7 @@ const SUBJECT_LABELS: Record<Subject, string> = {
   chinese: '语文',
   english: '英语',
 }
-const MIN_CACHE_SIZE_PER_SUBJECT = 3
+const MIN_CACHE_SIZE_PER_SUBJECT = 5
 
 export function getMinCacheSizeForCompletedSubjects(completedSubjectCount: number): number {
   return Math.max(0, Math.min(completedSubjectCount, SUBJECTS.length))
@@ -145,7 +162,7 @@ function getApiBase(): string {
 }
 
 export function buildPreGenerationChildSettings(
-  child: Pick<Child, 'name' | 'settings'> | null | undefined,
+  child: Pick<Child, 'name' | 'settings' | 'age'> | null | undefined,
   resolvedSettings?: Partial<ChildSettings> | null,
 ): Record<string, unknown> {
   const effectiveSettings = resolvedSettings
@@ -167,6 +184,7 @@ export function buildPreGenerationChildSettings(
     ...(effectiveSettings as unknown as Record<string, unknown>),
     ...(userNickname ? { userNickname } : {}),
     ...(userBio ? { userBio } : {}),
+    ...(typeof child?.age === 'number' && Number.isFinite(child.age) ? { childAge: child.age } : {}),
   }
 }
 
@@ -299,6 +317,8 @@ export function usePreGeneration(
           status: t.status,
           progress: t.status === 'completed' ? 100 : t.progress,
           currentStep: t.currentStep,
+          error: t.error,
+          retryCount: t.retryCount,
         })))
 
         // 计算整体进度：已完成任务算 100%，活跃任务按实际进度
@@ -446,6 +466,27 @@ export function usePreGeneration(
       log.info('按学科缓存统计 (未学习):', unlearnedCounts, '已完成课时:', completedLessonKeys.size, '待补学科:', subjectsNeedingCache)
 
       if (subjectsNeedingCache.length === 0) {
+        // Before declaring "no generation needed", check the backend for
+        // active tasks (e.g. submitted by handleRegenerate). If found, start
+        // polling so the UI tracks their progress instead of silently ignoring them.
+        try {
+          const statusData = await pollStatus(numChildId)
+          const activeTasks = statusData.tasks.filter(
+            (t) => t.status === 'pending' || t.status === 'running',
+          )
+          if (activeTasks.length > 0) {
+            log.info(
+              `水位线已满足，但发现 ${activeTasks.length} 个活跃后端任务，启动轮询追踪`,
+            )
+            setStatus('generating')
+            setStageText('AI 老师正在创作课堂内容...')
+            startPolling(numChildId)
+            return
+          }
+        } catch {
+          // poll check failed — fall through to normal "completed" path
+        }
+
         log.info('各已评测学科未学习缓存已达最低水位线，无需生成')
         setStatus('completed')
         setCompletedCount(totalUnlearnedCount)
@@ -581,7 +622,6 @@ export function usePreGeneration(
                 },
                 child: {
                   age: child.age,
-                  gradeLevel: child.gradeLevel,
                 },
                 masteryLevel: item.masteryLevel,
                 mode: item.mode,
@@ -606,24 +646,7 @@ export function usePreGeneration(
         }
       }
 
-      // Fallback：无知识点数据时生成默认课堂
-      if (backendTasks.length === 0) {
-        const subjectLabels: Record<Subject, string> = {
-          math: '趣味数学入门',
-          chinese: '快乐语文启蒙',
-          english: '英语字母乐园',
-        }
-
-        for (const subject of subjectsNeedingCache) {
-          backendTasks.push({
-            knowledgeNodeId: `default-${subject}`,
-            date: dateStr,
-            requirement: `为一位 ${child.age} 岁的 ${child.gradeLevel} 学生创建一节${subjectLabels[subject]}课堂。包含教学和测验环节，以趣味互动为主，难度适中。`,
-            language: 'zh-CN',
-          })
-        }
-      }
-
+      // 所有 planner 规划的课时都已有缓存 → 水位线已是当前可达上限，无需补充
       if (backendTasks.length === 0) {
         setStatus('completed')
         setStageText('备课完成！')

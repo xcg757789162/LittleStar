@@ -57,11 +57,11 @@ INSERT INTO api.tpr_instructions (id, command, translation, action, emoji, diffi
 -- 3. TPR 知识点 — INSERT 到 knowledge_nodes 表
 -- ============================================================
 
-INSERT INTO api.knowledge_nodes (id, subject, grade_level, name, description, prerequisites, next_nodes, difficulty, content_type, order_index) VALUES
-('english-tpr-body', 'english', 'middle-kindergarten', 'TPR 身体动作指令', '听懂并做出身体动作指令：Stand up, Sit down, Clap your hands, Stomp your feet', '[]', '["english-tpr-move"]', 1, 'voice', 301),
-('english-tpr-move', 'english', 'middle-kindergarten', 'TPR 运动指令', '听懂并做出运动指令：Jump, Turn around, Walk, Run', '["english-tpr-body"]', '["english-tpr-face"]', 1, 'voice', 302),
-('english-tpr-face', 'english', 'middle-kindergarten', 'TPR 表情指令', '听懂并做出表情指令：Smile, Open your mouth, Close your eyes, Blink', '["english-tpr-body"]', '["english-tpr-touch"]', 1, 'voice', 303),
-('english-tpr-touch', 'english', 'middle-kindergarten', 'TPR 触摸指令', '听懂并做出触摸指令：Touch your head, Touch your nose, Point up, Wave', '["english-tpr-face"]', '[]', 2, 'voice', 304);
+INSERT INTO api.knowledge_nodes (id, subject, name, description, prerequisites, next_nodes, difficulty, content_type, order_index) VALUES
+('english-tpr-body', 'english', 'TPR 身体动作指令', '听懂并做出身体动作指令：Stand up, Sit down, Clap your hands, Stomp your feet', '[]', '["english-tpr-move"]', 1, 'voice', 301),
+('english-tpr-move', 'english', 'TPR 运动指令', '听懂并做出运动指令：Jump, Turn around, Walk, Run', '["english-tpr-body"]', '["english-tpr-face"]', 1, 'voice', 302),
+('english-tpr-face', 'english', 'TPR 表情指令', '听懂并做出表情指令：Smile, Open your mouth, Close your eyes, Blink', '["english-tpr-body"]', '["english-tpr-touch"]', 1, 'voice', 303),
+('english-tpr-touch', 'english', 'TPR 触摸指令', '听懂并做出触摸指令：Touch your head, Touch your nose, Point up, Wave', '["english-tpr-face"]', '[]', 2, 'voice', 304);
 
 -- ============================================================
 -- 4. TPR 题目 — INSERT 到 questions 表

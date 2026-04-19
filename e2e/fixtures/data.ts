@@ -1,5 +1,5 @@
 import type { E2EEnv } from '../config/env'
-import type { GradeLevel, Subject } from '../../src/types/models'
+import type { Subject } from '../../src/types/models'
 
 export interface E2ECredentials {
   username: string
@@ -11,7 +11,6 @@ export interface E2EChildSeed {
   name: string
   avatar: string
   age: number
-  gradeLevel: GradeLevel
 }
 
 export interface PreparedLessonPickerSeed {
@@ -19,7 +18,6 @@ export interface PreparedLessonPickerSeed {
   userId: number
   childId: number
   childName: string
-  gradeLevel: GradeLevel
   subject: Subject
   subjectLabel: string
   credentials: E2ECredentials
@@ -37,7 +35,6 @@ export const DEFAULT_CHILD_SEED: E2EChildSeed = {
   name: '课堂体验生',
   avatar: '⭐',
   age: 5,
-  gradeLevel: 'middle-kindergarten',
 }
 
 export function buildPickerCredentials(env: E2EEnv): E2ECredentials {

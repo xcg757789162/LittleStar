@@ -15,6 +15,7 @@ import { buildHeadersFromSettingsServer } from './headers-builder-server.js'
 import { normalizeTaskProgress } from './task-progress.js'
 import { externalizeClassroomAudio } from './audio-file-store.js'
 import { writeSystemLog } from './system-log.js'
+import { processCourseInitTask } from './course-initializer.js'
 import type { PipelineCheckpoint } from './pipeline-executor.js'
 import type { UserRequirements } from '../../services/openmaic/pipeline-types.js'
 
@@ -34,6 +35,8 @@ interface TaskRow {
   retry_count: number
   max_retries: number
   lesson_index: number
+  task_type: string
+  course_id: number | null
 }
 
 // ============================================================
@@ -51,6 +54,20 @@ let currentTaskStartedAt: number | null = null
 const MAX_TASK_EXECUTION_MS = 900_000
 /** 卡住任务恢复间隔 */
 const RECOVERY_INTERVAL_MS = 120_000
+/** 限流后延迟重试间隔 */
+const RATE_LIMIT_DELAY_SECONDS = 60
+
+const RATE_LIMIT_PATTERNS = [
+  'rate limit', 'rate_limit', 'ratelimit',
+  'quota', 'usage limit',
+  '429', 'too many requests',
+  'TTSRateLimitError', 'concurrency',
+]
+
+function isRateLimitError(msg: string): boolean {
+  const lower = msg.toLowerCase()
+  return RATE_LIMIT_PATTERNS.some((p) => lower.includes(p.toLowerCase()))
+}
 
 const pipelineExecutor = new PipelineExecutor()
 
@@ -212,16 +229,18 @@ async function processNextTask(): Promise<void> {
 
   const { rows } = await pool.query<TaskRow>(
     `UPDATE api.generation_tasks
-     SET status = 'running', started_at = COALESCE(started_at, NOW()), updated_at = NOW()
+     SET status = 'running', started_at = COALESCE(started_at, NOW()),
+         scheduled_after = NULL, updated_at = NOW()
      WHERE id = (
        SELECT id FROM api.generation_tasks
        WHERE status = 'pending'
+         AND (scheduled_after IS NULL OR scheduled_after <= NOW())
        ORDER BY created_at ASC, id ASC
        LIMIT 1
        FOR UPDATE SKIP LOCKED
      )
      RETURNING id, child_id, knowledge_node_id, date, requirement, language,
-               settings, checkpoint, retry_count, max_retries, lesson_index`,
+               settings, checkpoint, retry_count, max_retries, lesson_index, task_type, course_id`,
   )
 
   if (rows.length === 0) return
@@ -232,9 +251,54 @@ async function processNextTask(): Promise<void> {
   currentTaskStartedAt = Date.now()
 
   console.log(
-    `[TaskProcessor] 开始处理任务 #${task.id}: ${task.knowledge_node_id}` +
+    `[TaskProcessor] 开始处理任务 #${task.id} (type=${task.task_type || 'classroom-prebuild'})` +
     ` (retry=${task.retry_count}/${task.max_retries})`,
   )
+
+  // ============================================================
+  // 分支：课程初始化（course-initialization）
+  // 单独的处理链路，不走 OpenMAIC pipeline，不写 classroom_cache
+  // ============================================================
+  if (task.task_type === 'course-initialization') {
+    try {
+      if (!task.course_id) throw new Error('course-initialization task requires course_id')
+      await processCourseInitTask({
+        id: task.id,
+        child_id: task.child_id,
+        course_id: task.course_id,
+        settings: task.settings,
+        checkpoint: (task.checkpoint as unknown) as never,
+      })
+      console.log(`[TaskProcessor] ✅ 课程初始化任务 #${task.id} 完成`)
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      console.error(`[TaskProcessor] ❌ 课程初始化 #${task.id} 失败:`, errorMsg)
+      if (task.retry_count < task.max_retries) {
+        await pool.query(
+          `UPDATE api.generation_tasks
+           SET status = 'pending', retry_count = retry_count + 1,
+               error = $1, updated_at = NOW()
+           WHERE id = $2`,
+          [errorMsg, task.id],
+        )
+      } else {
+        await pool.query(
+          `UPDATE api.generation_tasks
+           SET status = 'failed', error = $1, updated_at = NOW()
+           WHERE id = $2`,
+          [errorMsg, task.id],
+        )
+      }
+      writeSystemLog(task.child_id, 'error', 'CourseInit',
+        `课程初始化失败: ${errorMsg}`, task.id)
+    } finally {
+      isProcessing = false
+      currentTaskId = null
+      currentTaskStartedAt = null
+    }
+    return
+  }
+
   writeSystemLog(task.child_id, 'info', 'PreGeneration',
     `开始生成课堂: ${task.knowledge_node_id}${task.retry_count > 0 ? ` (第 ${task.retry_count} 次重试)` : ''}`,
     task.id)
@@ -341,7 +405,21 @@ async function processNextTask(): Promise<void> {
     const errorMsg = error instanceof Error ? error.message : String(error)
     console.error(`[TaskProcessor] ❌ 任务 #${task.id} 失败:`, errorMsg)
 
-    if (task.retry_count < task.max_retries) {
+    if (isRateLimitError(errorMsg)) {
+      await pool.query(
+        `UPDATE api.generation_tasks
+         SET status = 'pending', error = $1,
+             scheduled_after = NOW() + INTERVAL '${RATE_LIMIT_DELAY_SECONDS} seconds',
+             updated_at = NOW()
+         WHERE id = $2`,
+        [errorMsg, task.id],
+      ).catch((err: unknown) => {
+        console.error(`[TaskProcessor] 限流延迟更新失败 #${task.id}:`, err)
+      })
+      console.log(`[TaskProcessor] 任务 #${task.id} 触发限流，${RATE_LIMIT_DELAY_SECONDS}s 后重试（不消耗重试次数）`)
+      writeSystemLog(task.child_id, 'warn', 'PreGeneration',
+        `API 限流，${RATE_LIMIT_DELAY_SECONDS}s 后自动重试: ${errorMsg}`, task.id)
+    } else if (task.retry_count < task.max_retries) {
       await pool.query(
         `UPDATE api.generation_tasks
          SET status = 'pending', retry_count = retry_count + 1,

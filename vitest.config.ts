@@ -19,6 +19,7 @@ export default defineConfig({
       '**/dist/**',
       '**/.git/**',
       '**/.worktrees/**',
+      '**/e2e/**',
     ],
     coverage: {
       provider: 'v8',

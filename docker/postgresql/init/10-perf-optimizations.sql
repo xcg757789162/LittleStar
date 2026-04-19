@@ -87,17 +87,6 @@ CREATE POLICY achievements_select ON api.achievements FOR SELECT TO authenticate
 CREATE POLICY achievements_insert ON api.achievements FOR INSERT TO authenticated
   WITH CHECK (child_id IN (SELECT id FROM api.children WHERE user_id = api.current_user_id()));
 
--- grade_unlocks
-CREATE POLICY grade_unlocks_select ON api.grade_unlocks FOR SELECT TO authenticated
-  USING (child_id IN (SELECT id FROM api.children WHERE user_id = api.current_user_id()));
-CREATE POLICY grade_unlocks_insert ON api.grade_unlocks FOR INSERT TO authenticated
-  WITH CHECK (child_id IN (SELECT id FROM api.children WHERE user_id = api.current_user_id()));
-CREATE POLICY grade_unlocks_update ON api.grade_unlocks FOR UPDATE TO authenticated
-  USING (child_id IN (SELECT id FROM api.children WHERE user_id = api.current_user_id()))
-  WITH CHECK (child_id IN (SELECT id FROM api.children WHERE user_id = api.current_user_id()));
-CREATE POLICY grade_unlocks_delete ON api.grade_unlocks FOR DELETE TO authenticated
-  USING (child_id IN (SELECT id FROM api.children WHERE user_id = api.current_user_id()));
-
 -- classroom_cache
 CREATE POLICY classroom_cache_select ON api.classroom_cache FOR SELECT TO authenticated
   USING (child_id IN (SELECT id FROM api.children WHERE user_id = api.current_user_id()));

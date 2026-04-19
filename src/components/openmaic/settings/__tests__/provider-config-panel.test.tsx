@@ -25,13 +25,11 @@ vi.mock('@/lib/openmaic/hooks/use-i18n', () => ({
         'settings.capabilities.streaming': '流式输出',
         'settings.setAsActiveModel': '设为当前模型',
         'settings.currentlyUsing': '当前使用',
-        'settings.currentActiveSummary': '当前课堂使用',
-        'settings.activeProviderStatus': '当前生效',
-        'settings.viewingProvider': '正在查看',
-        'settings.activeProviderManaged': '你正在管理当前生效的服务商，绿色标签代表课堂现在真正使用的模型。',
-        'settings.providerSwitchHelper': '你正在查看这个服务商，但课堂当前仍在使用 {{provider}} / {{model}}。点击“设为当前模型”后才会切换。',
-        'settings.selectModel': '选择模型',
         'settings.modelSelectorHint': '点击模型卡片即可立即切换；带对勾的模型就是当前课堂真正使用的模型。',
+        'settings.noModelsAvailable': '暂无可用模型',
+        'settings.connectionSuccess': '连接成功',
+        'settings.connectionFailed': '连接失败',
+        'settings.serverConfiguredNotice': '服务端已配置',
       }
       return (messages[key] ?? key)
         .replace('{{provider}}', String(options?.provider ?? ''))
@@ -76,9 +74,13 @@ describe('ProviderConfigPanel', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true }),
+    }) as unknown as typeof fetch
   })
 
-  it('应允许把列表中的模型设为当前使用模型', async () => {
+  it('应允许点击未激活模型卡片以切换当前模型', async () => {
     const user = userEvent.setup()
     const onSetActiveModel = vi.fn()
 
@@ -103,13 +105,13 @@ describe('ProviderConfigPanel', () => {
       />,
     )
 
-    expect(screen.getByText('当前使用')).toBeInTheDocument()
+    expect(screen.getByText(/当前使用/)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '设为当前模型' }))
+    await user.click(screen.getByText('GPT-4.1'))
     expect(onSetActiveModel).toHaveBeenCalledWith('gpt-4.1')
   })
 
-  it('应在配置面板顶部明确展示当前真正生效的模型状态', () => {
+  it('应在非当前服务商视角下仍展示模型列表', () => {
     render(
       <ProviderConfigPanel
         provider={provider}
@@ -131,41 +133,7 @@ describe('ProviderConfigPanel', () => {
       />,
     )
 
-    expect(screen.getByText('当前课堂使用')).toBeInTheDocument()
-    expect(screen.getByText('Claude')).toBeInTheDocument()
-    expect(screen.getByText('Claude 3.7 Sonnet')).toBeInTheDocument()
-    expect(screen.getByText('正在查看')).toBeInTheDocument()
-    expect(screen.getByText('你正在查看这个服务商，但课堂当前仍在使用 Claude / Claude 3.7 Sonnet。点击“设为当前模型”后才会切换。')).toBeInTheDocument()
-  })
-
-  it('应提升重置确认框层级，避免被父级设置弹窗遮住', async () => {
-    const user = userEvent.setup()
-
-    render(
-      <ProviderConfigPanel
-        provider={provider}
-        initialApiKey="sk-test"
-        initialBaseUrl="https://api.openai.com/v1"
-        initialRequiresApiKey={true}
-        providersConfig={providersConfig}
-        activeProviderId="openai"
-        activeModelId="gpt-4o-mini"
-        activeProviderName="OpenAI"
-        activeModelName="GPT-4o Mini"
-        onSetActiveModel={vi.fn()}
-        onConfigChange={vi.fn()}
-        onSave={vi.fn()}
-        onEditModel={vi.fn()}
-        onDeleteModel={vi.fn()}
-        onAddModel={vi.fn()}
-        onResetToDefault={vi.fn()}
-        isBuiltIn={true}
-      />,
-    )
-
-    await user.click(screen.getByRole('button', { name: '重置' }))
-
-    const resetDialog = document.querySelector('[data-slot="alert-dialog-content"]')
-    expect(resetDialog).toHaveClass('z-[1201]')
+    expect(screen.getByText('GPT-4o Mini')).toBeInTheDocument()
+    expect(screen.getByText('模型列表')).toBeInTheDocument()
   })
 })

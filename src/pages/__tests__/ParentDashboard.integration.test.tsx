@@ -1,24 +1,89 @@
 /**
  * ParentDashboard 集成测试
  *
- * 测试分层配置：基础展示层（无需密码）+ 高级配置层（PIN 解锁）
- * 覆盖：服务健康检测、各学科掌握率、PIN 持久化、高级配置表单、PIN 错误提示
+ * 基础展示层 + PIN 解锁后跳转「高级设置」页（不再在仪表盘内嵌配置表单）
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
-// vi.hoisted: 确保 mock 变量在 vi.mock hoisting 前可用
 const {
   mockGetCacheSize,
   mockCheckHealth,
-} = vi.hoisted(() => ({
-  mockGetCacheSize: vi.fn(),
-  mockCheckHealth: vi.fn(),
+  mockNavigate,
+  mockApiPatch,
+  authState,
+  readyCoursesQuery,
+} = vi.hoisted(() => {
+  const authState = {
+    user: {
+      id: 1,
+      nickname: '家长',
+      parentPin: null as string | null,
+    },
+    logout: vi.fn(),
+  }
+  const readyCoursesData = [
+    {
+      id: 1, slug: 'math', name: '数学', emoji: '🔢', colorHex: '#FF8C42', status: 'ready', isSystem: true,
+      userId: null, disciplineType: 'academic', parentCourseId: null, stageIndex: 0,
+      requirementSpec: {}, dialogHistory: [], initTaskId: null, initError: null,
+      createdAt: '2024-01-01', updatedAt: '2024-01-01',
+    },
+    {
+      id: 2, slug: 'chinese', name: '语文', emoji: '📖', colorHex: '#2EC4B6', status: 'ready', isSystem: true,
+      userId: null, disciplineType: 'academic', parentCourseId: null, stageIndex: 0,
+      requirementSpec: {}, dialogHistory: [], initTaskId: null, initError: null,
+      createdAt: '2024-01-01', updatedAt: '2024-01-01',
+    },
+    {
+      id: 3, slug: 'english', name: '英语', emoji: '🌍', colorHex: '#5BC0EB', status: 'ready', isSystem: true,
+      userId: null, disciplineType: 'academic', parentCourseId: null, stageIndex: 0,
+      requirementSpec: {}, dialogHistory: [], initTaskId: null, initError: null,
+      createdAt: '2024-01-01', updatedAt: '2024-01-01',
+    },
+  ]
+  const readyCoursesQuery = { data: readyCoursesData, isLoading: false }
+  return {
+    mockGetCacheSize: vi.fn(),
+    mockCheckHealth: vi.fn(),
+    mockNavigate: vi.fn(),
+    mockApiPatch: vi.fn().mockResolvedValue({}),
+    authState,
+    readyCoursesQuery,
+  }
+})
+
+vi.mock('react-router-dom', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('react-router-dom')>()
+  return {
+    ...mod,
+    useNavigate: () => mockNavigate,
+  }
+})
+
+vi.mock('@/stores/authStore', () => ({
+  useAuthStore: Object.assign(
+    (selector: (s: { user: typeof authState.user | null; logout: typeof authState.logout }) => unknown) =>
+      selector({
+        user: authState.user,
+        logout: authState.logout,
+      }),
+    {
+      setState: (updater: (s: { user: typeof authState.user | null }) => { user?: typeof authState.user | null }) => {
+        const next = updater({ user: authState.user })
+        if (next.user !== undefined) {
+          authState.user = next.user
+            ? { ...authState.user, ...next.user }
+            : { id: 1, nickname: '家长', parentPin: null }
+        }
+      },
+    },
+  ),
 }))
 
-// Mock ClassroomCache
 vi.mock('@/services/openmaic/cache', () => ({
   ClassroomCache: vi.fn().mockImplementation(function () {
     this.getClassroom = vi.fn()
@@ -31,7 +96,6 @@ vi.mock('@/services/openmaic/cache', () => ({
   }),
 }))
 
-// Mock OpenMAICClient
 vi.mock('@/services/openmaic/client', () => ({
   OpenMAICClient: vi.fn().mockImplementation(function () {
     this.checkHealth = mockCheckHealth
@@ -40,17 +104,42 @@ vi.mock('@/services/openmaic/client', () => ({
   }),
 }))
 
-// Mock API Client（ParentDashboard 现在通过 apiClient 加载数据）
+const mockApiGet = vi.hoisted(() =>
+  vi.fn().mockImplementation((path: string) => {
+    if (path === '/knowledge_nodes') {
+      return Promise.resolve([
+        { id: 'm1', subject: 'math' },
+        { id: 'c1', subject: 'chinese' },
+        { id: 'e1', subject: 'english' },
+      ])
+    }
+    if (path === '/mastery_records') {
+      return Promise.resolve([
+        { knowledgeNodeId: 'm1', masteryLevel: 80 },
+        { knowledgeNodeId: 'c1', masteryLevel: 70 },
+        { knowledgeNodeId: 'e1', masteryLevel: 60 },
+      ])
+    }
+    if (path === '/daily_sessions') {
+      return Promise.resolve([])
+    }
+    return Promise.resolve([])
+  }),
+)
+
 vi.mock('@/services/api', () => ({
   apiClient: {
-    get: vi.fn().mockResolvedValue([]),
+    get: mockApiGet,
     getOne: vi.fn().mockResolvedValue(null),
     post: vi.fn().mockResolvedValue({}),
-    patch: vi.fn().mockResolvedValue({}),
+    patch: mockApiPatch,
   },
 }))
 
-// Mock childStore
+vi.mock('@/hooks/queries/useCourses', () => ({
+  useCourses: () => readyCoursesQuery,
+}))
+
 vi.mock('@/stores/childStore', () => ({
   useChildStore: Object.assign(
     vi.fn().mockImplementation((selector: (s: Record<string, unknown>) => unknown) =>
@@ -76,7 +165,6 @@ vi.mock('@/stores/childStore', () => ({
 
 import { ParentDashboard } from '../ParentDashboard'
 
-// Mock localStorage
 const localStorageMock = (() => {
   let store: Record<string, string> = {}
   return {
@@ -88,28 +176,37 @@ const localStorageMock = (() => {
 })()
 Object.defineProperty(window, 'localStorage', { value: localStorageMock })
 
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false } },
+})
+
 function renderWithRouter() {
   return render(
-    <MemoryRouter>
-      <ParentDashboard />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <ParentDashboard />
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 
-describe('ParentDashboard 集成测试 - 分层配置', () => {
+describe('ParentDashboard 集成测试', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockApiGet.mockClear()
+    mockApiPatch.mockClear()
+    mockNavigate.mockClear()
     localStorageMock.clear()
     mockGetCacheSize.mockResolvedValue(0)
     mockCheckHealth.mockResolvedValue(true)
+    authState.user = { id: 1, nickname: '家长', parentPin: null }
   })
 
-  // 基础展示层
   it('基础展示层应显示学习概览统计', async () => {
     renderWithRouter()
     await waitFor(() => {
       expect(screen.getByTestId('parent-dashboard')).toBeTruthy()
-      expect(screen.getByText('学习概览')).toBeTruthy()
+      expect(screen.getByText(/学习概览/)).toBeTruthy()
     })
   })
 
@@ -143,8 +240,7 @@ describe('ParentDashboard 集成测试 - 分层配置', () => {
     })
   })
 
-  // 高级配置解锁
-  it('应显示"高级设置"按钮', async () => {
+  it('应显示「高级设置」按钮', async () => {
     renderWithRouter()
     await waitFor(() => {
       expect(screen.getByTestId('advanced-settings-btn')).toBeTruthy()
@@ -156,7 +252,6 @@ describe('ParentDashboard 集成测试 - 分层配置', () => {
     await waitFor(() => {
       fireEvent.click(screen.getByTestId('advanced-settings-btn'))
     })
-    // 应显示 PIN 验证界面
     expect(screen.getByTestId('pin-container')).toBeTruthy()
   })
 
@@ -165,105 +260,85 @@ describe('ParentDashboard 集成测试 - 分层配置', () => {
     await waitFor(() => {
       fireEvent.click(screen.getByTestId('advanced-settings-btn'))
     })
-    // setup 模式应显示"设置"文字
-    expect(screen.getByText(/设置.*密码/)).toBeTruthy()
+    expect(screen.getByText(/请设置家长密码/)).toBeTruthy()
   })
 
-  it('PIN 设置后应持久化到 localStorage', async () => {
+  it('首次设置 PIN 成功后应同步到后端并跳转设置页', async () => {
     renderWithRouter()
     await waitFor(() => {
       fireEvent.click(screen.getByTestId('advanced-settings-btn'))
     })
 
-    // 第一次输入 PIN
     '1234'.split('').forEach((d) => fireEvent.click(screen.getByText(d)))
-    // 确认 PIN
     '1234'.split('').forEach((d) => fireEvent.click(screen.getByText(d)))
 
-    // 应保存到 localStorage
-    expect(localStorageMock.setItem).toHaveBeenCalledWith('littlestar_parent_pin', '1234')
-    // 应显示高级配置
     await waitFor(() => {
-      expect(screen.getByTestId('advanced-config')).toBeTruthy()
+      expect(mockApiPatch).toHaveBeenCalledWith(
+        '/users',
+        { parentPin: '1234' },
+        expect.objectContaining({
+          filters: [{ column: 'id', operator: 'eq', value: 1 }],
+        }),
+      )
+    })
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/parent/settings')
     })
   })
 
   it('有已保存 PIN 时应进入 verify 模式', async () => {
-    // 预设 PIN
-    localStorageMock.setItem('littlestar_parent_pin', '5678')
+    authState.user.parentPin = '5678'
     renderWithRouter()
     await waitFor(() => {
       fireEvent.click(screen.getByTestId('advanced-settings-btn'))
     })
-    // verify 模式应显示"输入家长密码"
-    expect(screen.getByText(/输入家长密码/)).toBeTruthy()
+    expect(screen.getByText(/请输入家长密码/)).toBeTruthy()
   })
 
-  it('PIN 验证通过后应显示高级配置区域', async () => {
-    localStorageMock.setItem('littlestar_parent_pin', '1234')
+  it('PIN 验证通过后应跳转到高级设置页面', async () => {
+    authState.user.parentPin = '1234'
     renderWithRouter()
 
     await waitFor(() => {
       fireEvent.click(screen.getByTestId('advanced-settings-btn'))
     })
 
-    // 输入正确 PIN
     '1234'.split('').forEach((d) => fireEvent.click(screen.getByText(d)))
 
-    // 应显示高级配置区域
     await waitFor(() => {
-      expect(screen.getByTestId('advanced-config')).toBeTruthy()
+      expect(mockNavigate).toHaveBeenCalledWith('/parent/settings')
     })
   })
 
   it('PIN 验证失败应显示错误提示', async () => {
-    localStorageMock.setItem('littlestar_parent_pin', '1234')
+    authState.user.parentPin = '1234'
     renderWithRouter()
 
     await waitFor(() => {
       fireEvent.click(screen.getByTestId('advanced-settings-btn'))
     })
 
-    // 输入错误 PIN
     '0000'.split('').forEach((d) => fireEvent.click(screen.getByText(d)))
 
-    // 应显示错误提示
     expect(screen.getByTestId('pin-error')).toBeTruthy()
     expect(screen.getByText(/密码错误/)).toBeTruthy()
   })
 
-  // 高级配置表单
-  it('高级配置应包含实际输入字段和保存按钮', async () => {
-    localStorageMock.setItem('littlestar_parent_pin', '1234')
+  it('已解锁后再次点击高级设置应直接跳转', async () => {
+    authState.user.parentPin = '1234'
     renderWithRouter()
 
     await waitFor(() => {
       fireEvent.click(screen.getByTestId('advanced-settings-btn'))
     })
     '1234'.split('').forEach((d) => fireEvent.click(screen.getByText(d)))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/parent/settings'))
+    mockNavigate.mockClear()
 
     await waitFor(() => {
-      expect(screen.getByTestId('config-openmaic-url')).toBeTruthy()
-      expect(screen.getByTestId('config-api-key')).toBeTruthy()
-      expect(screen.getByTestId('config-save-btn')).toBeTruthy()
+      expect(screen.queryByTestId('pin-container')).not.toBeInTheDocument()
     })
-  })
-
-  it('保存配置应写入 localStorage', async () => {
-    localStorageMock.setItem('littlestar_parent_pin', '1234')
-    renderWithRouter()
-
-    await waitFor(() => {
-      fireEvent.click(screen.getByTestId('advanced-settings-btn'))
-    })
-    '1234'.split('').forEach((d) => fireEvent.click(screen.getByText(d)))
-
-    await waitFor(() => {
-      const urlInput = screen.getByTestId('config-openmaic-url')
-      fireEvent.change(urlInput, { target: { value: 'http://my-server:3000' } })
-      fireEvent.click(screen.getByTestId('config-save-btn'))
-    })
-
-    expect(localStorageMock.setItem).toHaveBeenCalledWith('littlestar_openmaic_url', 'http://my-server:3000')
+    fireEvent.click(screen.getByTestId('advanced-settings-btn'))
+    expect(mockNavigate).toHaveBeenCalledWith('/parent/settings')
   })
 })

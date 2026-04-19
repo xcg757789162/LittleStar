@@ -1,15 +1,70 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ParentDashboard } from '../ParentDashboard'
+import type { Child } from '@/types/models'
 
-// vi.hoisted: 确保 mock 数据在 vi.mock hoisting 前可用
-const { mockDailySessions } = vi.hoisted(() => {
+const {
+  mockDailySessions,
+  mockGetCacheSize,
+  mockCheckHealth,
+  useChildStoreMock,
+  emptyCoursesQuery,
+} = vi.hoisted(() => {
   const mockDailySessions: unknown[] = []
-  return { mockDailySessions }
+  const mockChild = {
+    id: '1',
+    name: '小星星',
+    avatar: '⭐',
+    age: 7,
+    userId: '1',
+    createdAt: new Date(),
+    settings: {
+      dailyLearningMinutes: 20,
+      preferredSubjects: ['math'],
+      difficultyAdjustment: 0,
+      voiceEnabled: true,
+      soundEffectsEnabled: true,
+    },
+  } as Child
+  const useChildStoreMock = Object.assign(
+    vi.fn((selector: (s: { children: Child[]; currentChild: Child | null }) => unknown) =>
+      selector({ children: [mockChild], currentChild: mockChild })),
+    {
+      getState: vi.fn(() => ({ currentChild: mockChild })),
+    },
+  )
+  const emptyCoursesQuery = { data: [] as unknown[], isLoading: false }
+  return {
+    mockDailySessions,
+    mockGetCacheSize: vi.fn().mockResolvedValue(0),
+    mockCheckHealth: vi.fn().mockResolvedValue(true),
+    useChildStoreMock,
+    emptyCoursesQuery,
+  }
 })
 
-// Mock API Client（ParentDashboard 现在通过 apiClient 加载数据）
+vi.mock('@/services/openmaic/cache', () => ({
+  ClassroomCache: vi.fn().mockImplementation(function () {
+    this.getClassroom = vi.fn()
+    this.listCachedClassrooms = vi.fn().mockResolvedValue([])
+    this.saveClassroom = vi.fn()
+    this.deleteClassroom = vi.fn()
+    this.clearExpiredCache = vi.fn()
+    this.clearAll = vi.fn()
+    this.getCacheSize = mockGetCacheSize
+  }),
+}))
+
+vi.mock('@/services/openmaic/client', () => ({
+  OpenMAICClient: vi.fn().mockImplementation(function () {
+    this.checkHealth = mockCheckHealth
+    this.generateClassroom = vi.fn()
+    this.getClassroom = vi.fn()
+  }),
+}))
+
 vi.mock('@/services/api', () => ({
   apiClient: {
     get: vi.fn().mockImplementation(async (path: string) => {
@@ -24,63 +79,78 @@ vi.mock('@/services/api', () => ({
   },
 }))
 
-vi.mock('@/stores/childStore', () => ({
-  useChildStore: {
-    getState: vi.fn().mockReturnValue({
-      currentChild: {
-        id: 'child-1',
-        name: '小星星',
-      },
-    }),
-  },
+vi.mock('@/hooks/queries/useCourses', () => ({
+  useCourses: () => emptyCoursesQuery,
 }))
 
-function renderDashboard() {
+vi.mock('@/stores/authStore', () => ({
+  useAuthStore: Object.assign(
+    (selector: (s: { user: { id: number; parentPin: string | null }; logout: () => void }) => unknown) =>
+      selector({
+        user: { id: 1, parentPin: null },
+        logout: vi.fn(),
+      }),
+    { setState: vi.fn() },
+  ),
+}))
+
+vi.mock('@/stores/childStore', () => ({
+  useChildStore: useChildStoreMock,
+}))
+
+function renderDashboard(queryClient: QueryClient) {
   return render(
-    <MemoryRouter>
-      <ParentDashboard />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <ParentDashboard />
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 
 describe('ParentDashboard', () => {
+  let queryClient: QueryClient
+
   beforeEach(() => {
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     vi.clearAllMocks()
     mockDailySessions.length = 0
+    mockGetCacheSize.mockResolvedValue(0)
+    mockCheckHealth.mockResolvedValue(true)
   })
 
   it('应渲染仪表盘容器', () => {
-    renderDashboard()
+    renderDashboard(queryClient)
     expect(screen.getByTestId('parent-dashboard')).toBeInTheDocument()
   })
 
   it('应显示学习概览', () => {
-    renderDashboard()
-    expect(screen.getByText('学习概览')).toBeInTheDocument()
+    renderDashboard(queryClient)
+    expect(screen.getByText(/学习概览/)).toBeInTheDocument()
   })
 
   it('应显示学习时长信息', () => {
-    renderDashboard()
+    renderDashboard(queryClient)
     expect(screen.getByTestId('stat-duration')).toBeInTheDocument()
   })
 
   it('应显示完成题数信息', () => {
-    renderDashboard()
+    renderDashboard(queryClient)
     expect(screen.getByTestId('stat-completed')).toBeInTheDocument()
   })
 
   it('应显示正确率信息', () => {
-    renderDashboard()
+    renderDashboard(queryClient)
     expect(screen.getByTestId('stat-accuracy')).toBeInTheDocument()
   })
 
-  it('应显示学习报告入口', () => {
-    renderDashboard()
-    expect(screen.getByTestId('reports-btn')).toBeInTheDocument()
+  it('应显示系统日志入口', () => {
+    renderDashboard(queryClient)
+    expect(screen.getByTestId('logs-btn')).toBeInTheDocument()
   })
 
   it('无数据时显示 0 分/0 题/0%', async () => {
-    renderDashboard()
+    renderDashboard(queryClient)
 
     await waitFor(() => {
       expect(screen.getByTestId('stat-duration').textContent).toContain('0分')
@@ -104,7 +174,7 @@ describe('ParentDashboard', () => {
       streak: 1,
     })
 
-    renderDashboard()
+    renderDashboard(queryClient)
 
     await waitFor(() => {
       expect(screen.getByTestId('stat-completed').textContent).toContain('15题')

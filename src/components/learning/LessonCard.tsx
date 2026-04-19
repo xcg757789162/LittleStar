@@ -61,6 +61,8 @@ export interface LessonCardProps {
   status?: LessonStatus
   /** 正确率 0-100（completed 状态下展示） */
   accuracy?: number
+  /** 完成时实际做题数（为 0 时表示纯讲授无测验，不展示正确率徽标） */
+  questionsCompleted?: number
   /** 完成日期（completed 状态下展示） */
   completedAt?: string
 }
@@ -78,6 +80,7 @@ export function LessonCard({
   onToggleSelect,
   status = 'ready',
   accuracy,
+  questionsCompleted,
   completedAt,
 }: LessonCardProps) {
   const isCompleted = status === 'completed'
@@ -105,6 +108,7 @@ export function LessonCard({
     if (selectable) {
       onToggleSelect?.()
     } else if (!isLocked) {
+      // 已完成课程也允许点击（用于复习/再学一遍）
       onTap()
     }
   }, [isLocked, onTap, selectable, onToggleSelect])
@@ -120,7 +124,7 @@ export function LessonCard({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ delay: index * 0.08, type: 'spring', stiffness: 300, damping: 24 }}
       whileTap={isLocked ? { scale: 0.97 } : { scale: 0.93 }}
-      whileHover={!isLocked ? { scale: 1.04, y: -4 } : undefined}
+      whileHover={!isLocked ? (isCompleted ? { scale: 1.02, y: -2 } : { scale: 1.04, y: -4 }) : undefined}
       onClick={handleTap}
       style={{
         position: 'relative',
@@ -128,7 +132,7 @@ export function LessonCard({
         maxWidth: 320,
         borderRadius: 22,
         overflow: 'hidden',
-        cursor: isLocked || isCompleted ? (isCompleted ? 'default' : 'not-allowed') : 'pointer',
+        cursor: isLocked ? 'not-allowed' : 'pointer',
         background: '#FFFFFF',
         boxShadow: isLocked || isCompleted
           ? '0 4px 16px rgba(0,0,0,0.04)'
@@ -223,23 +227,41 @@ export function LessonCard({
           </motion.div>
         )}
 
-        {/* 已完成正确率徽标 */}
-        {isCompleted && accuracy !== undefined && (
-          <div style={{
-            position: 'absolute',
-            top: 8,
-            right: 8,
-            padding: '2px 8px',
-            borderRadius: 12,
-            background: accuracy >= 80 ? '#4CAF50' : accuracy >= 60 ? '#FF9800' : '#F44336',
-            color: '#FFFFFF',
-            fontSize: 11,
-            fontWeight: 800,
-            fontFamily: "'Baloo 2', 'Nunito', sans-serif",
-            boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-          }}>
-            {accuracy}%
-          </div>
+        {/* 已完成正确率徽标（有做题才展示；纯讲授课改为"已学完"） */}
+        {isCompleted && (
+          questionsCompleted !== undefined && questionsCompleted === 0 ? (
+            <div style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              padding: '2px 10px',
+              borderRadius: 12,
+              background: '#4CAF50',
+              color: '#FFFFFF',
+              fontSize: 11,
+              fontWeight: 800,
+              fontFamily: "'Baloo 2', 'Nunito', sans-serif",
+              boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+            }}>
+              ✨ 已学
+            </div>
+          ) : accuracy !== undefined ? (
+            <div style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              padding: '2px 8px',
+              borderRadius: 12,
+              background: accuracy >= 80 ? '#4CAF50' : accuracy >= 60 ? '#FF9800' : '#F44336',
+              color: '#FFFFFF',
+              fontSize: 11,
+              fontWeight: 800,
+              fontFamily: "'Baloo 2', 'Nunito', sans-serif",
+              boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+            }}>
+              {accuracy}%
+            </div>
+          ) : null
         )}
       </div>
 
@@ -285,6 +307,11 @@ export function LessonCard({
           >
             ▶️
           </motion.span>
+        )}
+        {!isLocked && isCompleted && (
+          <span style={{ fontSize: 12, flexShrink: 0, color: '#4CAF50', fontWeight: 700 }}>
+            🔁 再学
+          </span>
         )}
       </div>
 

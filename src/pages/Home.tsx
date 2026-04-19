@@ -23,6 +23,8 @@ import { PostgresCacheStore } from '@/services/openmaic/postgres-cache-store'
 import { usePreGeneration } from '@/hooks/usePreGeneration'
 import { apiClient } from '@/services/api'
 import type { Subject, PlacementTest, PlacementResult } from '@/types/models'
+import { useCourses } from '@/hooks/queries/useCourses'
+import type { Course } from '@/types/course'
 
 /* ═══════════════════════════════════════════
    设计 Token — Sunny Playground
@@ -272,11 +274,69 @@ interface SubjectConfig {
   icon: () => React.JSX.Element
 }
 
-const ALL_SUBJECTS: SubjectConfig[] = [
-  { key: 'math', label: '数学', emoji: '🔢', color: T.mathColor, bg: T.mathBg, shadow: T.mathShadow, icon: MathPlanetIcon },
-  { key: 'chinese', label: '语文', emoji: '📖', color: T.chineseColor, bg: T.chineseBg, shadow: T.chineseShadow, icon: ChinesePlanetIcon },
-  { key: 'english', label: '英语', emoji: '🌍', color: T.englishColor, bg: T.englishBg, shadow: T.englishShadow, icon: EnglishPlanetIcon },
-]
+/** 预置课程的视觉配置（手工调校过的） */
+const BUILTIN_SUBJECT_CONFIGS: Record<string, Omit<SubjectConfig, 'key' | 'label' | 'emoji'>> = {
+  math: { color: T.mathColor, bg: T.mathBg, shadow: T.mathShadow, icon: MathPlanetIcon },
+  chinese: { color: T.chineseColor, bg: T.chineseBg, shadow: T.chineseShadow, icon: ChinesePlanetIcon },
+  english: { color: T.englishColor, bg: T.englishBg, shadow: T.englishShadow, icon: EnglishPlanetIcon },
+}
+
+/** 十六进制色 → 柔色卡片背景渐变 + 阴影 */
+function deriveSubjectTheme(hex: string): { color: string; bg: string; shadow: string } {
+  const match = /^#?([0-9a-fA-F]{6})$/.exec((hex || '').trim())
+  const clean = match ? match[1] : 'f4b66b' // 兜底暖色
+  const r = parseInt(clean.slice(0, 2), 16)
+  const g = parseInt(clean.slice(2, 4), 16)
+  const b = parseInt(clean.slice(4, 6), 16)
+  const color = `#${clean}`
+  return {
+    color,
+    bg: `linear-gradient(135deg, rgba(${r}, ${g}, ${b}, 0.22) 0%, rgba(${r}, ${g}, ${b}, 0.08) 100%)`,
+    shadow: `rgba(${r}, ${g}, ${b}, 0.3)`,
+  }
+}
+
+/** 通用行星图标（自定义课程用） */
+function GenericPlanetIcon({ emoji, color }: { emoji: string; color: string }) {
+  return (
+    <div style={{
+      width: 64, height: 64,
+      borderRadius: '50%',
+      background: `radial-gradient(circle at 30% 30%, ${color}CC, ${color}77 60%, ${color}33)`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 34,
+      boxShadow: `inset -8px -8px 16px ${color}44, 0 4px 12px ${color}55`,
+    }}>
+      {emoji}
+    </div>
+  )
+}
+
+/** 把 Course 列表转成 SubjectConfig 列表（仅 ready 状态参与） */
+function buildSubjectConfigs(courses: Course[]): SubjectConfig[] {
+  return courses
+    .filter((c) => c.status === 'ready')
+    .map((c) => {
+      const builtin = BUILTIN_SUBJECT_CONFIGS[c.slug]
+      if (builtin) {
+        return {
+          key: c.slug as Subject,
+          label: c.name,
+          emoji: c.emoji,
+          ...builtin,
+        }
+      }
+      const theme = deriveSubjectTheme(c.colorHex)
+      const emoji = c.emoji
+      return {
+        key: c.slug as Subject,
+        label: c.name,
+        emoji,
+        ...theme,
+        icon: () => <GenericPlanetIcon emoji={emoji} color={c.colorHex} />,
+      }
+    })
+}
 
 /* ═══════════════════════════════════════════
    动画变体
@@ -336,11 +396,19 @@ export function Home() {
   const navigate = useNavigate()
   const currentChild = useChildStore((s) => s.currentChild)
   const childId = currentChild?.id
-  const gradeLevel = currentChild?.gradeLevel ?? 'middle-kindergarten'
   const [cachedCount, setCachedCount] = useState<number>(0)
   const [resetTarget, setResetTarget] = useState<Subject | 'all' | null>(null)
   const [isResetting, setIsResetting] = useState(false)
   const resetPlacement = useResetPlacement()
+
+  // 热拔插课程：动态加载 ALL_SUBJECTS
+  const { data: allCourses } = useCourses({
+    childId: childId != null ? Number(childId) : undefined,
+  })
+  const ALL_SUBJECTS = useMemo<SubjectConfig[]>(
+    () => buildSubjectConfigs(allCourses || []),
+    [allCourses],
+  )
 
   // 缓存初始化
   const cacheInstance = useMemo(() => {
@@ -359,43 +427,61 @@ export function Home() {
   const { data: masteryRecords } = useMasteryRecords(childId)
   const { data: allKnowledgeNodes } = useKnowledgeNodes()
 
-  // 按科目计算基于学习记录的已掌握数量：masteryLevel ≥ 80 为已掌握
+  // 获取已完成课程 knowledgeNodeId|lessonIndex 复合键（用于计算未学习缓存数、掌握统计）
+  const [completedLessonKeys, setCompletedLessonKeys] = useState<Set<string>>(new Set())
+
+  // 按科目统计每个知识点的学习状态；口径与 SubjectMasteryPage 保持一致：
+  //   total_lessons > 0  → 完全完成为已掌握，部分完成为学习中，0 为未学习
+  //   total_lessons null → 回落到 masteryLevel ≥ 80 已掌握，>0 学习中
   const subjectMasteryStats = useMemo(() => {
     const stats = new Map<string, { mastered: number; learning: number; total: number }>()
     if (!allKnowledgeNodes) return stats
 
-    // 先统计每科目的知识点总数
+    // 初始化各科目统计
     const subjectNodeIds = new Map<string, Set<string>>()
     for (const node of allKnowledgeNodes) {
-      if (!subjectNodeIds.has(node.subject)) {
-        subjectNodeIds.set(node.subject, new Set())
-      }
-      subjectNodeIds.get(node.subject)!.add(node.id ?? '')
+      if (!node.id) continue
+      if (!subjectNodeIds.has(node.subject)) subjectNodeIds.set(node.subject, new Set())
+      subjectNodeIds.get(node.subject)!.add(node.id)
     }
-
-    // 初始化各科目统计
     for (const [subj, nodeIds] of subjectNodeIds) {
       stats.set(subj, { mastered: 0, learning: 0, total: nodeIds.size })
     }
 
-    // 用学习记录填充
+    // knowledgeNodeId → 已完成课时数
+    const completedLessonCount = new Map<string, number>()
+    for (const key of completedLessonKeys) {
+      const [nodeId] = key.split('|')
+      if (!nodeId) continue
+      completedLessonCount.set(nodeId, (completedLessonCount.get(nodeId) ?? 0) + 1)
+    }
+
+    // knowledgeNodeId → masteryLevel（用于无课时计划的 fallback 分支）
+    const masteryByNode = new Map<string, number>()
     if (masteryRecords) {
-      for (const rec of masteryRecords) {
-        // 找到这个知识点属于哪个科目
-        const node = allKnowledgeNodes.find(n => n.id === rec.knowledgeNodeId)
-        if (!node) continue
-        const s = stats.get(node.subject)
-        if (!s) continue
-        if (rec.masteryLevel >= 80) {
-          s.mastered++
-        } else {
-          s.learning++
+      for (const rec of masteryRecords) masteryByNode.set(rec.knowledgeNodeId, rec.masteryLevel)
+    }
+
+    for (const node of allKnowledgeNodes) {
+      if (!node.id) continue
+      const s = stats.get(node.subject)
+      if (!s) continue
+      const totalLessons = node.totalLessons ?? 0
+      const completed = completedLessonCount.get(node.id) ?? 0
+      if (totalLessons > 0) {
+        if (completed >= totalLessons) s.mastered++
+        else if (completed > 0) s.learning++
+      } else {
+        const level = masteryByNode.get(node.id)
+        if (level != null) {
+          if (level >= 80) s.mastered++
+          else if (level > 0) s.learning++
         }
       }
     }
 
     return stats
-  }, [allKnowledgeNodes, masteryRecords])
+  }, [allKnowledgeNodes, masteryRecords, completedLessonKeys])
 
   // 保留评测结果数据的 Map：subject → PlacementTest（取最新一次）
   const completedSubjectsMap = useMemo(() => {
@@ -418,14 +504,12 @@ export function Home() {
 
   const pendingSubjects = useMemo(() => {
     return ALL_SUBJECTS.filter((s) => !completedSubjects.has(s.key))
-  }, [completedSubjects])
+  }, [completedSubjects, ALL_SUBJECTS])
 
   const hasPlacementTest = childId
     ? (placementTests ? placementTests.length > 0 : null)
     : false
 
-  // 获取已完成课程 knowledgeNodeId|lessonIndex 复合键（用于计算未学习缓存数）
-  const [completedLessonKeys, setCompletedLessonKeys] = useState<Set<string>>(new Set())
   useEffect(() => {
     if (!childId) return
     apiClient.get<{ knowledgeNodeId: string; lessonIndex: number }>('/classroom_history', {
@@ -887,7 +971,7 @@ export function Home() {
                   transition={{ delay: 0.3 + index * 0.1, type: 'spring', stiffness: 200 }}
                   whileTap={{ scale: 0.97 }}
                   whileHover={{ scale: 1.02 }}
-                  onClick={() => navigate(`/placement-test/${subject.key}/${gradeLevel}`)}
+                  onClick={() => navigate(`/placement-test/${subject.key}`)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',

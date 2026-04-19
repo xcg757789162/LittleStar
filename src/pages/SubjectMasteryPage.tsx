@@ -16,6 +16,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useChildStore } from '@/stores/childStore'
 import { useKnowledgeNodesBySubject } from '@/hooks/queries/useKnowledgeNodes'
 import { useMasteryRecords } from '@/hooks/queries/useMasteryRecords'
+import { useCourses } from '@/hooks/queries/useCourses'
 import { apiClient } from '@/services/api'
 import { useQuery } from '@tanstack/react-query'
 import type { Subject, KnowledgeNode } from '@/types/models'
@@ -93,17 +94,40 @@ const SUBJECT_THEMES: Record<string, SubjectTheme> = {
   },
 }
 
+/** 动态课程：从 colorHex 派生完整主题 */
+function deriveSubjectTheme(name: string, emoji: string, colorHex: string): SubjectTheme {
+  const match = /^#?([0-9a-fA-F]{6})$/.exec((colorHex || '').trim())
+  const clean = match ? match[1] : 'f4b66b'
+  const r = parseInt(clean.slice(0, 2), 16)
+  const g = parseInt(clean.slice(2, 4), 16)
+  const b = parseInt(clean.slice(4, 6), 16)
+  const rgba = (a: number) => `rgba(${r}, ${g}, ${b}, ${a})`
+  const hex = `#${clean}`
+  return {
+    label: name,
+    emoji: emoji || '✨',
+    color: hex,
+    bg: `linear-gradient(135deg, ${rgba(0.25)} 0%, ${rgba(0.12)} 100%)`,
+    shadow: rgba(0.3),
+    lightBg: rgba(0.08),
+    iconBg: rgba(0.12),
+  }
+}
+
 /* ═══════════════════════════════════════════
    知识点状态类型
    ═══════════════════════════════════════════ */
 
 type NodeStatus = 'mastered' | 'learning' | 'not_started'
 
+type LessonCacheStatus = 'completed' | 'cached' | 'generating' | 'pending_gen' | 'not_generated'
+
 interface LessonDetail {
   lessonIndex: number
   title: string
   description: string
   completed: boolean
+  cacheStatus: LessonCacheStatus
 }
 
 interface NodeWithStatus {
@@ -113,6 +137,21 @@ interface NodeWithStatus {
   completedLessons?: number
   totalLessons?: number
   lessons?: LessonDetail[]
+}
+
+function getLessonStatusConfig(status: LessonCacheStatus) {
+  switch (status) {
+    case 'completed':
+      return { label: '已完成', bgColor: T.successBg, textColor: T.successGreen, dot: T.successGreen }
+    case 'cached':
+      return { label: '已生成', bgColor: '#EEF4FF', textColor: '#5B8DEF', dot: '#5B8DEF' }
+    case 'generating':
+      return { label: '生成中', bgColor: T.warningBg, textColor: T.warningAmber, dot: T.warningAmber }
+    case 'pending_gen':
+      return { label: '排队中', bgColor: '#FFF5EB', textColor: '#E0952D', dot: '#E0952D' }
+    case 'not_generated':
+      return { label: '未生成', bgColor: '#F8F9FC', textColor: T.textLight, dot: '#D0D5DD' }
+  }
 }
 
 function getStatusConfig(status: NodeStatus, _color: string) {
@@ -180,18 +219,9 @@ function BookIcon({ size = 18, color = T.textLight }: { size?: number; color?: s
    动画变体
    ═══════════════════════════════════════════ */
 
-const staggerContainer = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.06, delayChildren: 0.1 },
-  },
-}
-
-const staggerItem = {
-  hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 20 } },
-}
+// (移除未使用的 staggerContainer/staggerItem variants —
+// 子组件改为直接使用 initial/animate，避免 Framer Motion variants
+// 在某些场景下未正确传递导致列表停留在 hidden 状态的问题)
 
 /* ═══════════════════════════════════════════
    主组件
@@ -203,7 +233,15 @@ export function SubjectMasteryPage() {
   const currentChild = useChildStore((s) => s.currentChild)
   const childId = currentChild?.id
 
-  const theme = SUBJECT_THEMES[subject ?? ''] ?? SUBJECT_THEMES.math
+  // 优先用内置主题；若是动态课程，从 courses 表读取名字/颜色派生主题
+  const { data: courses } = useCourses()
+  const theme = useMemo(() => {
+    const builtin = SUBJECT_THEMES[subject ?? '']
+    if (builtin) return builtin
+    const course = courses?.find((c) => c.slug === subject)
+    if (course) return deriveSubjectTheme(course.name, course.emoji, course.colorHex)
+    return SUBJECT_THEMES.math
+  }, [subject, courses])
 
   // 查询数据：知识点列表 + 学习记录（不依赖评测结果）
   const { data: knowledgeNodes, isLoading: isLoadingNodes } = useKnowledgeNodesBySubject(subject as Subject | undefined)
@@ -223,6 +261,38 @@ export function SubjectMasteryPage() {
       })
     },
     enabled: !!childId,
+  })
+
+  // 查询课堂缓存元数据（哪些课时已生成）
+  const { data: cacheEntries } = useQuery({
+    queryKey: ['classroom-cache-meta', childId, subject],
+    queryFn: async () => {
+      if (!childId) return []
+      return apiClient.get<{ knowledgeNodeId: string; lessonIndex: number }>('/classroom_cache', {
+        filters: [
+          { column: 'childId', operator: 'eq', value: Number(childId) },
+        ],
+        select: 'knowledge_node_id,lesson_index',
+      })
+    },
+    enabled: !!childId,
+  })
+
+  // 查询活跃的生成任务（pending/running）
+  const { data: activeTasks } = useQuery({
+    queryKey: ['generation-tasks-active', childId],
+    queryFn: async () => {
+      if (!childId) return []
+      return apiClient.get<{ knowledgeNodeId: string; lessonIndex: number; status: string }>('/generation_tasks', {
+        filters: [
+          { column: 'childId', operator: 'eq', value: Number(childId) },
+          { column: 'status', operator: 'in', value: ['pending', 'running'] },
+        ],
+        select: 'knowledge_node_id,lesson_index,status',
+      })
+    },
+    enabled: !!childId,
+    refetchInterval: 5000,
   })
 
   // 查询每个知识点的课时计划（课程名称）
@@ -279,6 +349,22 @@ export function SubjectMasteryPage() {
     return m
   }, [classroomHistory])
 
+  // 缓存映射：`${knowledgeNodeId}:${lessonIndex}` → true
+  const cacheSet = useMemo(() => {
+    const s = new Set<string>()
+    if (!cacheEntries) return s
+    for (const e of cacheEntries) s.add(`${e.knowledgeNodeId}:${e.lessonIndex}`)
+    return s
+  }, [cacheEntries])
+
+  // 活跃任务映射：`${knowledgeNodeId}:${lessonIndex}` → status
+  const activeTaskMap = useMemo(() => {
+    const m = new Map<string, string>()
+    if (!activeTasks) return m
+    for (const t of activeTasks) m.set(`${t.knowledgeNodeId}:${t.lessonIndex}`, t.status)
+    return m
+  }, [activeTasks])
+
   // 基于课时完成度判定状态：全部完成→已掌握 | 部分完成→学习中 | 0→未学习
   const { nodesWithStatus, masteredCount, learningCount, notStartedCount } = useMemo(() => {
     if (!knowledgeNodes) return { nodesWithStatus: [], masteredCount: 0, learningCount: 0, notStartedCount: 0 }
@@ -295,12 +381,21 @@ export function SubjectMasteryPage() {
       const completedLessons = completedSet?.size ?? 0
 
       const planLessons = lessonPlanMap.get(nodeId)
-      const lessons: LessonDetail[] | undefined = planLessons?.map(lp => ({
-        lessonIndex: lp.lessonIndex,
-        title: lp.title,
-        description: lp.description,
-        completed: completedSet?.has(lp.lessonIndex) ?? false,
-      }))
+      const lessons: LessonDetail[] | undefined = planLessons?.map(lp => {
+        const isCompleted = completedSet?.has(lp.lessonIndex) ?? false
+        const key = `${nodeId}:${lp.lessonIndex}`
+        let cacheStatus: LessonCacheStatus = 'not_generated'
+        if (isCompleted) cacheStatus = 'completed'
+        else if (cacheSet.has(key)) cacheStatus = 'cached'
+        else if (activeTaskMap.has(key)) cacheStatus = activeTaskMap.get(key) === 'running' ? 'generating' : 'pending_gen'
+        return {
+          lessonIndex: lp.lessonIndex,
+          title: lp.title,
+          description: lp.description,
+          completed: isCompleted,
+          cacheStatus,
+        }
+      })
 
       if (totalLessons > 0) {
         if (completedLessons >= totalLessons) {
@@ -328,7 +423,7 @@ export function SubjectMasteryPage() {
     })
 
     return { nodesWithStatus: nodes, masteredCount: mastered, learningCount: learning, notStartedCount: notStarted }
-  }, [knowledgeNodes, masteryMap, lessonCompletionMap, lessonPlanMap])
+  }, [knowledgeNodes, masteryMap, lessonCompletionMap, lessonPlanMap, cacheSet, activeTaskMap])
 
   const totalCount = nodesWithStatus.length
   const progressPercent = totalCount > 0 ? Math.round((masteredCount / totalCount) * 100) : 0
@@ -340,6 +435,12 @@ export function SubjectMasteryPage() {
       paddingBottom: 'calc(env(safe-area-inset-bottom, 20px) + 80px)',
       overflowX: 'hidden',
     }}>
+      <style>{`
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(0.75); }
+        }
+      `}</style>
       {/* ═══════════════════════════════════
          顶部导航栏
          ═══════════════════════════════════ */}
@@ -521,7 +622,7 @@ export function SubjectMasteryPage() {
         {/* ═══════════════════════════════════
            知识点列表
            ═══════════════════════════════════ */}
-        <AnimatePresence mode="wait">
+        <AnimatePresence>
           {isLoadingNodes ? (
             <motion.div
               key="loading"
@@ -581,9 +682,8 @@ export function SubjectMasteryPage() {
           ) : (
             <motion.div
               key="nodes-list"
-              variants={staggerContainer}
-              initial="hidden"
-              animate="show"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { staggerChildren: 0.04, delayChildren: 0.05 } }}
               exit={{ opacity: 0 }}
               style={{
                 display: 'flex',
@@ -726,7 +826,9 @@ function SectionHeader({
 }) {
   return (
     <motion.div
-      variants={staggerItem}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 260, damping: 20 }}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -771,7 +873,9 @@ function KnowledgeNodeCard({
 
   return (
     <motion.div
-      variants={staggerItem}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 260, damping: 20 }}
       style={{
         borderRadius: '20px',
         backgroundColor: T.cardBg,
@@ -938,68 +1042,92 @@ function KnowledgeNodeCard({
             backgroundColor: '#F0F2F5',
             marginBottom: '4px',
           }} />
-          {lessons!.map((lesson) => (
-            <div
-              key={lesson.lessonIndex}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '8px 12px',
-                borderRadius: '12px',
-                backgroundColor: lesson.completed ? `${cfg.bgColor}` : '#FAFBFC',
-                transition: 'background-color 0.2s',
-              }}
-            >
-              <span style={{
-                width: '22px',
-                height: '22px',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '12px',
-                flexShrink: 0,
-                backgroundColor: lesson.completed ? cfg.borderColor : '#E8ECF2',
-                color: lesson.completed ? '#fff' : T.textLight,
-                fontWeight: 700,
-                fontFamily: T.fontBody,
-              }}>
-                {lesson.completed ? '✓' : lesson.lessonIndex}
-              </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
+          {lessons!.map((lesson) => {
+            const lsCfg = getLessonStatusConfig(lesson.cacheStatus)
+            return (
+              <div
+                key={lesson.lessonIndex}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '8px 12px',
+                  borderRadius: '12px',
+                  backgroundColor: lesson.completed ? `${cfg.bgColor}` : '#FAFBFC',
+                  transition: 'background-color 0.2s',
+                }}
+              >
+                <span style={{
+                  width: '22px',
+                  height: '22px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '12px',
+                  flexShrink: 0,
+                  backgroundColor: lesson.completed ? cfg.borderColor : '#E8ECF2',
+                  color: lesson.completed ? '#fff' : T.textLight,
+                  fontWeight: 700,
                   fontFamily: T.fontBody,
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  color: lesson.completed ? T.textDark : T.textMedium,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
                 }}>
-                  {lesson.title}
-                </div>
-                {lesson.description && (
+                  {lesson.completed ? '✓' : lesson.lessonIndex}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
                     fontFamily: T.fontBody,
-                    fontSize: '11px',
-                    color: T.textLight,
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: lesson.completed ? T.textDark : T.textMedium,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
-                    marginTop: '1px',
                   }}>
-                    {lesson.description}
+                    {lesson.title}
                   </div>
-                )}
+                  {lesson.description && (
+                    <div style={{
+                      fontFamily: T.fontBody,
+                      fontSize: '11px',
+                      color: T.textLight,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      marginTop: '1px',
+                    }}>
+                      {lesson.description}
+                    </div>
+                  )}
+                </div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '3px 8px',
+                  borderRadius: '8px',
+                  backgroundColor: lsCfg.bgColor,
+                  flexShrink: 0,
+                }}>
+                  <span style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: lsCfg.dot,
+                    ...(lesson.cacheStatus === 'generating' ? { animation: 'pulse-dot 1.4s ease-in-out infinite' } : {}),
+                  }} />
+                  <span style={{
+                    fontFamily: T.fontBody,
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: lsCfg.textColor,
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {lsCfg.label}
+                  </span>
+                </div>
               </div>
-              {lesson.completed && (
-                <span style={{ fontSize: '11px', color: cfg.textColor, fontWeight: 600, fontFamily: T.fontBody, flexShrink: 0 }}>
-                  已完成
-                </span>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </motion.div>

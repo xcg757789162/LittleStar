@@ -23,7 +23,6 @@ function createTestChild(overrides: Partial<Child> = {}): Child {
     name: '小明',
     avatar: '🦊',
     age: 5,
-    gradeLevel: 'senior-kindergarten',
     createdAt: new Date(),
     settings: {
       dailyLearningMinutes: 15,
@@ -50,8 +49,8 @@ describe('ChildSettings Advanced Classroom Settings', () => {
       expect(DEFAULT_ADVANCED_SETTINGS.ttsProviderId).toBe('')
       expect(DEFAULT_ADVANCED_SETTINGS.ttsVoice).toBe('')
       expect(DEFAULT_ADVANCED_SETTINGS.ttsSpeed).toBe(1.0)
-      expect(DEFAULT_ADVANCED_SETTINGS.enableImageGeneration).toBe(false)
-      expect(DEFAULT_ADVANCED_SETTINGS.enableVideoGeneration).toBe(false)
+      expect(DEFAULT_ADVANCED_SETTINGS.enableImageGeneration).toBe(true)
+      expect(DEFAULT_ADVANCED_SETTINGS.enableVideoGeneration).toBe(true)
       expect(DEFAULT_ADVANCED_SETTINGS.classroomAgentMode).toBe('preset')
       expect(DEFAULT_ADVANCED_SETTINGS.selfIntroduction).toBe('')
       expect(DEFAULT_ADVANCED_SETTINGS.llmModel).toBe('')

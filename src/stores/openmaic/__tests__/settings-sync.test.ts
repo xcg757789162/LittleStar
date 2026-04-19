@@ -22,7 +22,6 @@ function createTestChild(
     name: '小明',
     avatar: '/avatars/user.png',
     age: 5,
-    gradeLevel: 'senior-kindergarten',
     createdAt: new Date(),
     settings: {
       dailyLearningMinutes: 15,

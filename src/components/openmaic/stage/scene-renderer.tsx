@@ -17,7 +17,9 @@ export function SceneRenderer({ scene, mode }: SceneRendererProps) {
     switch (scene.type) {
       case 'slide':
         if (scene.content.type !== 'slide') return <div>Invalid slide content</div>;
-        return <SlideRenderer mode={mode} />;
+        // key={scene.id} 很关键：不同 slide 的元素集合差异很大，
+        // 如果复用同一个实例会出现文本/动画残影（"上一页文字透在新页面上"）。
+        return <SlideRenderer key={scene.id} mode={mode} />;
       case 'quiz':
         if (scene.content.type !== 'quiz') return <div>Invalid quiz content</div>;
         return <QuizView key={scene.id} questions={scene.content.questions} sceneId={scene.id} />;

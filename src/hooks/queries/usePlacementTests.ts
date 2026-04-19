@@ -1,20 +1,20 @@
 /**
  * usePlacementTests — 入学测评记录 React Query Hooks
+ *
+ * 年级维度已下线：测评按 (childId, subject) 唯一定位。
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/api'
-import type { PlacementTest, Subject, GradeLevel } from '@/types/models'
+import type { PlacementTest, Subject } from '@/types/models'
 
-/** React Query 缓存键 */
 export const placementTestKeys = {
   all: ['placementTests'] as const,
   byChild: (childId: string | number) => ['placementTests', { childId }] as const,
-  byChildSubjectGrade: (childId: string | number, subject: Subject, gradeLevel: GradeLevel) =>
-    ['placementTests', { childId, subject, gradeLevel }] as const,
+  byChildSubject: (childId: string | number, subject: Subject) =>
+    ['placementTests', { childId, subject }] as const,
 }
 
-/** 按孩子查询测评记录 */
 export function usePlacementTests(childId: string | number | undefined) {
   return useQuery({
     queryKey: placementTestKeys.byChild(childId!),
@@ -27,33 +27,28 @@ export function usePlacementTests(childId: string | number | undefined) {
   })
 }
 
-/** 按孩子+科目+年级查询测评记录 */
-export function usePlacementTestBySubjectGrade(
+export function usePlacementTestBySubject(
   childId: string | number | undefined,
   subject: Subject | undefined,
-  gradeLevel: GradeLevel | undefined,
 ) {
   return useQuery({
-    queryKey: placementTestKeys.byChildSubjectGrade(childId!, subject!, gradeLevel!),
+    queryKey: placementTestKeys.byChildSubject(childId!, subject!),
     queryFn: () =>
       apiClient.get<PlacementTest>('/placement_tests', {
         filters: [
           { column: 'childId', operator: 'eq', value: Number(childId) },
           { column: 'subject', operator: 'eq', value: subject! },
-          { column: 'gradeLevel', operator: 'eq', value: gradeLevel! },
         ],
         order: [{ column: 'startedAt', ascending: false }],
         limit: 1,
       }),
-    enabled: !!childId && !!subject && !!gradeLevel,
+    enabled: !!childId && !!subject,
   })
 }
 
-/** 创建测评记录输入类型 */
 export interface CreatePlacementTestInput {
   childId: number
   subject: Subject
-  gradeLevel: GradeLevel
   questions: Array<{
     knowledgeNodeId: string
     questionId: string
@@ -66,7 +61,6 @@ export interface CreatePlacementTestInput {
   result?: unknown
 }
 
-/** 创建测评记录 */
 export function useCreatePlacementTest() {
   const queryClient = useQueryClient()
   return useMutation({

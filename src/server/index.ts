@@ -17,6 +17,7 @@ import { pool } from './db.js'
 import { resolveLLMBaseUrl, type QuestionGenerationSettings } from './question-model.js'
 import { startTaskProcessor, stopTaskProcessor, triggerProcessing } from './services/task-processor.js'
 import { startDataCleanup, stopDataCleanup } from './services/data-cleanup.js'
+import { registerCoursesRoutes } from './routes/courses.js'
 
 const app = express()
 app.use(express.json({ limit: '10mb', type: 'application/json' }))
@@ -51,39 +52,29 @@ const PHASE2_MODE_LABELS: Record<string, string> = {
 function buildQuestionSystemPrompt(
   nodeName: string,
   nodeDescription: string,
-  gradeLevel: string,
+  childAge: number,
   subject: string,
   phase2Context?: Phase2Ctx,
 ): string {
-  const gradeAgeMap: Record<string, string> = {
-    'middle-kindergarten': '中班（4-5岁）',
-    'senior-kindergarten': '大班（5-6岁）',
-    'grade-1': '一年级（6-7岁）',
-    'grade-2': '二年级（7-8岁）',
-    'grade-3': '三年级（8-9岁）',
-    'grade-4': '四年级（9-10岁）',
-    'grade-5': '五年级（10-11岁）',
-    'grade-6': '六年级（11-12岁）',
-  }
   const subjectNameMap: Record<string, string> = {
     math: '数学',
     chinese: '语文',
     english: '英语',
   }
 
-  const ageDescription = gradeAgeMap[gradeLevel] || gradeLevel
+  const ageDescription = `${childAge} 岁`
   const subjectName = subjectNameMap[subject] || subject
 
   let prompt = `你是一个面向幼儿的教育评测出题专家。
 
 ## 任务
-根据给定的知识点，生成一道四选一选择题，用于评估 ${ageDescription} 孩子对 ${subjectName} 科目中「${nodeName}」知识点的掌握程度。
+根据给定的知识点，生成一道四选一选择题，用于评估约 ${ageDescription} 的孩子对 ${subjectName} 科目中「${nodeName}」知识点的掌握程度。
 
 ## 知识点信息
 - 名称：${nodeName}
 - 描述：${nodeDescription}
 - 科目：${subjectName}
-- 年龄段：${ageDescription}
+- 年龄锚点：${ageDescription}
 `
 
   if (phase2Context) {
@@ -150,12 +141,15 @@ app.post('/api/pre-generate/question', async (req, res) => {
   try {
     const {
       node,
-      gradeLevel,
+      childAge: bodyChildAge,
+      gradeLevel: legacyGradeLevel,
       subject,
       settings,
       phase2Context,
     } = req.body as {
       node?: { id: string; name: string; description: string }
+      childAge?: number
+      /** @deprecated 旧前端字段，忽略 */
       gradeLevel?: string
       subject?: string
       settings?: QuestionGenerationSettings
@@ -167,8 +161,14 @@ app.post('/api/pre-generate/question', async (req, res) => {
       return
     }
 
-    if (!gradeLevel || !subject) {
-      res.status(400).json({ error: 'gradeLevel and subject are required' })
+    const childAge =
+      typeof bodyChildAge === 'number' && Number.isFinite(bodyChildAge)
+        ? Math.max(3, Math.min(18, Math.round(bodyChildAge)))
+        : typeof legacyGradeLevel === 'string' && legacyGradeLevel
+          ? 7
+          : NaN
+    if (!Number.isFinite(childAge) || !subject) {
+      res.status(400).json({ error: 'childAge (number) and subject are required' })
       return
     }
 
@@ -190,7 +190,7 @@ app.post('/api/pre-generate/question', async (req, res) => {
 
     console.log(`[API] question 请求: model=${modelId}, baseUrl=${baseUrl}, node=${node.name}, phase2=${phase2Context?.phase2Mode ?? 'none'}`)
 
-    const systemPrompt = buildQuestionSystemPrompt(node.name, node.description, gradeLevel, subject, phase2Context)
+    const systemPrompt = buildQuestionSystemPrompt(node.name, node.description, childAge, subject, phase2Context)
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), QUESTION_TIMEOUT_MS)
 
@@ -618,6 +618,11 @@ app.get('/api/pre-generate/health', async (_req, res) => {
     res.status(503).json({ status: 'degraded', service: 'pre-generation', db: 'disconnected' })
   }
 })
+
+// ============================================================
+// 注册热拔插课程路由
+// ============================================================
+registerCoursesRoutes(app)
 
 // ============================================================
 // 启动

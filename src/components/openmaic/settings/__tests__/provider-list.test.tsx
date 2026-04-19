@@ -8,8 +8,6 @@ vi.mock('@/lib/openmaic/hooks/use-i18n', () => ({
       const messages: Record<string, string> = {
         'settings.providerNames.openai': 'OpenAI',
         'settings.providerNames.anthropic': 'Claude',
-        'settings.currentActiveSummary': '当前课堂使用',
-        'settings.providerListDescription': '先看当前生效模型，再选择要查看或切换的服务商。',
         'settings.activeProviderStatus': '当前生效',
         'settings.viewingProvider': '正在查看',
         'settings.serverConfigured': '服务端',
@@ -46,14 +44,12 @@ describe('ProviderList', () => {
         activeModelName="Claude 3.7 Sonnet"
         onSelect={vi.fn()}
         onAddProvider={vi.fn()}
-      />, 
+      />,
     )
 
-    expect(screen.getByText('当前课堂使用')).toBeInTheDocument()
     expect(screen.getAllByText('Claude').length).toBeGreaterThan(0)
-    expect(screen.getByText('Claude 3.7 Sonnet')).toBeInTheDocument()
-    expect(screen.getByText('先看当前生效模型，再选择要查看或切换的服务商。')).toBeInTheDocument()
     expect(screen.getByText('当前生效')).toBeInTheDocument()
     expect(screen.getByText('正在查看')).toBeInTheDocument()
+    expect(screen.getByText('添加')).toBeInTheDocument()
   })
 })

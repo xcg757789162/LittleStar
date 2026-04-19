@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import { useChildStore } from '@/stores/childStore'
+import { useCourses } from '@/hooks/queries/useCourses'
 import { ReviewLearningService, type HistoryListItem } from '@/services/review-learning'
 import type { Subject } from '@/types/models'
 
@@ -37,39 +38,76 @@ const T = {
   textWhite: '#FFFFFF',
 }
 
-const SUBJECT_TABS: { key: Subject | 'all'; label: string; emoji: string; color: string }[] = [
-  { key: 'all', label: '全部', emoji: '📚', color: T.sunOrange },
-  { key: 'math', label: '数学', emoji: '🔢', color: T.mathColor },
-  { key: 'chinese', label: '语文', emoji: '📖', color: T.chineseColor },
-  { key: 'english', label: '英语', emoji: '🔤', color: T.englishColor },
-]
-
-const SUBJECT_COLORS: Record<Subject, string> = {
-  math: 'linear-gradient(135deg, #FFE0C2 0%, #FFECD2 100%)',
-  chinese: 'linear-gradient(135deg, #C8F7F1 0%, #DEFFF9 100%)',
-  english: 'linear-gradient(135deg, #C8E9FA 0%, #E0F2FE 100%)',
+/** 预置三科的精调主题（保留视觉记忆） */
+const BUILTIN_SUBJECT_THEME: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
+  math: { label: '数学', emoji: '🔢', color: T.mathColor, bg: 'linear-gradient(135deg, #FFE0C2 0%, #FFECD2 100%)' },
+  chinese: { label: '语文', emoji: '📖', color: T.chineseColor, bg: 'linear-gradient(135deg, #C8F7F1 0%, #DEFFF9 100%)' },
+  english: { label: '英语', emoji: '🔤', color: T.englishColor, bg: 'linear-gradient(135deg, #C8E9FA 0%, #E0F2FE 100%)' },
 }
 
-const SUBJECT_TEXT_COLORS: Record<Subject, string> = {
-  math: T.mathColor,
-  chinese: T.chineseColor,
-  english: T.englishColor,
+/** 从十六进制色派生柔色卡片渐变 */
+function deriveSubjectBg(hex: string): { bg: string; color: string } {
+  const match = /^#?([0-9a-fA-F]{6})$/.exec((hex || '').trim())
+  const clean = match ? match[1] : 'f4b66b'
+  const r = parseInt(clean.slice(0, 2), 16)
+  const g = parseInt(clean.slice(2, 4), 16)
+  const b = parseInt(clean.slice(4, 6), 16)
+  return {
+    color: `#${clean}`,
+    bg: `linear-gradient(135deg, rgba(${r},${g},${b},0.22) 0%, rgba(${r},${g},${b},0.08) 100%)`,
+  }
 }
 
-const SUBJECT_LABELS: Record<Subject, string> = {
-  math: '数学',
-  chinese: '语文',
-  english: '英语',
+type SubjectTabInfo = {
+  key: Subject | 'all'
+  label: string
+  emoji: string
+  color: string
 }
+
+type SubjectStyle = { label: string; bg: string; color: string; emoji: string }
 
 export function LearningHistory() {
   const navigate = useNavigate()
   const currentChild = useChildStore((s) => s.currentChild)
+  const { data: allCourses } = useCourses()
   const [activeTab, setActiveTab] = useState<Subject | 'all'>('all')
   const [historyItems, setHistoryItems] = useState<HistoryListItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const service = useMemo(() => new ReviewLearningService(), [])
+
+  // 每个科目的展示样式（含预置课程 + 用户自建热拔插课程）
+  const subjectStyleMap = useMemo(() => {
+    const map = new Map<string, SubjectStyle>()
+    for (const [slug, theme] of Object.entries(BUILTIN_SUBJECT_THEME)) {
+      map.set(slug, { label: theme.label, bg: theme.bg, color: theme.color, emoji: theme.emoji })
+    }
+    for (const c of allCourses || []) {
+      if (c.status !== 'ready') continue
+      if (map.has(c.slug)) continue
+      const { bg, color } = deriveSubjectBg(c.colorHex)
+      map.set(c.slug, { label: c.name, bg, color, emoji: c.emoji || '✨' })
+    }
+    return map
+  }, [allCourses])
+
+  // 科目筛选 Tabs：全部 + 所有已就绪课程
+  const subjectTabs = useMemo<SubjectTabInfo[]>(() => {
+    const tabs: SubjectTabInfo[] = [
+      { key: 'all', label: '全部', emoji: '📚', color: T.sunOrange },
+    ]
+    for (const [slug, style] of subjectStyleMap) {
+      tabs.push({ key: slug as Subject, label: style.label, emoji: style.emoji, color: style.color })
+    }
+    return tabs
+  }, [subjectStyleMap])
+
+  // 未知科目回落样式（比如已被删除的课程仍有历史）
+  const fallbackStyle: SubjectStyle = useMemo(
+    () => ({ label: '课程', bg: 'linear-gradient(135deg, #F3F4F6 0%, #E5E7EB 100%)', color: T.textMedium, emoji: '📚' }),
+    [],
+  )
 
   const loadHistory = useCallback(async () => {
     setIsLoading(true)
@@ -137,7 +175,7 @@ export function LearningHistory() {
         display: 'flex', gap: '8px', padding: '0 24px 16px',
         overflowX: 'auto',
       }}>
-        {SUBJECT_TABS.map((tab) => {
+        {subjectTabs.map((tab) => {
           const isActive = activeTab === tab.key
           return (
             <motion.button
@@ -204,7 +242,9 @@ export function LearningHistory() {
         ) : (
           <AnimatePresence mode="popLayout">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {historyItems.map((item, index) => (
+              {historyItems.map((item, index) => {
+                const style = subjectStyleMap.get(item.subject) || fallbackStyle
+                return (
                 <motion.div
                   key={item.id}
                   initial={{ opacity: 0, y: 20 }}
@@ -225,11 +265,11 @@ export function LearningHistory() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{
                         padding: '4px 12px', borderRadius: '12px',
-                        background: SUBJECT_COLORS[item.subject],
-                        fontSize: '12px', color: SUBJECT_TEXT_COLORS[item.subject],
+                        background: style.bg,
+                        fontSize: '12px', color: style.color,
                         fontWeight: 'bold', fontFamily: T.fontBody,
                       }}>
-                        {SUBJECT_LABELS[item.subject]}
+                        {style.emoji} {style.label}
                       </span>
                       <span style={{
                         fontSize: '15px', fontWeight: 'bold', color: T.textDark,
@@ -299,7 +339,8 @@ export function LearningHistory() {
                     </motion.button>
                   </div>
                 </motion.div>
-              ))}
+                )
+              })}
             </div>
           </AnimatePresence>
         )}

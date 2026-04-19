@@ -7,7 +7,7 @@ describe('FeedbackAnimation', () => {
     render(<FeedbackAnimation type="correct" onComplete={vi.fn()} />)
     const text = screen.getByTestId('feedback-message')
     expect(text).toBeInTheDocument()
-    expect(text.textContent).toMatch(/棒|太好了|真厉害|对了|聪明/)
+    expect(text.textContent).toMatch(/棒|太好了|真厉害|对了|聪明|完美/)
   })
 
   it('错误反馈应显示引导文字', () => {

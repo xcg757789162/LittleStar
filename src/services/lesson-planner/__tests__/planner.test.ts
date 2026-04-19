@@ -14,7 +14,6 @@ function createNode(overrides: Partial<KnowledgeNode> = {}): KnowledgeNode {
   return {
     id: 'node-1',
     subject: 'math',
-    gradeLevel: 'senior-kindergarten',
     name: 'Test Node',
     description: 'Test description',
     prerequisites: [],

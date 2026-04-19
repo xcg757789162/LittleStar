@@ -24,7 +24,6 @@ describe('Zustand Stores', () => {
       name: '小明',
       avatar: '🧒',
       age: 5,
-      gradeLevel: 'senior-kindergarten',
       createdAt: new Date('2026-01-01'),
       settings: {
         dailyLearningMinutes: 15,

@@ -13,9 +13,3 @@ export type { LearningState, LearningActions, SessionStats, SessionEndInfo } fro
 
 export { useUIStore } from './uiStore'
 export type { UIState, UIActions, Theme, FontSize } from './uiStore'
-
-export { useGradeUnlockStore } from './gradeUnlockStore'
-export type { GradeUnlockState, GradeUnlockActions, PendingUnlock } from './gradeUnlockStore'
-
-export { useReportStore } from './reportStore'
-export type { ReportState, ReportActions, ReportFilter } from './reportStore'

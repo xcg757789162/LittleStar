@@ -61,16 +61,22 @@ export function getServerVoiceList(providerId: TTSProviderId): string[] {
   return provider.voices.map((v) => v.id);
 }
 
+export interface VoiceOption {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 export interface ModelVoiceGroup {
   modelId: string;
   modelName: string;
-  voices: Array<{ id: string; name: string }>;
+  voices: VoiceOption[];
 }
 
 export interface ProviderWithVoices {
   providerId: TTSProviderId;
   providerName: string;
-  voices: Array<{ id: string; name: string }>; // keep for backward compat
+  voices: VoiceOption[]; // keep for backward compat
   modelGroups: ModelVoiceGroup[]; // voices grouped by model
 }
 
@@ -97,15 +103,19 @@ export function getAvailableProvidersWithVoices(
     const isServerConfigured = providerConfig?.isServerConfigured === true;
 
     if (hasApiKey || isServerConfigured) {
-      const allVoices = config.voices.map((v) => ({ id: v.id, name: v.name }));
+      const allVoices: VoiceOption[] = config.voices.map((v) => ({
+        id: v.id,
+        name: v.name,
+        description: v.description,
+      }));
 
       // Build model groups
       const modelGroups: ModelVoiceGroup[] = [];
       if (config.models.length > 0) {
         for (const model of config.models) {
-          const compatibleVoices = config.voices
+          const compatibleVoices: VoiceOption[] = config.voices
             .filter((v) => !v.compatibleModels || v.compatibleModels.includes(model.id))
-            .map((v) => ({ id: v.id, name: v.name }));
+            .map((v) => ({ id: v.id, name: v.name, description: v.description }));
           modelGroups.push({
             modelId: model.id,
             modelName: model.name,
@@ -136,7 +146,7 @@ export function getAvailableProvidersWithVoices(
 /**
  * Maximum number of representative voices to show per provider in the picker UI.
  */
-const MAX_REPRESENTATIVE_VOICES = 10;
+const MAX_REPRESENTATIVE_VOICES = 15;
 
 /**
  * Get representative voices for the currently selected TTS provider.
@@ -177,7 +187,11 @@ export function getCurrentProviderVoices(
   });
 
   const selected = sorted.slice(0, MAX_REPRESENTATIVE_VOICES);
-  const voices = selected.map((v) => ({ id: v.id, name: v.name }));
+  const voices: VoiceOption[] = selected.map((v) => ({
+    id: v.id,
+    name: v.name,
+    description: v.description,
+  }));
 
   const targetModel = config.models.find((m) => m.id === targetModelId);
   const modelGroups: ModelVoiceGroup[] = [{

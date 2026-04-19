@@ -8,7 +8,11 @@
  * 运行环境：服务端（通过 /api/lesson-plans 端点）。
  */
 
-import type { KnowledgeNode } from '@/types/models'
+interface KnowledgeNodeMeta {
+  name: string
+  description: string
+  difficulty?: number
+}
 
 export interface LessonPlanItem {
   index: number
@@ -62,7 +66,7 @@ export function buildLessonPlanSystemPrompt(config: Required<LessonPlanGenerator
 /**
  * 构建用户消息
  */
-export function buildLessonPlanUserPrompt(node: Pick<KnowledgeNode, 'name' | 'description' | 'difficulty'>): string {
+export function buildLessonPlanUserPrompt(node: KnowledgeNodeMeta): string {
   return `请为以下知识点设计课时计划：
 
 知识点名称：${node.name}
@@ -107,7 +111,7 @@ export function parseLessonPlanResponse(
  * 为无法调用 AI 的场景提供确定性的默认课时计划
  */
 export function generateDefaultLessonPlan(
-  node: Pick<KnowledgeNode, 'name' | 'description' | 'difficulty'>,
+  node: KnowledgeNodeMeta,
   config?: LessonPlanGeneratorConfig,
 ): LessonPlanOutput {
   const cfg = { ...DEFAULT_CONFIG, ...config }

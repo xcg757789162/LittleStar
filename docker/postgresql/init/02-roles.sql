@@ -48,7 +48,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON api.learning_records TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.mastery_records TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.achievements TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.daily_sessions TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON api.grade_unlocks TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.placement_tests TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.placement_questions TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api.report_data TO authenticated;

@@ -48,13 +48,50 @@ export interface CacheListItem {
 
 /**
  * 从 knowledgeNodeId 推断科目
- * 知识点 ID 格式：math-xxx / chinese-xxx / english-xxx / default-math 等
+ *
+ * 约定：知识点 ID 以 `${subject}-` 开头（如 math-g1-add、biology-cell-structure）。
+ * 兼容历史别名：cn- → chinese / en- → english（来自旧版种子数据）。
+ * 自定义热拔插课程的 slug 直接作为前缀，无需修改此函数。
  */
+const LEGACY_PREFIX_ALIASES: Record<string, string> = {
+  'cn-': 'chinese',
+  'en-': 'english',
+}
+
+/**
+ * 已注册的 course slug 集合，用于对多段 slug（如 `stock-investment-basics`）
+ * 进行最长前缀匹配。由 `useCourses` 等数据层在加载到 courses 后注册进来。
+ *
+ * 没注册也能工作（降级为取第一段），但对多段 slug 会分错。
+ */
+const KNOWN_COURSE_SLUGS: Set<string> = new Set()
+
+export function registerKnownCourseSlugs(slugs: Iterable<string>): void {
+  for (const s of slugs) {
+    if (typeof s === 'string' && s.length > 0) {
+      KNOWN_COURSE_SLUGS.add(s.toLowerCase())
+    }
+  }
+}
+
 export function inferSubjectFromNodeId(knowledgeNodeId: string): string | undefined {
   const id = knowledgeNodeId.toLowerCase()
-  if (id.startsWith('math') || id.endsWith('-math')) return 'math'
-  if (id.startsWith('chinese') || id.endsWith('-chinese')) return 'chinese'
-  if (id.startsWith('english') || id.endsWith('-english')) return 'english'
+  for (const [alias, subject] of Object.entries(LEGACY_PREFIX_ALIASES)) {
+    if (id.startsWith(alias)) return subject
+  }
+  // 优先按已注册的 course slug 做最长前缀匹配，支持多段 slug（如 stock-investment-basics）
+  let best: string | undefined
+  for (const slug of KNOWN_COURSE_SLUGS) {
+    if (id === slug || id.startsWith(slug + '-')) {
+      if (!best || slug.length > best.length) best = slug
+    }
+  }
+  if (best) return best
+  // 降级：取第一个 '-' 前的 token（单段 slug 场景）
+  const dashIdx = id.indexOf('-')
+  if (dashIdx > 0) {
+    return id.slice(0, dashIdx)
+  }
   return undefined
 }
 

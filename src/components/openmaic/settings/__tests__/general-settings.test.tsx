@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { GeneralSettings } from '../general-settings'
 import type { ProvidersConfig } from '@/lib/openmaic/types/settings'
 
@@ -12,50 +11,15 @@ vi.mock('@/lib/openmaic/hooks/use-i18n', () => ({
         'settings.currentModelPanelDescription': '这里会显示课堂真正正在使用的模型，并允许你直接切换。',
         'settings.currentModelProvider': '服务商',
         'settings.currentModelId': '模型 ID',
-        'settings.selectModel': '选择模型',
-        'settings.manualAddModel': '手动添加模型',
-        'settings.manageProviders': '管理服务商',
         'settings.currentlyUsing': '当前使用',
-        'settings.switchGuideTitle': '如何切换',
-        'settings.switchGuideDescription': '先选择服务商，再点击模型卡片，切换后会立刻影响后续对话与生成。',
-        'settings.switchScopeTitle': '影响范围',
-        'settings.switchScopeDescription': '只影响后续 AI 对话和内容生成，不影响已经生成的内容。',
+        'settings.activeModel': '可用模型',
+        'settings.activeModelDescription': '从下列模型中选择课堂要用的版本。',
+        'settings.selectModel': '选择模型',
         'settings.modelSelectorHint': '点击模型卡片即可立即切换；带对勾的模型就是当前课堂真正使用的模型。',
-        'settings.dangerZone': '危险操作',
-        'settings.clearCache': '清除缓存',
-        'settings.clearCacheDescription': '清除本地缓存并重新加载页面。',
-        'settings.clearCacheConfirmPhrase': '确认清除',
-        'settings.clearCacheConfirmItems': '缓存、会话',
-        'settings.clearCacheConfirmTitle': '确认清除缓存',
-        'settings.clearCacheConfirmDescription': '此操作将移除本地数据。',
-        'settings.clearCacheConfirmInput': '请输入确认短语',
-        'settings.clearCacheButton': '确认清除',
-        'common.cancel': '取消',
-        'settings.configureProvidersFirst': '请先配置提供商',
-        'settings.modelCount': '个模型',
-        'settings.modelSingular': '个模型',
-        'settings.searchModels': '搜索模型',
-        'settings.noModelsFound': '未找到匹配模型',
-        'settings.noModelsAvailable': '暂无可用模型',
-        'settings.connectionSuccess': '连接成功',
-        'settings.connectionFailed': '连接失败',
-        'settings.apiKeyRequired': '请先配置 API Key',
-        'settings.serverConfigured': '服务端',
       }
       return messages[key] ?? key
     },
   }),
-}))
-
-vi.mock('@/lib/openmaic/utils/database', () => ({
-  clearDatabase: vi.fn(),
-}))
-
-vi.mock('sonner', () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-  },
 }))
 
 const providersConfig = {
@@ -87,11 +51,7 @@ describe('GeneralSettings', () => {
     vi.clearAllMocks()
   })
 
-  it('应展示当前模型信息并提供手动添加入口', async () => {
-    const user = userEvent.setup()
-    const onManualAddModel = vi.fn()
-    const onOpenProviderManager = vi.fn()
-
+  it('应展示当前模型信息并提供模型选择区', () => {
     render(
       <GeneralSettings
         activeProviderId="openai"
@@ -100,8 +60,6 @@ describe('GeneralSettings', () => {
         currentModelName="GPT-4o Mini"
         providersConfig={providersConfig}
         onModelChange={vi.fn()}
-        onManualAddModel={onManualAddModel}
-        onOpenProviderManager={onOpenProviderManager}
       />,
     )
 
@@ -109,16 +67,6 @@ describe('GeneralSettings', () => {
     expect(screen.getAllByText('GPT-4o Mini').length).toBeGreaterThan(0)
     expect(screen.getAllByText('OpenAI').length).toBeGreaterThan(0)
     expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument()
-    expect(screen.getByText('如何切换')).toBeInTheDocument()
-    expect(screen.getByText('先选择服务商，再点击模型卡片，切换后会立刻影响后续对话与生成。')).toBeInTheDocument()
-    expect(screen.getByText('影响范围')).toBeInTheDocument()
-    expect(screen.getByText('只影响后续 AI 对话和内容生成，不影响已经生成的内容。')).toBeInTheDocument()
-    expect(screen.getByText('点击模型卡片即可立即切换；带对勾的模型就是当前课堂真正使用的模型。')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: '手动添加模型' }))
-    expect(onManualAddModel).toHaveBeenCalledTimes(1)
-
-    await user.click(screen.getByRole('button', { name: '管理服务商' }))
-    expect(onOpenProviderManager).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('可用模型')).toBeInTheDocument()
   })
 })

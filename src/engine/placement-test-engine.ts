@@ -264,21 +264,15 @@ export class AdaptiveAssessmentEngine {
    *
    * @param modules 课程模块列表
    * @param subject 科目
-   * @param gradeLevel 年级
    * @returns 选择题列表（含题目内容）
    */
   async generatePhase1Plan(
     modules: CurriculumModule[],
     subject: string,
-    gradeLevel: string,
   ): Promise<ChoiceQuestion[]> {
     if (modules.length === 0) return []
 
-    // 加载预设题库
-    const questionBank = await loadQuestionBank(
-      subject as 'math' | 'chinese' | 'english',
-      gradeLevel as Parameters<typeof loadQuestionBank>[1],
-    )
+    const questionBank = await loadQuestionBank(subject)
 
     const plan: ChoiceQuestion[] = []
     const sorted = [...modules].sort((a, b) => a.order - b.order)
@@ -546,7 +540,7 @@ export class AdaptiveAssessmentEngine {
    * @param phase1Analysis 阶段一分析结果
    * @param modules 课程模块列表
    * @param subject 科目
-   * @param gradeLevel 年级
+   * @param childAge 孩子年龄（传给 AI 生成器做 prompt 锚点）
    * @param settings 孩子设置（用于 AI 生成）
    * @param assessmentType 评测场景（默认 placement），影响 AI prompt 语境
    * @returns 选择题列表
@@ -555,18 +549,14 @@ export class AdaptiveAssessmentEngine {
     phase1Analysis: Phase1Analysis,
     modules: CurriculumModule[],
     subject: string,
-    gradeLevel: string,
+    childAge: number,
     settings?: ChildSettings,
     assessmentType: AssessmentType = 'placement',
   ): Promise<ChoiceQuestion[]> {
     const plan: ChoiceQuestion[] = []
     const mode = phase1Analysis.phase2Mode || 'verify'
 
-    // 加载预设题库
-    const questionBank = await loadQuestionBank(
-      subject as 'math' | 'chinese' | 'english',
-      gradeLevel as Parameters<typeof loadQuestionBank>[1],
-    )
+    const questionBank = await loadQuestionBank(subject)
 
     const phase1AnsweredNodeIds = new Set(
       phase1Analysis.answerSummaries.map(s => s.nodeId),
@@ -625,7 +615,7 @@ export class AdaptiveAssessmentEngine {
         const ctx: Phase2QuestionContext = { ...p2Ctx, sameModulePerformance: modPerf }
 
         const question = await this.generateSingleQuestion(
-          node, mod, questionBank, 'hard', gradeLevel, subject, settings, ctx,
+          node, mod, questionBank, 'hard', childAge, subject, settings, ctx,
         )
         if (question) plan.push(question)
       }
@@ -658,7 +648,7 @@ export class AdaptiveAssessmentEngine {
             purpose: purposeText.verifyWeak,
           }
           const question = await this.generateSingleQuestion(
-            node, mod, questionBank, 'hard', gradeLevel, subject, settings, ctx,
+            node, mod, questionBank, 'hard', childAge, subject, settings, ctx,
           )
           if (question) plan.push(question)
         }
@@ -679,7 +669,7 @@ export class AdaptiveAssessmentEngine {
               purpose: purposeText.verifyUncertain,
             }
             const question = await this.generateSingleQuestion(
-              node, mod, questionBank, 'hard', gradeLevel, subject, settings, ctx,
+              node, mod, questionBank, 'hard', childAge, subject, settings, ctx,
             )
             if (question) plan.push(question)
             break
@@ -708,7 +698,7 @@ export class AdaptiveAssessmentEngine {
             purpose: purposeText.mixedStrong,
           }
           const question = await this.generateSingleQuestion(
-            node, mod, questionBank, 'hard', gradeLevel, subject, settings, ctx,
+            node, mod, questionBank, 'hard', childAge, subject, settings, ctx,
           )
           if (question) {
             plan.push(question)
@@ -759,7 +749,7 @@ export class AdaptiveAssessmentEngine {
           purpose: purposeText.verifyOverall,
         }
         const question = await this.generateSingleQuestion(
-          node, mod, questionBank, 'hard', gradeLevel, subject, settings, ctx,
+          node, mod, questionBank, 'hard', childAge, subject, settings, ctx,
         )
         if (question) plan.push(question)
       }
@@ -975,7 +965,7 @@ export class AdaptiveAssessmentEngine {
     mod: CurriculumModule,
     questionBank: Map<string, QuestionBankItem[]>,
     difficulty: 'easy' | 'hard',
-    gradeLevel: string,
+    childAge: number,
     subject: string,
     settings?: ChildSettings,
     phase2Context?: Phase2QuestionContext,
@@ -983,7 +973,7 @@ export class AdaptiveAssessmentEngine {
     if (settings?.llmApiKey && settings?.llmModel) {
       const aiResult = await generateQuestion(
         { id: node.id, name: node.name, description: node.description },
-        gradeLevel,
+        childAge,
         subject,
         settings,
         phase2Context,

@@ -47,7 +47,7 @@ function sleep(ms: number): Promise<void> {
 
 async function attemptGenerate(
   node: { id: string; name: string; description: string },
-  gradeLevel: string,
+  childAge: number,
   subject: string,
   settings: ChildSettings,
   phase2Context?: Phase2QuestionContext,
@@ -61,7 +61,7 @@ async function attemptGenerate(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         node,
-        gradeLevel,
+        childAge,
         subject,
         settings: pickQuestionGenerationSettings(settings),
         ...(phase2Context ? { phase2Context } : {}),
@@ -110,7 +110,7 @@ async function attemptGenerate(
  */
 export async function generateQuestion(
   node: { id: string; name: string; description: string },
-  gradeLevel: string,
+  childAge: number,
   subject: string,
   settings: ChildSettings,
   phase2Context?: Phase2QuestionContext,
@@ -132,7 +132,7 @@ export async function generateQuestion(
       await sleep(backoff)
     }
 
-    const { result, retryable, error } = await attemptGenerate(node, gradeLevel, subject, settings, phase2Context)
+    const { result, retryable, error } = await attemptGenerate(node, childAge, subject, settings, phase2Context)
 
     if (result) {
       const elapsed = Date.now() - t0

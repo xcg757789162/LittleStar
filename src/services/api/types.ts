@@ -209,7 +209,6 @@ export interface TPRCommand {
 /** 课程大纲主表 */
 export interface Curriculum {
   id: number
-  gradeLevel: string
   subject: string
   version: string
   reference: string

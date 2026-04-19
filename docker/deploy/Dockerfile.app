@@ -43,6 +43,7 @@ COPY src/engine/ ./src/engine/
 COPY src/types/ ./src/types/
 COPY src/shared/ ./src/shared/
 COPY src/services/openmaic/pipeline-types.ts ./src/services/openmaic/pipeline-types.ts
+COPY src/services/lesson-planner/lesson-plan-generator.ts ./src/services/lesson-planner/lesson-plan-generator.ts
 COPY src/lib/openmaic/media/types.ts ./src/lib/openmaic/media/types.ts
 
 # 编译 + 路径别名解析

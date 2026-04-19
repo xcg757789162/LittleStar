@@ -33,7 +33,6 @@ CREATE INDEX IF NOT EXISTS idx_placement_tests_parent
 CREATE TABLE IF NOT EXISTS api.placement_questions (
   id SERIAL PRIMARY KEY,
   subject VARCHAR(20) NOT NULL,
-  grade_level VARCHAR(30) NOT NULL,
   knowledge_node_id VARCHAR(100) NOT NULL,
   source VARCHAR(10) NOT NULL DEFAULT 'preset',  -- 'preset' | 'ai'
   stem TEXT NOT NULL,                              -- 题干
@@ -45,7 +44,7 @@ CREATE TABLE IF NOT EXISTS api.placement_questions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_placement_questions_node
-  ON api.placement_questions(subject, grade_level, knowledge_node_id);
+  ON api.placement_questions(subject, knowledge_node_id);
 
 CREATE INDEX IF NOT EXISTS idx_placement_questions_source
   ON api.placement_questions(source);

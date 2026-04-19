@@ -64,13 +64,8 @@ export function ClassroomBridge({ onComplete, onAnswer, onExit }: ClassroomBridg
       return;
     }
 
-    const quizScenes = allScenes.filter((s) => s.type === 'quiz');
-    const allQuizzesDone =
-      quizScenes.length === 0 ||
-      quizScenes.every((s) => completedQuizScenesRef.current.has(s.id));
-
-    if (!allQuizzesDone) return;
-
+    // 到达最后一个场景即启动倒计时完成本课，不再要求所有测验已作答
+    // （用户若跳过测验仍可正常完成课程，避免学习进度卡死无法保存）
     if (!autoCompleteTimerRef.current) {
       autoCompleteTimerRef.current = setTimeout(handleComplete, AUTO_COMPLETE_DELAY_MS);
     }
@@ -165,6 +160,8 @@ export function ClassroomBridge({ onComplete, onAnswer, onExit }: ClassroomBridg
   }
 
   // status === 'ready' || status === 'playing'
+  const isOnLastScene = scenes.length > 0 && currentSceneId === scenes[scenes.length - 1]?.id;
+
   return (
     <div className="openmaic-classroom relative flex h-full w-full min-h-0 overflow-hidden">
       <ThemeProvider>
@@ -172,6 +169,26 @@ export function ClassroomBridge({ onComplete, onAnswer, onExit }: ClassroomBridg
           <Stage />
         </div>
       </ThemeProvider>
+
+      {/* 最后一幕：显式"完成本课"按钮，方便学习者手动触发完成 */}
+      {isOnLastScene && !hasAutoCompletedRef.current && (
+        <motion.button
+          initial={{ scale: 0, opacity: 0, y: 20 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.3 }}
+          whileHover={{ scale: 1.05, y: -2 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={handleComplete}
+          className="absolute top-4 right-4 z-50 px-5 py-2.5 rounded-full text-white font-bold text-sm shadow-lg"
+          style={{
+            background: 'linear-gradient(135deg, #FF9A56 0%, #FF6B9D 100%)',
+            fontFamily: "'Baloo 2', 'Nunito', 'PingFang SC', sans-serif",
+            boxShadow: '0 8px 24px rgba(255, 107, 157, 0.4)',
+          }}
+        >
+          🎉 完成本课
+        </motion.button>
+      )}
     </div>
   );
 }

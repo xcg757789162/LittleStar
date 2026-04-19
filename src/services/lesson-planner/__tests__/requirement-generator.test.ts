@@ -5,7 +5,7 @@
  * 支持两种模式：新知识教学 和 加固复习。
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import {
   RequirementGenerator,
   type RequirementInput,
@@ -32,7 +32,6 @@ function makeInput(overrides: Partial<RequirementInput> = {}): RequirementInput 
     },
     child: {
       age: 5,
-      gradeLevel: 'senior-kindergarten' as const,
     },
     masteryLevel: 0,
     mode: 'new-teaching' as RequirementMode,
@@ -72,7 +71,7 @@ describe('RequirementGenerator', () => {
     })
 
     it('should include age-appropriate language for young children', () => {
-      const input = makeInput({ child: { age: 4, gradeLevel: 'middle-kindergarten' } })
+      const input = makeInput({ child: { age: 4 } })
       const result = generator.generate(input)
 
       // 幼儿课堂应强调趣味性
@@ -110,9 +109,9 @@ describe('RequirementGenerator', () => {
       expect(result).toMatch(/[Ee]nglish|英文/)
     })
 
-    it('should include grade level context', () => {
+    it('should include age context', () => {
       const result = generator.generate(makeInput())
-      expect(result).toMatch(/大班|幼儿园|5.*岁/)
+      expect(result).toMatch(/5.*岁/)
     })
 
     it('should handle knowledge node without template prompts', () => {
@@ -160,7 +159,7 @@ describe('RequirementGenerator', () => {
           templatePrompts: [],
           prerequisites: ['math-g1-add-within-10'],
         },
-        child: { age: 7, gradeLevel: 'grade-1' },
+        child: { age: 7 },
       })
       const result = generator.generate(input)
 

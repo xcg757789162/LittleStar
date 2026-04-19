@@ -21,7 +21,6 @@ export type { CreateChildInput, UpdateChildInput } from './useChildren'
 export {
   useKnowledgeNodes,
   useKnowledgeNodesBySubject,
-  useKnowledgeNodesBySubjectGrade,
   useKnowledgeNode,
   knowledgeNodeKeys,
 } from './useKnowledgeNodes'
@@ -66,60 +65,15 @@ export {
   questionKeys,
 } from './useQuestions'
 
-// 每日会话
-export {
-  useDailySessions,
-  useDailySessionByDate,
-  useCreateDailySession,
-  dailySessionKeys,
-} from './useDailySessions'
-export type { CreateDailySessionInput } from './useDailySessions'
-
-// 成就
-export {
-  useAchievements,
-  useAchievementsByType,
-  useCreateAchievement,
-  achievementKeys,
-} from './useAchievements'
-export type { CreateAchievementInput } from './useAchievements'
-
-// 年级解锁
-export {
-  useGradeUnlocks,
-  useGradeUnlocksBySubject,
-  useCreateGradeUnlock,
-  gradeUnlockKeys,
-} from './useGradeUnlocks'
-export type { CreateGradeUnlockInput } from './useGradeUnlocks'
-
 // 入学测评
 export {
   usePlacementTests,
-  usePlacementTestBySubjectGrade,
+  usePlacementTestBySubject,
   useCreatePlacementTest,
   useResetPlacement,
   placementTestKeys,
 } from './usePlacementTests'
 export type { CreatePlacementTestInput } from './usePlacementTests'
-
-// 学习报告
-export {
-  useReportData,
-  useReportDataByType,
-  useCreateReportData,
-  reportDataKeys,
-} from './useReportData'
-export type { CreateReportDataInput } from './useReportData'
-
-// 掌握度快照
-export {
-  useMasterySnapshots,
-  useMasterySnapshotsBySubjectGrade,
-  useCreateMasterySnapshot,
-  masterySnapshotKeys,
-} from './useMasterySnapshots'
-export type { CreateMasterySnapshotInput } from './useMasterySnapshots'
 
 // 亲子活动
 export {

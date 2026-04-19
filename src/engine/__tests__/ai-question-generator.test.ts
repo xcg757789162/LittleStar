@@ -103,7 +103,7 @@ describe('generateQuestion', () => {
 
     const result = await generateQuestion(
       { id: 'english-letter-a', name: '字母 A', description: '识别英文字母 A' },
-      'grade-1',
+      7,
       'english',
       baseSettings,
     )
@@ -115,7 +115,7 @@ describe('generateQuestion', () => {
     expect(request.method).toBe('POST')
     expect(JSON.parse(String(request.body))).toMatchObject({
       node: { id: 'english-letter-a', name: '字母 A' },
-      gradeLevel: 'grade-1',
+      childAge: 7,
       subject: 'english',
       settings: {
         llmModel: 'openai:gpt-4o-mini',
@@ -140,13 +140,13 @@ describe('generateQuestion', () => {
   it('代理返回异常时应降级为 null', async () => {
     const fetchMock = vi.mocked(fetch)
     fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ error: 'cors blocked' }), { status: 502 }),
+      new Response(JSON.stringify({ error: 'bad request', retryable: false }), { status: 400 }),
     )
 
     await expect(
       generateQuestion(
         { id: 'english-letter-b', name: '字母 B', description: '识别英文字母 B' },
-        'grade-1',
+        7,
         'english',
         baseSettings,
       ),

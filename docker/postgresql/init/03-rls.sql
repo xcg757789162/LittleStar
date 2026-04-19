@@ -132,26 +132,6 @@ CREATE POLICY daily_sessions_delete ON api.daily_sessions
   FOR DELETE TO authenticated
   USING (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()));
 
--- grade_unlocks
-ALTER TABLE api.grade_unlocks ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY grade_unlocks_select ON api.grade_unlocks
-  FOR SELECT TO authenticated
-  USING (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()));
-
-CREATE POLICY grade_unlocks_insert ON api.grade_unlocks
-  FOR INSERT TO authenticated
-  WITH CHECK (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()));
-
-CREATE POLICY grade_unlocks_update ON api.grade_unlocks
-  FOR UPDATE TO authenticated
-  USING (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()))
-  WITH CHECK (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()));
-
-CREATE POLICY grade_unlocks_delete ON api.grade_unlocks
-  FOR DELETE TO authenticated
-  USING (child_id IN (SELECT id FROM api.children WHERE user_id::text = api.current_user_id()));
-
 -- placement_tests
 ALTER TABLE api.placement_tests ENABLE ROW LEVEL SECURITY;
 

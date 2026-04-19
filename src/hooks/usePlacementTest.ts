@@ -31,7 +31,6 @@ import { mergeChildSettingsWithLiveStore } from '@/stores/openmaic/child-setting
 import { extractChildSettingsFromStore } from '@/stores/openmaic/settings-reverse-sync'
 import { placementTestKeys } from '@/hooks/queries/usePlacementTests'
 import type {
-  GradeLevel,
   Subject,
   PlacementResult,
   Phase1Analysis,
@@ -124,7 +123,6 @@ const COUNTDOWN_INTERVAL_MS = 1000
 
 export function usePlacementTest(
   subject: Subject,
-  gradeLevel: GradeLevel,
   onComplete: (result: PlacementResult) => void,
 ): PlacementTestState {
   const queryClient = useQueryClient()
@@ -253,11 +251,11 @@ export function usePlacementTest(
 
   /** 开始两阶段测评 */
   const startTest = useCallback(async () => {
-    log.info('开始两阶段测评, subject:', subject, 'gradeLevel:', gradeLevel)
+    log.info('开始两阶段测评, subject:', subject)
     setIsLoading(true)
     setErrorMessage(null)
     try {
-      const curriculum = await loadCurriculum(gradeLevel, subject)
+      const curriculum = await loadCurriculum(subject)
       if (!curriculum) {
         log.error('课程数据加载失败')
         setErrorMessage('后端服务连接失败或未找到课程数据，请检查服务是否正常运行后重试')
@@ -270,7 +268,6 @@ export function usePlacementTest(
       const phase1Plan = await engine.generatePhase1Plan(
         curriculum.modules,
         subject,
-        gradeLevel,
       )
       log.info('阶段一计划生成完成, 题目数:', phase1Plan.length)
 
@@ -299,7 +296,7 @@ export function usePlacementTest(
     } finally {
       setIsLoading(false)
     }
-  }, [engine, gradeLevel, subject, updateCurrentQuestion])
+  }, [engine, subject, updateCurrentQuestion])
 
   /** 提交选择题答案 */
   const submitAnswer = useCallback(
@@ -374,7 +371,7 @@ export function usePlacementTest(
     stopCountdown()
 
     try {
-      const curriculum = await loadCurriculum(gradeLevel, subject)
+      const curriculum = await loadCurriculum(subject)
       if (!curriculum) {
         // 降级：直接完成
         handleTestComplete()
@@ -407,11 +404,12 @@ export function usePlacementTest(
         }),
       )
 
+      const childAge = child?.age ?? 8
       const phase2Plan = await engine.generatePhase2Plan(
         analysis,
         curriculum.modules,
         subject,
-        gradeLevel,
+        childAge,
         settings ?? undefined,
       )
 
@@ -438,7 +436,7 @@ export function usePlacementTest(
       // 降级：直接以阶段一结果完成
       handleTestComplete()
     }
-  }, [engine, gradeLevel, subject, stopCountdown, updateCurrentQuestion])
+  }, [engine, subject, stopCountdown, updateCurrentQuestion])
 
   /** 测评完成（两阶段合并结果） */
   const handleTestComplete = useCallback(async () => {
@@ -447,7 +445,7 @@ export function usePlacementTest(
     setCurrentQuestion(null)
 
     try {
-      const curriculum = await loadCurriculum(gradeLevel, subject)
+      const curriculum = await loadCurriculum(subject)
       const phase1Session = phase1SessionRef.current
       const phase2Session = phase2SessionRef.current
 
@@ -493,7 +491,6 @@ export function usePlacementTest(
         const phase1Record = await apiClient.post('/placement_tests', {
           childId,
           subject,
-          gradeLevel,
           phase: 'phase1',
           questions: phase1Session.answers.map((a: AnswerRecord, i: number) => ({
             knowledgeNodeId: a.nodeId,
@@ -519,7 +516,6 @@ export function usePlacementTest(
           await apiClient.post('/placement_tests', {
             childId,
             subject,
-            gradeLevel,
             phase: 'phase2',
             parentTestId: phase1Id,
             phase1Result: phase1Analysis,
@@ -613,7 +609,7 @@ export function usePlacementTest(
     } catch {
       setPhase('result')
     }
-  }, [engine, gradeLevel, subject, queryClient, phase1Analysis, stopCountdown])
+  }, [engine, subject, queryClient, phase1Analysis, stopCountdown])
 
   /** 完成结果页 */
   const finishAndNavigate = useCallback(() => {

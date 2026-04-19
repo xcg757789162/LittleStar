@@ -524,6 +524,7 @@ export class OpenMAICClient {
     classroomId: string,
     options?: PollOptions,
   ): Promise<Classroom> {
+    this.validateClassroomId(classroomId)
     const intervalMs = options?.intervalMs ?? 5000
     const maxAttempts = options?.maxAttempts ?? 180
     const startTime = Date.now()

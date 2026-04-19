@@ -1,11 +1,30 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppLayout } from '../AppLayout'
 
+const { emptyCoursesQuery } = vi.hoisted(() => ({
+  emptyCoursesQuery: { data: [] as unknown[], isLoading: false },
+}))
+
+vi.mock('@/hooks/queries/useCourses', () => ({
+  useCourses: () => emptyCoursesQuery,
+}))
+
+let queryClient: QueryClient
+
+beforeEach(() => {
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+})
+
 function renderWithRouter(ui: React.ReactElement, initialEntries = ['/']) {
-  return render(<MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>)
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>
+    </QueryClientProvider>,
+  )
 }
 
 describe('AppLayout', () => {
@@ -27,15 +46,18 @@ describe('AppLayout', () => {
     expect(screen.getByTestId('bottom-nav')).toBeInTheDocument()
   })
 
-  it('底部导航应显示 3 个导航项', () => {
+  it('底部导航应显示主入口项', () => {
     renderWithRouter(
       <AppLayout>
         <div>Content</div>
       </AppLayout>,
     )
     expect(screen.getByText('首页')).toBeInTheDocument()
-    expect(screen.getByText('星空')).toBeInTheDocument()
+    expect(screen.getByText('复习')).toBeInTheDocument()
+    expect(screen.getByText('课堂')).toBeInTheDocument()
     expect(screen.getByText('家长')).toBeInTheDocument()
+    // 中央"知识"按钮是无文字图标
+    expect(screen.getByTestId('nav-item-knowledge')).toBeInTheDocument()
   })
 
   it('点击导航项应触发路由跳转', async () => {
@@ -46,12 +68,11 @@ describe('AppLayout', () => {
       </AppLayout>,
     )
 
-    const starMapNav = screen.getByText('星空')
-    await user.click(starMapNav)
+    const historyNav = screen.getByText('复习')
+    await user.click(historyNav)
 
-    // 验证导航被触发 — 星空按钮应高亮
-    const starMapButton = starMapNav.closest('[data-testid="nav-item-starmap"]')
-    expect(starMapButton).toBeInTheDocument()
+    const historyButton = historyNav.closest('[data-testid="nav-item-history"]')
+    expect(historyButton).toBeInTheDocument()
   })
 
   it('课堂页面（/classroom）不应渲染底部导航栏', () => {
@@ -77,13 +98,12 @@ describe('AppLayout', () => {
   it('当前页面对应的导航项应高亮', () => {
     renderWithRouter(
       <AppLayout>
-        <div>Star Map</div>
+        <div>History</div>
       </AppLayout>,
-      ['/starmap'],
+      ['/history'],
     )
 
-    const starMapItem = screen.getByTestId('nav-item-starmap')
-    // 高亮项应有 active 样式（检查 data-active 属性）
-    expect(starMapItem).toHaveAttribute('data-active', 'true')
+    const historyItem = screen.getByTestId('nav-item-history')
+    expect(historyItem).toHaveAttribute('data-active', 'true')
   })
 })

@@ -9,7 +9,6 @@
  * - reinforcement: 加固复习（掌握率低需巩固）
  */
 
-import type { GradeLevel } from '@/types/models'
 import type { UserRequirements } from '@/services/openmaic/pipeline-types'
 
 // ============================================================
@@ -39,7 +38,6 @@ export interface KnowledgeNodeInput {
 /** 孩子画像输入 */
 export interface ChildProfile {
   age: number
-  gradeLevel: GradeLevel
 }
 
 /** Requirement 生成输入 */
@@ -62,22 +60,6 @@ export interface RequirementInput {
   lessonTitle?: string
   /** 本课时聚焦要点 */
   lessonFocusPoints?: string[]
-}
-
-// ============================================================
-// 辅助映射
-// ============================================================
-
-/** 年级到中文描述 */
-const GRADE_LABELS: Record<string, string> = {
-  'middle-kindergarten': '幼儿园中班',
-  'senior-kindergarten': '幼儿园大班',
-  'grade-1': '小学一年级',
-  'grade-2': '小学二年级',
-  'grade-3': '小学三年级',
-  'grade-4': '小学四年级',
-  'grade-5': '小学五年级',
-  'grade-6': '小学六年级',
 }
 
 // ============================================================
@@ -208,8 +190,7 @@ export class RequirementGenerator {
   }
 
   private buildStudentProfile(child: ChildProfile): string {
-    const gradeLabel = GRADE_LABELS[child.gradeLevel] || child.gradeLevel
-    return `【学生画像】\n年龄：${child.age} 岁\n年级：${gradeLabel}\n目标受众为 ${child.age} 岁${gradeLabel}学生。`
+    return `【学生画像】\n年龄：${child.age} 岁\n以年龄为主要难度锚点，语言与抽象度需与该年龄段认知相匹配。`
   }
 
   private buildContentRequirements(

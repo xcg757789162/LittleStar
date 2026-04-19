@@ -1,6 +1,6 @@
 /**
  * 创建孩子信息引导页面 — Sunny Playground 风格
- * 分步引导：名字 → 年龄 → 年级 → 头像 → 完成
+ * 分步引导：名字 → 年龄 → 头像 → 完成
  * 温暖阳光游乐场设计 · clay 质感 · 弹性动画
  */
 
@@ -11,7 +11,7 @@ import { apiClient } from '@/services/api'
 import { useChildStore } from '@/stores/childStore'
 import { useAuthStore } from '@/stores/authStore'
 import { DEFAULT_ADVANCED_SETTINGS } from '@/types/models'
-import type { Child, GradeLevel } from '@/types/models'
+import type { Child } from '@/types/models'
 
 /* ═══════════════════════════════════════════
    设计 Token
@@ -38,34 +38,12 @@ const T = {
   errorBg: '#FFF0F0',
 }
 
-type Step = 'name' | 'age' | 'grade' | 'avatar' | 'done'
+type Step = 'name' | 'age' | 'avatar' | 'done'
 
 const AVATARS = ['⭐', '🌟', '🦊', '🐱', '🐰', '🦄', '🌈', '🎨', '🚀', '🌸', '🐝', '🦋']
 
-const GRADE_OPTIONS: { key: GradeLevel; label: string; ageHint: string }[] = [
-  { key: 'middle-kindergarten', label: '中班', ageHint: '4-5岁' },
-  { key: 'senior-kindergarten', label: '大班', ageHint: '5-6岁' },
-  { key: 'grade-1', label: '一年级', ageHint: '6-7岁' },
-  { key: 'grade-2', label: '二年级', ageHint: '7-8岁' },
-  { key: 'grade-3', label: '三年级', ageHint: '8-9岁' },
-  { key: 'grade-4', label: '四年级', ageHint: '9-10岁' },
-  { key: 'grade-5', label: '五年级', ageHint: '10-11岁' },
-  { key: 'grade-6', label: '六年级', ageHint: '11-12岁' },
-]
-
-function suggestGrade(age: number): GradeLevel {
-  if (age <= 4) return 'middle-kindergarten'
-  if (age <= 5) return 'senior-kindergarten'
-  if (age <= 6) return 'grade-1'
-  if (age <= 7) return 'grade-2'
-  if (age <= 8) return 'grade-3'
-  if (age <= 9) return 'grade-4'
-  if (age <= 10) return 'grade-5'
-  return 'grade-6'
-}
-
-/** 步骤图标 */
-const STEP_ICONS = ['✏️', '🎂', '📚', '🎭']
+/** 步骤图标（名字 / 年龄 / 头像） */
+const STEP_ICONS = ['✏️', '🎂', '🎭']
 
 export function CreateChildPage() {
   const navigate = useNavigate()
@@ -75,7 +53,6 @@ export function CreateChildPage() {
   const [step, setStep] = useState<Step>('name')
   const [name, setName] = useState('')
   const [age, setAge] = useState(5)
-  const [gradeLevel, setGradeLevel] = useState<GradeLevel>('middle-kindergarten')
   const [avatar, setAvatar] = useState('⭐')
   const [error, setError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
@@ -90,7 +67,6 @@ export function CreateChildPage() {
         name: name.trim(),
         avatar,
         age,
-        gradeLevel,
         settings: {
           dailyLearningMinutes: 20,
           preferredSubjects: ['math', 'chinese', 'english'],
@@ -109,7 +85,7 @@ export function CreateChildPage() {
     } finally {
       setIsSaving(false)
     }
-  }, [isSaving, user, name, avatar, age, gradeLevel, addChild, navigate])
+  }, [isSaving, user, name, avatar, age, addChild, navigate])
 
   const handleNext = useCallback(() => {
     setError('')
@@ -120,10 +96,6 @@ export function CreateChildPage() {
         setStep('age')
         break
       case 'age':
-        setGradeLevel(suggestGrade(age))
-        setStep('grade')
-        break
-      case 'grade':
         setStep('avatar')
         break
       case 'avatar':
@@ -136,12 +108,11 @@ export function CreateChildPage() {
     setError('')
     switch (step) {
       case 'age': setStep('name'); break
-      case 'grade': setStep('age'); break
-      case 'avatar': setStep('grade'); break
+      case 'avatar': setStep('age'); break
     }
   }, [step])
 
-  const currentStepIndex = ['name', 'age', 'grade', 'avatar'].indexOf(step)
+  const currentStepIndex = ['name', 'age', 'avatar'].indexOf(step)
 
   const renderStep = () => {
     switch (step) {
@@ -270,71 +241,6 @@ export function CreateChildPage() {
             <p style={{ fontSize: '13px', color: T.textLight, fontFamily: T.fontBody }}>
               年龄范围：3-12 岁
             </p>
-          </motion.div>
-        )
-
-      case 'grade':
-        return (
-          <motion.div
-            key="grade"
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}
-          >
-            <motion.span
-              style={{ fontSize: '64px' }}
-              animate={{ y: [0, -5, 0] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              📚
-            </motion.span>
-            <h2 style={{
-              fontSize: '24px', color: T.textDark, margin: 0,
-              fontFamily: T.fontDisplay, fontWeight: 'bold',
-            }}>
-              选择年级
-            </h2>
-            <p style={{
-              fontSize: '13px', color: T.textLight, margin: 0,
-              fontFamily: T.fontBody,
-            }}>
-              根据年龄推荐，你也可以自由选择
-            </p>
-            <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: '10px', width: '100%', maxWidth: '320px',
-            }}>
-              {GRADE_OPTIONS.map((opt) => (
-                <motion.button
-                  key={opt.key}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setGradeLevel(opt.key)}
-                  style={{
-                    padding: '14px 8px',
-                    borderRadius: '16px',
-                    border: gradeLevel === opt.key
-                      ? `2.5px solid ${T.sunOrange}`
-                      : '2.5px solid #FFE8D6',
-                    backgroundColor: gradeLevel === opt.key ? '#FFF3E7' : T.cardBg,
-                    color: gradeLevel === opt.key ? T.sunOrange : T.textDark,
-                    fontSize: '15px',
-                    fontWeight: gradeLevel === opt.key ? 'bold' : 'normal',
-                    fontFamily: T.fontBody,
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'all 0.2s ease',
-                    boxShadow: gradeLevel === opt.key
-                      ? '0 4px 12px rgba(255, 140, 66, 0.2)'
-                      : 'none',
-                  }}
-                >
-                  {opt.label}
-                  <br />
-                  <span style={{ fontSize: '11px', color: T.textLight }}>{opt.ageHint}</span>
-                </motion.button>
-              ))}
-            </div>
           </motion.div>
         )
 
@@ -469,7 +375,7 @@ export function CreateChildPage() {
               >
                 {currentStepIndex > i ? '✅' : icon}
               </motion.div>
-              {i < 3 && (
+              {i < STEP_ICONS.length - 1 && (
                 <div style={{
                   width: '20px', height: '3px',
                   borderRadius: '2px',

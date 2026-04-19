@@ -1,129 +1,40 @@
 /**
- * 预设题库加载器
+ * 题库加载器
  *
- * 从 JSON 文件加载预设评测题目，按知识点 ID 索引。
- * 每个科目+年级组合对应一个 JSON 文件。
- *
- * 注意：使用静态 import 确保 Vite 打包时正确包含 JSON 文件，
- * 避免纯动态 import(`./${var}`) 在生产构建后找不到模块。
+ * 年级维度下线 + 预置课程也走 Socratic 初始化后，所有题库都由后端
+ * course-initializer 在初始化时写入 `api.placement_questions`（按 subject 存储）。
+ * 本模块负责按 subject 读取并缓存成 `Map<knowledgeNodeId, QuestionBankItem[]>`，
+ * 供 placement-test-engine 选题。
  */
 
-import type { Subject, GradeLevel, QuestionBankItem } from '@/types/models'
+import type { Subject, QuestionBankItem, PlacementQuestionOption } from '@/types/models'
+import { apiClient } from '@/services/api'
 
-// === 静态 import 所有题库 JSON ===
-// 中班（4-5岁）
-import mathMiddleKindergarten from './math-middle-kindergarten.json'
-import chineseMiddleKindergarten from './chinese-middle-kindergarten.json'
-import englishMiddleKindergarten from './english-middle-kindergarten.json'
-// 大班（5-6岁）
-import mathSeniorKindergarten from './math-senior-kindergarten.json'
-import chineseSeniorKindergarten from './chinese-senior-kindergarten.json'
-import englishSeniorKindergarten from './english-senior-kindergarten.json'
-// 一年级（6-7岁）
-import mathGrade1 from './math-grade-1.json'
-import chineseGrade1 from './chinese-grade-1.json'
-import englishGrade1 from './english-grade-1.json'
-
-/** 题库 JSON 文件格式：知识点 ID → 题目数组 */
-export type QuestionBankData = Record<string, QuestionBankItem[]>
-
-/** 静态题库映射表（确保 Vite 打包时正确包含） */
-const questionBankRegistry: Record<string, QuestionBankData> = {
-  // 中班
-  'math:middle-kindergarten': mathMiddleKindergarten as unknown as QuestionBankData,
-  'chinese:middle-kindergarten': chineseMiddleKindergarten as unknown as QuestionBankData,
-  'english:middle-kindergarten': englishMiddleKindergarten as unknown as QuestionBankData,
-  // 大班
-  'math:senior-kindergarten': mathSeniorKindergarten as unknown as QuestionBankData,
-  'chinese:senior-kindergarten': chineseSeniorKindergarten as unknown as QuestionBankData,
-  'english:senior-kindergarten': englishSeniorKindergarten as unknown as QuestionBankData,
-  // 一年级
-  'math:grade-1': mathGrade1 as unknown as QuestionBankData,
-  'chinese:grade-1': chineseGrade1 as unknown as QuestionBankData,
-  'english:grade-1': englishGrade1 as unknown as QuestionBankData,
-}
-
-/** 内存缓存 */
+/** 内存缓存：subject → Map<nodeId, QuestionBankItem[]> */
 const bankCache = new Map<string, Map<string, QuestionBankItem[]>>()
 
-/** 生成缓存 key */
-function getCacheKey(subject: Subject, gradeLevel: GradeLevel): string {
-  return `${subject}:${gradeLevel}`
-}
-
 /**
- * 加载指定科目+年级的预设题库
+ * 加载指定学科的预设题库
  *
- * @param subject 科目
- * @param gradeLevel 年级
- * @returns 知识点 ID → 题目数组 的 Map，加载失败返回空 Map
+ * @param subject 学科 slug
+ * @returns 知识点 ID → 题目数组 的 Map；无数据时返回空 Map（由上层降级到 AI 生成）
  */
 export async function loadQuestionBank(
   subject: Subject,
-  gradeLevel: GradeLevel,
 ): Promise<Map<string, QuestionBankItem[]>> {
-  const cacheKey = getCacheKey(subject, gradeLevel)
-
-  // 检查缓存
-  const cached = bankCache.get(cacheKey)
+  const cached = bankCache.get(subject)
   if (cached) return cached
 
-  try {
-    // 从静态注册表获取题库数据
-    const data: QuestionBankData | undefined = questionBankRegistry[cacheKey]
-
-    if (!data) {
-      console.warn(
-        `[QuestionBank] 题库 ${subject}-${gradeLevel} 未注册，将使用 AI 生成题目`,
-      )
-      const emptyMap = new Map<string, QuestionBankItem[]>()
-      bankCache.set(cacheKey, emptyMap)
-      return emptyMap
-    }
-
-    // 转换为 Map
-    const questionMap = new Map<string, QuestionBankItem[]>()
-    for (const [nodeId, questions] of Object.entries(data)) {
-      // 校验题目格式
-      const validQuestions = questions.filter(
-        (q) =>
-          q.stem &&
-          Array.isArray(q.options) &&
-          q.options.length === 4 &&
-          q.correctIndex >= 0 &&
-          q.correctIndex <= 3 &&
-          q.difficulty >= 1 &&
-          q.difficulty <= 5,
-      )
-      if (validQuestions.length > 0) {
-        // 为每个题目补充 knowledgeNodeId
-        questionMap.set(
-          nodeId,
-          validQuestions.map((q) => ({
-            ...q,
-            knowledgeNodeId: nodeId,
-          })),
-        )
-      }
-    }
-
+  const dbMap = await loadQuestionBankFromDB(subject)
+  bankCache.set(subject, dbMap)
+  if (dbMap.size === 0) {
+    console.warn(`[QuestionBank] 题库 ${subject} DB 中未找到题目`)
+  } else {
     console.info(
-      `[QuestionBank] 题库 ${subject}-${gradeLevel} 加载成功，共 ${questionMap.size} 个知识点`,
+      `[QuestionBank] 题库 ${subject} 从 DB 加载成功，共 ${dbMap.size} 个知识点`,
     )
-
-    // 缓存
-    bankCache.set(cacheKey, questionMap)
-
-    return questionMap
-  } catch (err) {
-    console.warn(
-      `[QuestionBank] 题库 ${subject}-${gradeLevel} 加载失败:`, err,
-    )
-    // 返回空 Map（由调用方降级到 AI 生成）
-    const emptyMap = new Map<string, QuestionBankItem[]>()
-    bankCache.set(cacheKey, emptyMap)
-    return emptyMap
   }
+  return dbMap
 }
 
 /**
@@ -131,8 +42,7 @@ export async function loadQuestionBank(
  *
  * @param bank 已加载的题库 Map
  * @param nodeId 知识点 ID
- * @param difficulty 可选：按难度筛选（'easy' 取最低难度，'hard' 取最高难度）
- * @returns 题目，未找到返回 null
+ * @param difficulty 可选：'easy' 取最低难度，'hard' 取最高难度
  */
 export function getQuestionFromBank(
   bank: Map<string, QuestionBankItem[]>,
@@ -143,17 +53,71 @@ export function getQuestionFromBank(
   if (!questions || questions.length === 0) return null
 
   if (!difficulty) {
-    // 随机选一题
     return questions[Math.floor(Math.random() * questions.length)]
   }
 
-  // 按难度排序
   const sorted = [...questions].sort((a, b) => a.difficulty - b.difficulty)
   return difficulty === 'easy' ? sorted[0] : sorted[sorted.length - 1]
 }
 
 /**
- * 清除题库缓存（测试用）
+ * 从 PostgREST 读取题库（按 subject 归集）
+ *
+ * DB 表 api.placement_questions 年级维度下线后仅按 subject 过滤；
+ * apiClient 会自动做 snake → camel 转换。
+ */
+interface PlacementQuestionRow {
+  id: number
+  subject: string
+  knowledgeNodeId: string
+  source: 'preset' | 'ai'
+  stem: string
+  options: PlacementQuestionOption[]
+  correctIndex: number
+  difficulty: number
+  createdAt?: string
+}
+
+async function loadQuestionBankFromDB(
+  subject: Subject,
+): Promise<Map<string, QuestionBankItem[]>> {
+  const map = new Map<string, QuestionBankItem[]>()
+  try {
+    const rows = await apiClient.get<PlacementQuestionRow>('/placement_questions', {
+      filters: [{ column: 'subject', operator: 'eq', value: subject }],
+      select: 'knowledge_node_id,stem,options,correct_index,difficulty',
+    })
+
+    for (const row of rows) {
+      if (
+        !row.stem ||
+        !Array.isArray(row.options) ||
+        row.options.length < 2 ||
+        typeof row.correctIndex !== 'number' ||
+        row.correctIndex < 0 ||
+        row.correctIndex >= row.options.length
+      ) {
+        continue
+      }
+      const item: QuestionBankItem = {
+        knowledgeNodeId: row.knowledgeNodeId,
+        stem: row.stem,
+        options: row.options,
+        correctIndex: row.correctIndex,
+        difficulty: Math.max(1, Math.min(5, row.difficulty ?? 2)),
+      }
+      const list = map.get(row.knowledgeNodeId)
+      if (list) list.push(item)
+      else map.set(row.knowledgeNodeId, [item])
+    }
+  } catch (err) {
+    console.warn(`[QuestionBank] DB 查询 ${subject} 失败:`, err)
+  }
+  return map
+}
+
+/**
+ * 清除题库缓存（测试用 / 课程重新初始化后调用以拉新题）
  */
 export function clearQuestionBankCache(): void {
   bankCache.clear()

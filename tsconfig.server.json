@@ -19,7 +19,8 @@
   },
   "include": [
     "src/server/**/*.ts",
-    "src/services/openmaic/pipeline-types.ts"
+    "src/services/openmaic/pipeline-types.ts",
+    "src/services/lesson-planner/lesson-plan-generator.ts"
   ],
   "exclude": [
     "node_modules",

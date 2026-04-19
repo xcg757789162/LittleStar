@@ -27,14 +27,12 @@ CREATE TABLE api.children (
   name VARCHAR(50) NOT NULL,
   avatar TEXT NOT NULL,
   age INTEGER NOT NULL,
-  grade_level VARCHAR(30) NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   settings JSONB NOT NULL DEFAULT '{}',
   CONSTRAINT children_user_name_unique UNIQUE (user_id, name)
 );
 
 CREATE INDEX idx_children_name ON api.children(name);
-CREATE INDEX idx_children_grade_level ON api.children(grade_level);
 
 -- ============================================================
 -- 3. knowledge_nodes — 知识点表（公共只读）
@@ -42,7 +40,6 @@ CREATE INDEX idx_children_grade_level ON api.children(grade_level);
 CREATE TABLE api.knowledge_nodes (
   id VARCHAR(100) PRIMARY KEY,
   subject VARCHAR(20) NOT NULL,
-  grade_level VARCHAR(30) NOT NULL,
   name VARCHAR(200) NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   prerequisites JSONB NOT NULL DEFAULT '[]',
@@ -54,7 +51,7 @@ CREATE TABLE api.knowledge_nodes (
   total_lessons INTEGER
 );
 
-CREATE INDEX idx_knowledge_nodes_subject_grade ON api.knowledge_nodes(subject, grade_level);
+CREATE INDEX idx_knowledge_nodes_subject ON api.knowledge_nodes(subject);
 CREATE INDEX idx_knowledge_nodes_difficulty ON api.knowledge_nodes(difficulty);
 CREATE INDEX idx_knowledge_nodes_order ON api.knowledge_nodes(order_index);
 
@@ -100,7 +97,6 @@ CREATE INDEX idx_questions_ai_generated ON api.questions(is_ai_generated);
 CREATE TABLE api.question_templates (
   id SERIAL PRIMARY KEY,
   subject VARCHAR(20) NOT NULL,
-  grade_level VARCHAR(30) NOT NULL,
   knowledge_node_id VARCHAR(100) NOT NULL,
   template_type VARCHAR(50) NOT NULL,
   prompt TEXT NOT NULL DEFAULT '',
@@ -110,7 +106,7 @@ CREATE TABLE api.question_templates (
 
 CREATE INDEX idx_question_templates_subject ON api.question_templates(subject);
 CREATE INDEX idx_question_templates_node ON api.question_templates(knowledge_node_id);
-CREATE INDEX idx_question_templates_subject_grade ON api.question_templates(subject, grade_level);
+CREATE INDEX idx_question_templates_subject_node ON api.question_templates(subject, knowledge_node_id);
 
 -- ============================================================
 -- 6. learning_records — 学习记录表
@@ -193,31 +189,12 @@ CREATE INDEX idx_daily_sessions_date ON api.daily_sessions(date);
 CREATE INDEX idx_daily_sessions_child_date ON api.daily_sessions(child_id, date);
 
 -- ============================================================
--- 10. grade_unlocks — 年级解锁记录表
--- ============================================================
-CREATE TABLE api.grade_unlocks (
-  id SERIAL PRIMARY KEY,
-  child_id INTEGER NOT NULL REFERENCES api.children(id),
-  subject VARCHAR(20) NOT NULL,
-  grade_level VARCHAR(30) NOT NULL,
-  unlocked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  mastery_at_unlock NUMERIC(5,2) NOT NULL DEFAULT 0,
-  placement_test_id INTEGER
-);
-
-CREATE INDEX idx_grade_unlocks_child ON api.grade_unlocks(child_id);
-CREATE INDEX idx_grade_unlocks_child_subject ON api.grade_unlocks(child_id, subject);
-CREATE INDEX idx_grade_unlocks_grade ON api.grade_unlocks(grade_level);
-CREATE INDEX idx_grade_unlocks_unlocked ON api.grade_unlocks(unlocked_at);
-
--- ============================================================
--- 11. placement_tests — 入学测评记录表
+-- 10. placement_tests — 入学测评记录表
 -- ============================================================
 CREATE TABLE api.placement_tests (
   id SERIAL PRIMARY KEY,
   child_id INTEGER NOT NULL REFERENCES api.children(id),
   subject VARCHAR(20) NOT NULL,
-  grade_level VARCHAR(30) NOT NULL,
   questions JSONB NOT NULL DEFAULT '[]',
   started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   completed_at TIMESTAMPTZ,
@@ -228,7 +205,7 @@ CREATE TABLE api.placement_tests (
 );
 
 CREATE INDEX idx_placement_tests_child ON api.placement_tests(child_id);
-CREATE INDEX idx_placement_tests_child_subject_grade ON api.placement_tests(child_id, subject, grade_level);
+CREATE INDEX idx_placement_tests_child_subject ON api.placement_tests(child_id, subject);
 CREATE INDEX idx_placement_tests_started ON api.placement_tests(started_at);
 CREATE INDEX idx_placement_tests_phase ON api.placement_tests(phase);
 CREATE INDEX idx_placement_tests_parent ON api.placement_tests(parent_test_id);
@@ -240,7 +217,6 @@ CREATE TABLE api.report_data (
   id SERIAL PRIMARY KEY,
   child_id INTEGER NOT NULL REFERENCES api.children(id),
   type VARCHAR(20) NOT NULL,
-  grade_level VARCHAR(30) NOT NULL,
   subject VARCHAR(20),
   period_start VARCHAR(10) NOT NULL,
   period_end VARCHAR(10) NOT NULL,
@@ -251,7 +227,6 @@ CREATE TABLE api.report_data (
 CREATE INDEX idx_report_data_child ON api.report_data(child_id);
 CREATE INDEX idx_report_data_type ON api.report_data(type);
 CREATE INDEX idx_report_data_child_type ON api.report_data(child_id, type);
-CREATE INDEX idx_report_data_child_grade ON api.report_data(child_id, grade_level);
 CREATE INDEX idx_report_data_period ON api.report_data(period_start);
 
 -- ============================================================
@@ -262,14 +237,13 @@ CREATE TABLE api.mastery_snapshots (
   child_id INTEGER NOT NULL REFERENCES api.children(id),
   date VARCHAR(10) NOT NULL,
   subject VARCHAR(20) NOT NULL,
-  grade_level VARCHAR(30) NOT NULL,
   nodes_mastery JSONB NOT NULL DEFAULT '{}',
   average_mastery NUMERIC(5,2) NOT NULL DEFAULT 0
 );
 
 CREATE INDEX idx_mastery_snapshots_child ON api.mastery_snapshots(child_id);
 CREATE INDEX idx_mastery_snapshots_child_date_subject ON api.mastery_snapshots(child_id, date, subject);
-CREATE INDEX idx_mastery_snapshots_child_subject_grade ON api.mastery_snapshots(child_id, subject, grade_level);
+CREATE INDEX idx_mastery_snapshots_child_subject ON api.mastery_snapshots(child_id, subject);
 CREATE INDEX idx_mastery_snapshots_date ON api.mastery_snapshots(date);
 
 -- ============================================================
@@ -349,7 +323,8 @@ CREATE TABLE api.generation_tasks (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   started_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
-  lesson_index INTEGER NOT NULL DEFAULT 1
+  lesson_index INTEGER NOT NULL DEFAULT 1,
+  scheduled_after TIMESTAMPTZ
 );
 
 CREATE INDEX idx_generation_tasks_child ON api.generation_tasks(child_id);
@@ -398,12 +373,11 @@ CREATE INDEX idx_tpr_instructions_difficulty ON api.tpr_instructions(difficulty)
 -- ============================================================
 CREATE TABLE api.curricula (
   id SERIAL PRIMARY KEY,
-  grade_level VARCHAR(30) NOT NULL,
-  subject VARCHAR(20) NOT NULL,
+  subject VARCHAR(50) NOT NULL,
   version VARCHAR(20) NOT NULL,
   reference TEXT NOT NULL DEFAULT '',
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
-  CONSTRAINT curricula_grade_subject_unique UNIQUE (grade_level, subject)
+  CONSTRAINT curricula_subject_unique UNIQUE (subject)
 );
 
 -- ============================================================
@@ -463,7 +437,6 @@ CREATE INDEX idx_media_files_source ON api.media_files(source);
 CREATE TABLE api.placement_questions (
   id SERIAL PRIMARY KEY,
   subject VARCHAR(20) NOT NULL,
-  grade_level VARCHAR(30) NOT NULL,
   knowledge_node_id VARCHAR(100) NOT NULL,
   source VARCHAR(10) NOT NULL DEFAULT 'preset',  -- 'preset' | 'ai'
   stem TEXT NOT NULL,                              -- 题干
@@ -474,7 +447,7 @@ CREATE TABLE api.placement_questions (
   CONSTRAINT placement_questions_correct_range CHECK (correct_index >= 0 AND correct_index <= 3)
 );
 
-CREATE INDEX idx_placement_questions_node ON api.placement_questions(subject, grade_level, knowledge_node_id);
+CREATE INDEX idx_placement_questions_node ON api.placement_questions(subject, knowledge_node_id);
 CREATE INDEX idx_placement_questions_source ON api.placement_questions(source);
 
 -- ============================================================

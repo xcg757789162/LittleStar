@@ -23,8 +23,20 @@ CREATE TABLE IF NOT EXISTS api.generation_tasks (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   started_at TIMESTAMPTZ,
-  completed_at TIMESTAMPTZ
+  completed_at TIMESTAMPTZ,
+  scheduled_after TIMESTAMPTZ
 );
+
+-- 增量迁移：为已有表添加 scheduled_after 列（限流延迟重试）
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'api' AND table_name = 'generation_tasks' AND column_name = 'scheduled_after'
+  ) THEN
+    ALTER TABLE api.generation_tasks ADD COLUMN scheduled_after TIMESTAMPTZ;
+  END IF;
+END $$;
 
 -- 索引（IF NOT EXISTS 防止重复创建）
 CREATE INDEX IF NOT EXISTS idx_generation_tasks_child ON api.generation_tasks(child_id);

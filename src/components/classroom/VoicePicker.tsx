@@ -29,7 +29,17 @@ interface VoiceGroupOption {
   providerName: string
   modelId?: string
   label: string
-  voices: Array<{ id: string; name: string }>
+  voices: Array<{ id: string; name: string; description?: string }>
+}
+
+/**
+ * Heuristic: treat descriptions containing spaces or non-ASCII characters
+ * (e.g. Chinese copy) as display-ready text. Skip short camelCase strings that
+ * look like untranslated i18n keys (e.g. "voiceMarin").
+ */
+function isDisplayableDescription(desc: string | undefined): desc is string {
+  if (!desc) return false
+  return /\s/.test(desc) || /[^\x00-\x7F]/.test(desc)
 }
 
 export interface VoicePickerProps {
@@ -424,7 +434,7 @@ export function VoicePicker({
                         textAlign: 'left',
                       }}
                     >
-                      <span style={{ minWidth: 0 }}>
+                      <span style={{ minWidth: 0, flex: 1 }}>
                         <span style={{
                           display: 'block',
                           fontSize: '13px',
@@ -436,6 +446,20 @@ export function VoicePicker({
                         }}>
                           {voice.name}
                         </span>
+                        {isDisplayableDescription(voice.description) && (
+                          <span style={{
+                            display: 'block',
+                            fontSize: '11px',
+                            fontWeight: 500,
+                            color: UI.textLight,
+                            marginTop: '2px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {voice.description}
+                          </span>
+                        )}
                       </span>
                       {isActive && (
                         <span style={{
